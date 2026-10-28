@@ -11,7 +11,9 @@
     padding: 0;
 }
 
+/* Obsidian's own close button: .modal-close-button before 1.14, .modal-header-button since */
 #sr-modal-view .modal-close-button,
+#sr-modal-view > .modal-header-button,
 #sr-modal-view .modal-header {
     display: none;
 }
