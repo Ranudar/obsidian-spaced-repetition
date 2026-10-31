@@ -50,6 +50,13 @@ const DISCARD_ARM_MS = 3000;
 const LOCKED_EVENTS = ["pointerdown", "mousedown", "touchstart", "click", "keydown"];
 /** With pen-only on, finger presses this soon after the pen was used count as the palm */
 const PALM_GUARD_MS = 500;
+/** Pen thickness steps of the toolbar button, as factors of the pen thickness setting */
+const PEN_SIZE_STEPS = [
+    { factor: 0.6, cls: "is-thin", label: "CARD_EDITOR_PEN_THIN" },
+    { factor: 1, cls: "is-medium", label: "CARD_EDITOR_PEN_MEDIUM" },
+    { factor: 1.6, cls: "is-thick", label: "CARD_EDITOR_PEN_THICK" },
+] as const;
+const DEFAULT_PEN_SIZE_STEP = 1;
 
 /**
  * The card editor, used to add new cards and to edit existing ones.
@@ -64,6 +71,8 @@ export class CardEditorModal extends Modal {
     private activeSide: SideEditor | null = null;
     private undoStack: { side: SideEditor; prev: Stroke[] }[] = [];
     private eraser = false;
+    /** Index into PEN_SIZE_STEPS; kept for this editor only */
+    private penSizeStep = DEFAULT_PEN_SIZE_STEP;
     private added = 0;
     private busy = false;
     /** Settles with true when the save in progress succeeded */
@@ -78,9 +87,12 @@ export class CardEditorModal extends Modal {
     private penDown = false;
     /** When the pen was last used */
     private lastPenAt = 0;
+    /** On mobile, the window size the editor's height was taken from (see keepSteadyHeight()) */
+    private steadySize: { width: number; height: number } | null = null;
 
     private sidesEl!: HTMLElement;
     private counterEl: HTMLElement | null = null;
+    private penSizeButton!: HTMLButtonElement;
     private eraserButton!: HTMLButtonElement;
     private undoButton!: HTMLButtonElement;
     private clearButton!: HTMLButtonElement;
@@ -136,6 +148,11 @@ export class CardEditorModal extends Modal {
             this.back = this.createSide(sidesEl, t("CARD_EDITOR_BACK"), initial.back, true);
         }
         this.activeSide = this.front;
+        // New strokes follow the toolbar's size, also on a card being edited (whose file has its
+        // own size) and on a restored draft (saved with the size picked then); every stroke
+        // already written keeps its own size
+        const penSize = this.penSize;
+        this.sides.forEach((side) => side.setPenSize(penSize));
 
         this.buildFooter(root);
         root.addEventListener("keydown", this.onKeyDown);
@@ -144,6 +161,7 @@ export class CardEditorModal extends Modal {
         this.modalEl.addEventListener("pointerup", this.onPenActivity, true);
         this.modalEl.addEventListener("pointercancel", this.onPenActivity, true);
         this.guardBackground();
+        this.keepSteadyHeight();
 
         // A theme change (e.g. to dark mode at night) changes the ink color
         this.cssChangeRef = this.app.workspace.on("css-change", () =>
@@ -165,6 +183,7 @@ export class CardEditorModal extends Modal {
             this.sidesEl.removeEventListener(type, this.onLockedInput, true);
         }
         if (this.cssChangeRef !== null) this.app.workspace.offref(this.cssChangeRef);
+        if (this.steadySize !== null) activeWindow.removeEventListener("resize", this.onResize);
         this.disarmDiscard();
 
         const opts = this.opts;
@@ -186,8 +205,21 @@ export class CardEditorModal extends Modal {
 
     private buildHeader(root: HTMLElement) {
         const header = root.createDiv({ cls: "sr-card-editor-header" });
-        header.createDiv({ cls: "sr-card-editor-title", text: this.opts.title });
+        const titleEl = header.createDiv({ cls: "sr-card-editor-title-wrap" });
+        titleEl.createDiv({ cls: "sr-card-editor-title", text: this.opts.title });
+        if (this.opts.kind === "add") {
+            // Cards added in this session, as a small badge so it never pushes buttons away
+            this.counterEl = titleEl.createDiv({
+                cls: ["sr-card-editor-counter", "sr-is-hidden"],
+            });
+            this.counterEl.setAttr("role", "status");
+        }
 
+        this.penSizeButton = this.iconButton(header, null, t("CARD_EDITOR_PEN_SIZE"), () =>
+            this.cyclePenSize(),
+        );
+        this.penSizeButton.addClass("sr-card-editor-pen-size");
+        this.penSizeButton.createSpan({ cls: "sr-card-editor-pen-dot" });
         this.eraserButton = this.iconButton(header, "eraser", t("CARD_EDITOR_ERASER"), () =>
             this.setEraser(!this.eraser),
         );
@@ -209,9 +241,7 @@ export class CardEditorModal extends Modal {
                 this.discard(),
             );
             this.discardButton.addClass("sr-card-editor-discard");
-            this.counterEl = footer.createDiv({
-                cls: ["sr-card-editor-footer-spacer", "sr-card-editor-counter"],
-            });
+            footer.createDiv({ cls: "sr-card-editor-footer-spacer" });
             this.saveCloseButton = this.textButton(footer, t("CARD_EDITOR_SAVE_CLOSE"), () => {
                 void this.saveAdd(true);
             });
@@ -239,7 +269,13 @@ export class CardEditorModal extends Modal {
     }
 
     private blankSide(mode = this.settings.cardEditorDefaultMode): SideState {
-        return { mode, text: "", strokes: [], penSize: this.settings.cardEditorPenSize };
+        return { mode, text: "", strokes: [], penSize: this.penSize };
+    }
+
+    /** Pen thickness for new ink: the setting, scaled by the toolbar's thin / medium / thick */
+    private get penSize(): number {
+        const size = this.settings.cardEditorPenSize * PEN_SIZE_STEPS[this.penSizeStep].factor;
+        return Math.round(size * 10) / 10;
     }
 
     private createSide(
@@ -317,7 +353,44 @@ export class CardEditorModal extends Modal {
         }
     }
 
+    /**
+     * On phones and tablets the soft keyboard makes the window lower while it is open: tapping a
+     * text area opens it, switching that side to pen closes it. An editor sized to the window
+     * would then grow and shrink, and both sides with it. Instead it keeps the height of the
+     * window without keyboard, and scrolls while the keyboard covers its lower part.
+     * A window that gets wider or narrower (rotation, split screen) or higher starts over.
+     */
+    private keepSteadyHeight() {
+        if (!Platform.isMobile) return;
+        this.containerEl.addClass("sr-card-editor-container");
+        this.steadySize = { width: 0, height: 0 };
+        this.onResize();
+        activeWindow.addEventListener("resize", this.onResize);
+    }
+
+    private onResize = () => {
+        const size = this.steadySize;
+        if (size === null) return;
+        const { innerWidth: width, innerHeight: height } = activeWindow;
+        // Only lower: the keyboard opened
+        if (width === size.width && height <= size.height) return;
+        this.steadySize = { width, height };
+        this.modalEl.setCssProps({ "--sr-card-editor-height": `${height}px` });
+    };
+
     // MARK: actions
+
+    /**
+     * Medium → thick → thin. Applies to the strokes written from now on; every stroke keeps the
+     * thickness it was written with.
+     */
+    private cyclePenSize() {
+        if (this.busy) return;
+        this.penSizeStep = (this.penSizeStep + 1) % PEN_SIZE_STEPS.length;
+        const size = this.penSize;
+        this.sides.forEach((side) => side.setPenSize(size));
+        this.updateButtons();
+    }
 
     private setEraser(on: boolean) {
         this.eraser = on;
@@ -488,6 +561,10 @@ export class CardEditorModal extends Modal {
             this.eraser = false;
             this.sides.forEach((side) => side.setEraser(false));
         }
+        const step = PEN_SIZE_STEPS[this.penSizeStep];
+        this.penSizeButton.disabled = this.busy || !anyInk;
+        for (const s of PEN_SIZE_STEPS) this.penSizeButton.toggleClass(s.cls, s === step);
+        this.penSizeButton.setAttr("aria-label", `${t("CARD_EDITOR_PEN_SIZE")}: ${t(step.label)}`);
         this.eraserButton.disabled = !anyInk;
         this.eraserButton.toggleClass("is-active", this.eraser);
         this.eraserButton.setAttr("aria-pressed", this.eraser);
@@ -503,14 +580,15 @@ export class CardEditorModal extends Modal {
         if (this.discardButton) this.discardButton.disabled = this.busy;
         if (this.counterEl) {
             this.counterEl.setText(
-                this.added > 0 ? t("CARD_EDITOR_CARDS_ADDED", { count: this.added }) : "",
+                this.added > 0 ? t("CARD_EDITOR_ADDED_BADGE", { count: this.added }) : "",
             );
+            this.counterEl.toggleClass("sr-is-hidden", this.added === 0);
         }
     }
 
     private iconButton(
         parent: HTMLElement,
-        icon: string,
+        icon: string | null,
         label: string,
         onClick: () => void,
     ): HTMLButtonElement {
@@ -519,7 +597,7 @@ export class CardEditorModal extends Modal {
         });
         button.setAttr("aria-label", label);
         button.setAttr("type", "button");
-        setIcon(button, icon);
+        if (icon !== null) setIcon(button, icon);
         const isPalm = this.palmGuard(button);
         button.addEventListener("click", (evt) => {
             evt.stopPropagation();

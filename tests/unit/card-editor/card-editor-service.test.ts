@@ -1091,7 +1091,7 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
         expect(sync).not.toHaveBeenCalled();
         expect(refresh).toHaveBeenCalledWith([vault.byName("sr-ink-xyz-back.svg")]);
         expect(svgToStrokes(vault.content("sr-ink/sr-ink-xyz-back.svg")).strokes).toEqual([
-            stroke(7),
+            { ...stroke(7), size: 5 },
         ]);
     });
 

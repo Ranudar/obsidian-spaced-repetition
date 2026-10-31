@@ -78,7 +78,6 @@ export interface SRSettings {
 
     // card editor
     cardEditorDefaultMode: CardEditorInputMode;
-    cardEditorPenSwitchesToInk: boolean;
     cardEditorPenOnly: boolean;
     // Folder for handwritten card images; empty = Obsidian's attachment location
     cardEditorImageFolder: string;
@@ -178,12 +177,11 @@ export const DEFAULT_SETTINGS: SRSettings = {
 
     // card editor
     cardEditorDefaultMode: "text",
-    cardEditorPenSwitchesToInk: true,
     cardEditorPenOnly: true,
     cardEditorImageFolder: "sr-ink",
     cardEditorGuide: "lined",
     cardEditorGuideSpacing: 44,
-    cardEditorPenSize: 5,
+    cardEditorPenSize: 2.5,
 
     // algorithm
     algorithm: SRAlgorithmType.SM_2_OSR,
@@ -207,6 +205,9 @@ export const DEFAULT_SETTINGS: SRSettings = {
     preferredDateFormatForNoteReviewQueue: "MMM DD YYYY",
     preferredLocale: "-",
 };
+
+/** cardEditorPenSize's default in builds before the first release of the card editor */
+const OLD_DEFAULT_CARD_EDITOR_PEN_SIZE = 5;
 
 export function upgradeSettings(settings: SRSettings) {
     if (settings.showRibbonIcon) {
@@ -259,6 +260,18 @@ export function upgradeSettings(settings: SRSettings) {
 
     if (settings.fsrsDesiredRetention === null || settings.fsrsDesiredRetention === undefined) {
         settings.fsrsDesiredRetention = DEFAULT_SETTINGS.fsrsDesiredRetention;
+    }
+
+    // Builds of the card editor before its first release had a pen autodetection setting and a
+    // thicker default pen (5). Data saved by them still holds both: the setting is dropped, and
+    // the old default pen size becomes the new one. The dropped key marks such data, so this
+    // happens once and a 5 chosen later on purpose is kept.
+    const raw = settings as unknown as Record<string, unknown>;
+    if ("cardEditorPenSwitchesToInk" in raw) {
+        delete raw.cardEditorPenSwitchesToInk;
+        if (settings.cardEditorPenSize === OLD_DEFAULT_CARD_EDITOR_PEN_SIZE) {
+            settings.cardEditorPenSize = DEFAULT_SETTINGS.cardEditorPenSize;
+        }
     }
 
     // Only published reminder settings are upgraded here. We deliberately do not preserve

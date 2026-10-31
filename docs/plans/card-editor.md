@@ -23,7 +23,7 @@ Already done on `main` (not part of this work): the edit dialog splits cards wit
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ Biology › Cells                       ⌫  ↶  🗑          ✕ │  header: note name, pen tools, close
+│ Biology › Cells (2 added)          ●  ⌫  ↶  🗑          ✕ │  header: note, counter, pen tools, close
 ├──────────────────────────────────────────────────────────┤
 │ Front                                        [⌨ | ✎]    │  per-side mode switch
 │ ┌──────────────────────────────────────────────────────┐ │
@@ -34,22 +34,19 @@ Already done on `main` (not part of this work): the edit dialog splits cards wit
 │ │                                                      │ │
 │ └──────────────────────────────────────────────────────┘ │
 ├──────────────────────────────────────────────────────────┤
-│ Discard        3 cards added    Save & next   Save & close│  add mode
+│ Discard                        Save & close   Save & next │  add mode
 │ Cancel                                             Save   │  edit mode
 └──────────────────────────────────────────────────────────┘
 ```
 
-- **Mode switch per side**: ⌨ text / ✎ pen.
-    - A pen touch (`pointerType === "pen"`) on a text side switches it to pen (setting, default on),
-      so S Pen users never have to tap the switch.
-    - Typing on a keyboard while an _empty_ ink side is focused switches it to text.
-- **Pen tools** (eraser toggle, undo, clear side) are enabled only while a side is in pen mode.
-  The S Pen side button erases too. Only the pen draws, fingers are ignored (setting).
+- **Mode switch per side**: segmented control "Text | Pen" (lucide `keyboard` / `pen-line`).
+  Only the user switches modes (no pen autodetection, see "Device test round 1").
+- **Pen tools** (pen size, eraser toggle, undo, clear side) are enabled only while a side is in pen
+  mode. The S Pen side button erases too. Only the pen draws, fingers are ignored (setting).
 - **Text mode** keeps the existing textarea behaviour: Tab inserts a tab, Ctrl/Cmd+Enter saves
   (in add mode: Save & next).
 - **Switching a side that has content** keeps both drafts until saving; the mode visible at
-  save time wins. A hint under the side says "Saving replaces the text with handwriting" (or the
-  reverse).
+  save time wins. A dot badge on the inactive mode button marks a hidden draft (no hint line).
 - **Cloze cards**: one text field, no pen switch, no back side.
 - **Save is disabled** while a needed side is empty (front and back; front only for cloze).
 - Fullscreen on mobile, a large dialog on desktop. Exactly one close button, top right.
@@ -296,15 +293,14 @@ Nothing changes in the parser, scheduling or data store.
 
 ### Settings ("Card editor" section)
 
-| Key                          | Setting                                      | Default    |
-| ---------------------------- | -------------------------------------------- | ---------- |
-| `cardEditorDefaultMode`      | Default input mode (text / pen)              | `"text"`   |
-| `cardEditorPenSwitchesToInk` | Switch a side to pen when the pen touches it | `true`     |
-| `cardEditorPenOnly`          | Ignore fingers in pen mode                   | `true`     |
-| `cardEditorImageFolder`      | Image folder                                 | `"sr-ink"` |
-| `cardEditorGuide`            | Guide lines (lined / dotted / grid / none)   | `"lined"`  |
-| `cardEditorGuideSpacing`     | Line spacing (px, 24–80)                     | `44`       |
-| `cardEditorPenSize`          | Pen thickness (2–12)                         | `5`        |
+| Key                      | Setting                                    | Default    |
+| ------------------------ | ------------------------------------------ | ---------- |
+| `cardEditorDefaultMode`  | Default input mode (text / pen)            | `"text"`   |
+| `cardEditorPenOnly`      | Ignore fingers in pen mode                 | `true`     |
+| `cardEditorImageFolder`  | Image folder                               | `"sr-ink"` |
+| `cardEditorGuide`        | Guide lines (lined / dotted / grid / none) | `"lined"`  |
+| `cardEditorGuideSpacing` | Line spacing (px, 24–80)                   | `44`       |
+| `cardEditorPenSize`      | Pen thickness (1–8, step 0.5)              | `2.5`      |
 
 Separator and end marker are SR's own settings.
 
@@ -345,10 +341,50 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
       refresh (the Pen Cards migration notice was removed again, see below).
 - [x] 8. **Docs**: user page `docs/docs/en/flashcards/card-editor.md` (+ mkdocs nav, links from
       Reviewing and User Options).
-- [ ] 9. **Device test** on the S22 Ultra, by hand: pen-only, side-button eraser, auto switch to pen
-      (write a whole word starting on the text area: the stroke must not be cut short),
+- [ ] 9. **Device test** on the S22 Ultra, by hand: pen-only, side-button eraser (pixel erase,
+      eraser circle), pen size button, footer fits at 360 px, no layout shift on mode switch,
       live-preview pencil tap (also in tabs that load late), single ✕, dark mode, back gesture keeps
-      draft.
+      draft. Round 1 done, see below.
+
+## Device test round 1
+
+Feedback from the S22 Ultra (Obsidian Android, dark mode, S Pen) and what changed:
+
+1. **Counter in the header**: "N card(s) added" in the footer pushed Save & next off-screen. It is
+   now a compact badge next to the note title ("2 added", hidden at 0). The footer holds only
+   Discard (left) · Save & close · Save & next (primary, right), with compact sizing on phones so
+   all three fit at 360 CSS px.
+2. **No layout shift on mode switch**: the hint line under a side is gone; a dot badge
+   (absolutely positioned) on the inactive mode button marks a hidden draft. Text and ink fields
+   use an identical box (size, border, radius, padding, background), so switching only swaps the
+   content. On mobile, switching never focuses the text area (no soft keyboard); on desktop, Text
+   focuses it so typing can start. The pen tools keep their place and only change enabled state.
+   On mobile the editor keeps the height of the window without the soft keyboard (it scrolls while
+   the keyboard is open), so the sides don't resize when the keyboard opens or closes.
+3. **Pixel eraser**: the eraser removes only the parts of strokes under it (a capsule between
+   consecutive eraser positions, radius = eraser radius + the widest the stroke's outline gets,
+   `strokeMaxRadius()`: 0.8 × size with real pressure, 0.75 × size without) and splits strokes
+   into the remaining runs. Strokes stay vector data, so the SVG stays editable. Long segments are
+   resampled before cutting; leftover runs too short to see are dropped, untouched single-point
+   dots are kept. A circle cursor (an element over the canvas, so hovering repaints no strokes)
+   shows the eraser; one undo step per eraser gesture; the radius
+   scales with pen size (`max(8, 3 × size)` CSS px).
+4. **No pen autodetection**: no switch to ink on pen touch, no switch to text on typing. The
+   `cardEditorPenSwitchesToInk` setting, its UI, strings, docs and tests are removed.
+   `upgradeSettings` deletes the key from data saved by earlier builds of this branch and, in that
+   same data, resets the old default pen size 5 to the new one (once: a 5 picked later is kept). Text areas use
+   normal `touch-action`, so finger scrolling works.
+5. **Thinner pen**: `cardEditorPenSize` default 2.5, slider 1–8 step 0.5. A toolbar button cycles
+   thin / medium / thick (0.6× / 1× / 1.6× of the setting) for new strokes, per session; its icon
+   shows the size as a dot. Each stroke keeps the thickness it was written with (optional
+   `Stroke.size`; the SVG metadata stores `s` for strokes whose size differs from the file's).
+   Edited cards and restored drafts also start at the button's size (medium), so the button never
+   shows a size other than the one new strokes get.
+6. **Pencil in notes**: smaller (about 28 px), outside the image's frame to its right with an 8 px
+   gap (its tap area stays in the gap), so it never sits on or right next to the ink, slightly translucent until pressed; tighter image box padding. Taps still
+   don't reach CodeMirror.
+7. **Mode switch**: a clear "Text | Pen" segmented control with Obsidian's lucide icons
+   (`keyboard`, `pen-line`) and accessible labels, same height as before.
 
 ## Deviations from this plan
 
@@ -359,8 +395,7 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
   `--sr-ink-guide-spacing`) instead of on the canvas. The field label is a placeholder inside the
   field; the side label sits in the side header.
 - **Additions to contracts**: `SideEditor.reset(state)` (Save & next), getters `strokes`,
-  `text`, `el`; `InkField.beginStroke(e)` so the pen touch that switches a side also draws; an
-  optional `textDirection` in the modal options; `cardSeparator`, `inkEmbedFileNames` in
+  `text`, `el`; `SideEditor.setPenSize(size)` for the toolbar's pen size button; an optional `textDirection` in the modal options; `cardSeparator`, `inkEmbedFileNames` in
   `card-text.ts`; `inkFileName`, `parseInkFileName`, `timestampName` in `ink-svg.ts`;
   `findQuestionWithInk` in the service; `ContentManager.editCurrentQuestion()` for `editInReview`.
 - **New file** `card-inserter.ts`: insertion at the cursor / end of note, split out of the service so
@@ -375,10 +410,9 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
   lines around it, so saving without changes never rewrites the note.
 - **Ink files** are resolved by the embed's link path, not by file name alone. Any `sr-ink-*.svg`
   embed counts as ink, also for the pencil; only names following the scheme give a stem to reuse.
-- **Pen on the text area**: with "switch to pen" on, the text area has
-  `touch-action: pan-y pinch-zoom`, so fingers still scroll long text. A pen stroke that starts
-  vertically may be taken over by the browser for scrolling (`pointercancel`); the ink field then
-  drops that unfinished stroke (no undo entry), so only the start of the first stroke can be lost.
+- **Pen on the text area** (superseded by device test round 1, autodetection removed): with
+  "switch to pen" on, the text area had `touch-action: pan-y pinch-zoom`, and a pen stroke taken
+  over for scrolling (`pointercancel`) was dropped.
 - **Image folder**: an existing folder with another letter case is used as it is.
 - **Note edit**: editors showing the note are saved before the card is read, so unsaved typing is
   not mistaken for a changed card. Images are refreshed in every window, incl. popouts.
@@ -415,8 +449,7 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
   notice and nothing more is written. Unreadable or malformed ink metadata opens the side as text.
 - **Pen only** also guards the editor's buttons: a finger press while the pen is down or within
   500 ms of pen use is taken for the palm and ignored.
-- **Mobile focus**: on mobile a text side is not focused on open (no soft keyboard for pen users);
-  a pen touch on a text area blurs it before switching to ink.
+- **Mobile focus**: on mobile a text side is not focused on open (no soft keyboard for pen users).
 - **Pencil**: a press that moves more than 10 px is not a tap. Canvas text nodes get a pencil, but
   `editInNote` only edits `.md` notes (notice otherwise).
 - **Flashcard tag notice**: tag matching reuses SR's `SettingsUtil.isFlashcardTag` (Pen Cards'
@@ -431,4 +464,5 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
 
 - Command name: **Add card**.
 - Add card creates **multi-line basic** cards only; reversed can come later.
-- Default input mode is a setting (Text); the pen switches a side automatically.
+- Default input mode is a setting (Text); only the user switches a side (pen autodetection was
+  removed after device test round 1).

@@ -1,4 +1,5 @@
 import "src/card-editor/card-editor.css";
+import { Platform, setIcon } from "obsidian";
 
 import { Stroke } from "src/card-editor/core/strokes";
 import { InkField } from "src/card-editor/ink-field";
@@ -32,11 +33,14 @@ export interface SideEditorOptions {
     isPalm?(evt: PointerEvent): boolean;
 }
 
-const MODE_ICONS: Record<InputMode, string> = { text: "⌨", ink: "✎" };
+const MODE_ICONS: Record<InputMode, string> = { text: "keyboard", ink: "pen-line" };
 
 /**
  * One side of a card: a text area or an ink field, with a switch between the two.
- * Switching keeps both drafts; the mode visible at save time wins.
+ * Switching keeps both drafts; the mode visible at save time wins. A dot on the switch shows that
+ * the hidden mode holds a draft, which saving would replace.
+ *
+ * Both modes fill the same box and switching only swaps its content, so nothing moves.
  */
 export class SideEditor {
     readonly el: HTMLDivElement;
@@ -52,22 +56,23 @@ export class SideEditor {
     /** Strokes while the ink field has not been created yet */
     private pendingStrokes: Stroke[];
     private switchButtons = new Map<InputMode, HTMLButtonElement>();
-    private hintEl: HTMLDivElement;
 
     constructor(parent: HTMLElement, opts: SideEditorOptions) {
         this.opts = opts;
-        this.initial = opts.initial;
+        this.initial = withOwnSizes(opts.initial);
         this.currentMode = opts.allowInk ? opts.initial.mode : "text";
         this.penSize = opts.initial.penSize;
-        this.pendingStrokes = opts.initial.strokes;
+        this.pendingStrokes = this.initial.strokes;
 
         this.el = parent.createDiv({ cls: "sr-card-editor-side" });
         const header = this.el.createDiv({ cls: "sr-card-editor-side-header" });
         header.createDiv({ cls: "sr-card-editor-side-label", text: opts.label });
         if (opts.allowInk) {
             const modeSwitch = header.createDiv({ cls: "sr-card-editor-mode-switch" });
-            this.addSwitchButton(modeSwitch, "text", t("CARD_EDITOR_SWITCH_TO_TEXT"));
-            this.addSwitchButton(modeSwitch, "ink", t("CARD_EDITOR_SWITCH_TO_INK"));
+            modeSwitch.setAttr("role", "group");
+            modeSwitch.setAttr("aria-label", opts.label);
+            this.addSwitchButton(modeSwitch, "text", t("CARD_EDITOR_MODE_TEXT"));
+            this.addSwitchButton(modeSwitch, "ink", t("CARD_EDITOR_MODE_INK"));
         }
 
         const body = this.el.createDiv({ cls: "sr-card-editor-side-body" });
@@ -78,15 +83,8 @@ export class SideEditor {
         this.textArea.addEventListener("input", this.onTextInput);
         this.textArea.addEventListener("keydown", this.onTextKeyDown);
         this.textArea.addEventListener("pointerdown", this.onTextPointerDown);
-        // The browser decides at pointerdown whether a touch pans. Only horizontal panning is
-        // turned off, so fingers still scroll the text and most pen strokes keep going in ink.
-        this.textArea.toggleClass(
-            "sr-pen-switch",
-            opts.allowInk && opts.settings.cardEditorPenSwitchesToInk,
-        );
 
         this.inkHost = body.createDiv({ cls: "sr-card-editor-ink" });
-        this.hintEl = this.el.createDiv({ cls: "sr-card-editor-hint" });
 
         this.showMode();
     }
@@ -138,8 +136,15 @@ export class SideEditor {
     setStrokes(strokes: Stroke[]): void {
         if (this.ink) this.ink.setStrokes(strokes);
         else this.pendingStrokes = strokes;
-        this.updateHint();
+        this.updateDraftDot();
         this.opts.onChange();
+    }
+
+    /** Pen thickness of new strokes on this side; strokes already written keep theirs */
+    setPenSize(size: number): void {
+        if (size === this.penSize) return;
+        this.penSize = size;
+        this.ink?.setStyle({ size });
     }
 
     /** Clears the visible mode; ink clearing is reported to onInkCommit so it can be undone */
@@ -159,6 +164,7 @@ export class SideEditor {
 
     /** Starts over with new content, e.g. the next card after "Save & next" */
     reset(state: SideState): void {
+        state = withOwnSizes(state);
         this.initial = state;
         this.penSize = state.penSize;
         this.textArea.value = state.text;
@@ -191,22 +197,19 @@ export class SideEditor {
         this.textArea.removeEventListener("input", this.onTextInput);
         this.textArea.removeEventListener("keydown", this.onTextKeyDown);
         this.textArea.removeEventListener("pointerdown", this.onTextPointerDown);
-        if (this.ink) {
-            this.ink.el.removeEventListener("keydown", this.onInkKeyDown);
-            this.ink.destroy();
-        }
+        this.ink?.destroy();
         this.el.remove();
     }
 
     // MARK: helpers
 
     private addSwitchButton(parent: HTMLElement, mode: InputMode, label: string) {
-        const button = parent.createEl("button", {
-            cls: "sr-card-editor-mode-button",
-            text: MODE_ICONS[mode],
-        });
-        button.setAttr("aria-label", label);
+        const button = parent.createEl("button", { cls: "sr-card-editor-mode-button" });
         button.setAttr("type", "button");
+        setIcon(button.createSpan({ cls: "sr-card-editor-mode-icon" }), MODE_ICONS[mode]);
+        button.createSpan({ cls: "sr-card-editor-mode-label", text: label });
+        // Absolutely positioned, so showing it moves nothing
+        button.createSpan({ cls: "sr-card-editor-mode-dot" });
         let palm = false;
         button.addEventListener("pointerdown", (evt) => (palm = this.isPalm(evt)));
         button.addEventListener("click", () => {
@@ -214,10 +217,23 @@ export class SideEditor {
             const ignore = palm;
             palm = false;
             if (ignore) return;
-            this.setMode(mode);
-            this.focus();
+            this.switchTo(mode);
         });
         this.switchButtons.set(mode, button);
+    }
+
+    /**
+     * Switch button. On mobile it never focuses the text area, so the soft keyboard doesn't pop
+     * up; tapping the text area itself does. On desktop, Text focuses the text area so typing can
+     * start right away. A focused text area is let go when it is hidden.
+     */
+    private switchTo(mode: InputMode) {
+        if (mode === "ink" && this.textArea.ownerDocument.activeElement === this.textArea) {
+            this.textArea.blur();
+        }
+        this.setMode(mode);
+        if (this.currentMode === "ink") this.ink?.el.focus({ preventScroll: true });
+        else if (!Platform.isMobile) this.textArea.focus();
     }
 
     /** The ink field (and its canvas) is only created once the side is first shown as ink */
@@ -234,7 +250,6 @@ export class SideEditor {
             onChange: (_, prev) => this.onInkChange(prev),
         });
         this.ink.setStrokes(this.pendingStrokes);
-        this.ink.el.addEventListener("keydown", this.onInkKeyDown);
         return this.ink;
     }
 
@@ -249,29 +264,36 @@ export class SideEditor {
             button.toggleClass("is-active", mode === this.currentMode);
             button.setAttr("aria-pressed", mode === this.currentMode);
         }
-        this.updateHint();
+        this.updateDraftDot();
     }
 
-    private updateHint() {
-        let hint = "";
-        if (this.replacesOther) {
-            hint =
-                this.currentMode === "ink"
-                    ? t("CARD_EDITOR_HINT_REPLACES_TEXT")
-                    : t("CARD_EDITOR_HINT_REPLACES_INK");
+    /** Marks the switch button of the hidden mode while that mode holds a draft */
+    private updateDraftDot() {
+        const replaces = this.replacesOther;
+        for (const [mode, button] of this.switchButtons) {
+            const dot = replaces && mode !== this.currentMode;
+            button.toggleClass("has-draft", dot);
+            if (dot) {
+                button.setAttr(
+                    "aria-description",
+                    mode === "text"
+                        ? t("CARD_EDITOR_HINT_REPLACES_TEXT")
+                        : t("CARD_EDITOR_HINT_REPLACES_INK"),
+                );
+            } else {
+                button.removeAttribute("aria-description");
+            }
         }
-        this.hintEl.setText(hint);
-        this.hintEl.toggleClass("sr-is-hidden", hint === "");
     }
 
     private onInkChange(prev: Stroke[]) {
-        this.updateHint();
+        this.updateDraftDot();
         this.opts.onInkCommit(prev);
         this.opts.onChange();
     }
 
     private onTextInput = () => {
-        this.updateHint();
+        this.updateDraftDot();
         this.opts.onChange();
     };
 
@@ -287,33 +309,9 @@ export class SideEditor {
         return this.opts.isPalm?.(evt) ?? false;
     }
 
-    /** A pen touching the text area turns the side into ink and starts drawing right away */
+    /** The palm must not focus the text area: the soft keyboard would open under the pen */
     private onTextPointerDown = (evt: PointerEvent) => {
-        // The palm must not focus the text area: the soft keyboard would open under the pen
-        if (this.isPalm(evt)) {
-            evt.preventDefault();
-            return;
-        }
-        if (evt.pointerType !== "pen" || !this.opts.allowInk) return;
-        if (!this.opts.settings.cardEditorPenSwitchesToInk) return;
-        evt.preventDefault();
-        // Blurred first: a focused text area that is hidden would close the soft keyboard on
-        // its own, at a moment of the browser's choosing, while the stroke is being drawn
-        this.textArea.blur();
-        this.setMode("ink");
-        this.ink?.el.focus({ preventScroll: true });
-        this.ink?.beginStroke(evt);
-    };
-
-    /** Typing on a keyboard into an empty ink side switches it to text */
-    private onInkKeyDown = (evt: KeyboardEvent) => {
-        if (evt.key.length !== 1 || evt.ctrlKey || evt.metaKey || evt.altKey) return;
-        if (this.strokes.length > 0) return;
-        evt.preventDefault();
-        this.setMode("text");
-        this.textArea.focus();
-        insertText(this.textArea, evt.key);
-        this.onTextInput();
+        if (this.isPalm(evt)) evt.preventDefault();
     };
 }
 
@@ -321,6 +319,18 @@ function insertText(textArea: HTMLTextAreaElement, text: string) {
     const start = textArea.selectionStart ?? textArea.value.length;
     const end = textArea.selectionEnd ?? start;
     textArea.setRangeText(text, start, end, "end");
+}
+
+/**
+ * Strokes without their own size (e.g. made before strokes had one) get the side's pen size, so
+ * they keep their thickness when the pen size changes for new strokes.
+ */
+function withOwnSizes(state: SideState): SideState {
+    if (state.strokes.every((s) => s.size !== undefined)) return state;
+    const strokes = state.strokes.map((s) =>
+        s.size === undefined ? { ...s, size: state.penSize } : s,
+    );
+    return { ...state, strokes };
 }
 
 function sameStrokes(a: Stroke[], b: Stroke[]): boolean {

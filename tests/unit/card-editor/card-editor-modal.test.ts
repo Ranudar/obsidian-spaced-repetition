@@ -8,7 +8,7 @@ import {
 } from "src/card-editor/card-editor-modal";
 import { Stroke } from "src/card-editor/core/strokes";
 import { InkField } from "src/card-editor/ink-field";
-import { SideState } from "src/card-editor/side-editor";
+import { SideEditor, SideState } from "src/card-editor/side-editor";
 import { CardType } from "src/data/data-structures/card/questions/question";
 import { DEFAULT_SETTINGS, SRSettings } from "src/data/settings";
 
@@ -29,12 +29,14 @@ afterEach(() => {
     jest.useRealTimers();
 });
 
-const stroke = (x: number): Stroke => ({
+/** A stroke as written in the editor: with its own size */
+const stroke = (x: number, size = 5): Stroke => ({
     points: [
         [x, 0, 0.5],
         [x + 10, 10, 0.5],
     ],
     pressure: false,
+    size,
 });
 
 const side = (s: Partial<SideState> = {}): SideState => ({
@@ -114,6 +116,7 @@ const button = (text: string) =>
     $$<HTMLButtonElement>("button").find((b) => b.textContent === text);
 const iconButton = (label: string) => $<HTMLButtonElement>(`button[aria-label="${label}"]`);
 const eraser = () => iconButton("Eraser (or hold the pen button)");
+const penSize = () => $<HTMLButtonElement>("button.sr-card-editor-pen-size");
 const undo = () => iconButton("Undo");
 const clearSide = () => iconButton("Clear side");
 const saveNext = () => button("Save & next");
@@ -145,6 +148,19 @@ describe("CardEditorModal layout", () => {
         expect(saveClose()).toBeDefined();
         expect(button("Discard")).toBeDefined();
         expect(document.activeElement).toBe(textAreas()[0]);
+    });
+
+    test("footer: Discard, Save & close, Save & next; the counter is hidden at 0", () => {
+        openAdd();
+        const footerButtons = $$<HTMLButtonElement>(".sr-card-editor-footer button");
+        expect(footerButtons.map((b) => b.textContent)).toEqual([
+            "Discard",
+            "Save & close",
+            "Save & next",
+        ]);
+        expect($(".sr-card-editor-footer .sr-card-editor-counter")).toBeNull();
+        expect($(".sr-card-editor-counter").hasClass("sr-is-hidden")).toBe(true);
+        expect($(".sr-card-editor-counter").textContent).toBe("");
     });
 
     test("sides start in the default input mode", () => {
@@ -200,11 +216,12 @@ describe("CardEditorModal add mode", () => {
             back: { mode: "text", text: "A1" },
         });
         expect(textAreas().map((ta) => ta.value)).toEqual(["", ""]);
-        // The counter sits in the footer, between Discard and the save buttons
+        // The counter is a badge next to the title, not in the footer
         const counter = $(".sr-card-editor-counter");
-        expect(counter.parentElement).toBe($(".sr-card-editor-footer"));
-        expect(counter.previousElementSibling).toBe(button("Discard"));
-        expect(counter.textContent).toBe("1 card(s) added");
+        expect(counter.closest(".sr-card-editor-header")).not.toBeNull();
+        expect(counter.previousElementSibling).toBe($(".sr-card-editor-title"));
+        expect(counter.hasClass("sr-is-hidden")).toBe(false);
+        expect(counter.textContent).toBe("1 added");
         expect(document.activeElement).toBe(textAreas()[0]);
         expect(cb.closed).not.toHaveBeenCalled();
 
@@ -213,7 +230,7 @@ describe("CardEditorModal add mode", () => {
         saveNext().click();
         await flush();
         expect(cb.save).toHaveBeenCalledTimes(2);
-        expect($(".sr-card-editor-counter").textContent).toContain("2 card(s) added");
+        expect($(".sr-card-editor-counter").textContent).toBe("2 added");
     });
 
     test("Save & close saves and closes without a draft", async () => {
@@ -242,10 +259,11 @@ describe("CardEditorModal add mode", () => {
         });
         saveNext().click();
         await flush();
+        // The pen size is the toolbar's (medium of the 2.5 setting); strokes keep their own
         expect(cb.save.mock.calls[0][0].back).toEqual({
             mode: "ink",
             strokes: [stroke(0)],
-            penSize: 7,
+            penSize: 2.5,
             changed: false,
         });
         // The next card keeps each side's input mode
@@ -439,7 +457,7 @@ describe("CardEditorModal edit mode", () => {
         await flush();
         expect(cb.save).toHaveBeenCalledWith({
             front: { mode: "text", text: "Q2" },
-            back: { mode: "ink", strokes, penSize: 3, changed: false },
+            back: { mode: "ink", strokes, penSize: 2.5, changed: false },
         });
         expect(cb.closed).toHaveBeenCalledTimes(1);
     });
@@ -474,14 +492,77 @@ describe("CardEditorModal edit mode", () => {
 describe("CardEditorModal pen tools", () => {
     test("enabled only while a side is in ink mode", () => {
         openAdd();
+        expect(penSize().disabled).toBe(true);
         expect(eraser().disabled).toBe(true);
         expect(undo().disabled).toBe(true);
         expect(clearSide().disabled).toBe(true);
 
+        const header = $(".sr-card-editor-header");
+        const toolsBefore = Array.from(header.children);
         $$<HTMLButtonElement>(".sr-card-editor-mode-button")[1].click(); // front → ink
+        // The tools keep their place, only their state changes
+        expect(Array.from(header.children)).toEqual(toolsBefore);
+        expect(penSize().disabled).toBe(false);
         expect(eraser().disabled).toBe(false);
         expect(undo().disabled).toBe(true); // nothing to undo yet
         expect(clearSide().disabled).toBe(true); // nothing to clear yet
+    });
+
+    test("pen size cycles medium, thick, thin around the setting", async () => {
+        const { modal, cb } = openAdd(
+            { front: side({ text: "Q" }), back: side({ mode: "ink", strokes: [stroke(0)] }) },
+            { cardEditorPenSize: 2.5 },
+        );
+        expect(penSize().hasClass("is-medium")).toBe(true);
+        expect(penSize().getAttribute("aria-label")).toContain("Pen thickness");
+        expect(penSize().querySelector(".sr-card-editor-pen-dot")).not.toBeNull();
+        penSize().click();
+        expect(penSize().hasClass("is-thick")).toBe(true);
+        expect(penSize().hasClass("is-medium")).toBe(false);
+
+        saveNext().click();
+        await flush();
+        // The side is saved with the thickness it is shown with
+        expect(cb.save.mock.calls[0][0].back).toMatchObject({ mode: "ink", penSize: 4 });
+
+        // The next card keeps the chosen thickness; it lasts for this editor only
+        penSize().click();
+        expect(penSize().hasClass("is-thin")).toBe(true);
+        type(0, "Q2");
+        modal.close();
+        expect(cb.keepDraft.mock.calls[0][0].back.penSize).toBe(1.5);
+        document.body.replaceChildren();
+        openAdd(null, { cardEditorPenSize: 2.5, cardEditorDefaultMode: "ink" });
+        expect(penSize().hasClass("is-medium")).toBe(true);
+    });
+
+    test("an edited card and a restored draft write with the size the button shows", () => {
+        const setPenSize = jest.spyOn(SideEditor.prototype, "setPenSize");
+        try {
+            // An old card saved with the thick pen of earlier builds (5)
+            openEdit({
+                front: side({ text: "Q" }),
+                back: side({ mode: "ink", strokes: [stroke(0, 5)], penSize: 5 }),
+            });
+            expect(penSize().hasClass("is-medium")).toBe(true);
+            expect(setPenSize).toHaveBeenCalledWith(2.5);
+            expect(setPenSize.mock.calls.every(([size]) => size === 2.5)).toBe(true);
+            document.body.replaceChildren();
+            setPenSize.mockClear();
+
+            // A draft closed while the thin pen was picked
+            openAdd({
+                front: side({ text: "Q" }),
+                back: side({ mode: "ink", strokes: [stroke(0, 1.5)], penSize: 1.5 }),
+            });
+            expect(penSize().hasClass("is-medium")).toBe(true);
+            expect(setPenSize.mock.calls.every(([size]) => size === 2.5)).toBe(true);
+            // Pressing the button once goes to thick, not skipping a step
+            penSize().click();
+            expect(setPenSize).toHaveBeenLastCalledWith(4);
+        } finally {
+            setPenSize.mockRestore();
+        }
     });
 
     test("eraser toggles and turns off when no side is ink", () => {
@@ -526,8 +607,8 @@ describe("CardEditorModal pen tools", () => {
         button("Save").click();
         await flush();
         const result = cb.save.mock.calls[0][0];
-        expect(result.front).toEqual({ mode: "ink", strokes: front, penSize: 5, changed: false });
-        expect(result.back).toEqual({ mode: "ink", strokes: back, penSize: 5, changed: false });
+        expect(result.front).toEqual({ mode: "ink", strokes: front, penSize: 2.5, changed: false });
+        expect(result.back).toEqual({ mode: "ink", strokes: back, penSize: 2.5, changed: false });
     });
 
     test("undo shows the side it changes in ink mode", () => {
@@ -689,6 +770,41 @@ test("on mobile a text side isn't focused on open, so the soft keyboard stays cl
     } finally {
         isMobile.mockRestore();
     }
+});
+
+test("on mobile the editor keeps its height while the soft keyboard opens and closes", () => {
+    const isMobile = jest.spyOn(Platform, "isMobile", "get").mockReturnValue(true);
+    const resize = (width: number, height: number) => {
+        Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+        Object.defineProperty(window, "innerHeight", { value: height, configurable: true });
+        window.dispatchEvent(new Event("resize"));
+    };
+    try {
+        resize(400, 800);
+        const { modal } = openAdd();
+        const height = () => modal.modalEl.style.getPropertyValue("--sr-card-editor-height");
+        expect(modal.containerEl.hasClass("sr-card-editor-container")).toBe(true);
+        expect(height()).toBe("800px");
+        resize(400, 500); // keyboard opens
+        expect(height()).toBe("800px");
+        resize(400, 800); // and closes
+        expect(height()).toBe("800px");
+        resize(800, 400); // rotated
+        expect(height()).toBe("400px");
+        resize(800, 450); // higher, e.g. a bar went away
+        expect(height()).toBe("450px");
+        modal.close();
+        resize(400, 800);
+        expect(height()).toBe("450px");
+    } finally {
+        resize(1024, 768);
+        isMobile.mockRestore();
+    }
+});
+
+test("on desktop the editor's height is left to CSS", () => {
+    openAdd();
+    expect($(".sr-card-editor-modal").style.getPropertyValue("--sr-card-editor-height")).toBe("");
 });
 
 describe("CardEditorModal while saving", () => {

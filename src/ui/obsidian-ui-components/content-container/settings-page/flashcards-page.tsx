@@ -548,19 +548,6 @@ export class FlashcardsPage extends SettingsPage {
             })
             .addSetting((setting: Setting) => {
                 setting
-                    .setName(t("CARD_EDITOR_PEN_SWITCHES_TO_INK"))
-                    .setDesc(t("CARD_EDITOR_PEN_SWITCHES_TO_INK_DESC"))
-                    .addToggle((toggle) =>
-                        toggle
-                            .setValue(this.settingsManager.settings.cardEditorPenSwitchesToInk)
-                            .onChange(async (value) => {
-                                this.settingsManager.settings.cardEditorPenSwitchesToInk = value;
-                                await this.settingsManager.save();
-                            }),
-                    );
-            })
-            .addSetting((setting: Setting) => {
-                setting
                     .setName(t("CARD_EDITOR_PEN_ONLY"))
                     .setDesc(t("CARD_EDITOR_PEN_ONLY_DESC"))
                     .addToggle((toggle) =>
@@ -626,7 +613,7 @@ export class FlashcardsPage extends SettingsPage {
             .addSetting((setting: Setting) => {
                 setting.setName(t("CARD_EDITOR_PEN_SIZE")).addSlider((slider) =>
                     slider
-                        .setLimits(2, 12, 0.5)
+                        .setLimits(1, 8, 0.5)
                         .setValue(this.settingsManager.settings.cardEditorPenSize)
                         .setDynamicTooltip()
                         .onChange(async (value) => {

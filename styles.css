@@ -7,14 +7,25 @@ img[src*="sr-ink-"] {
   height: auto;
 }
 .sr-pencil-host {
+  --sr-pencil-size: 28px;
+  --sr-pencil-gap: 8px;
   position: relative;
   display: inline-block;
   max-width: 100%;
   box-sizing: border-box;
-  padding: 6px 44px 6px 6px;
+  padding: 4px calc(var(--sr-pencil-size) + var(--sr-pencil-gap) + 4px) 4px 4px;
+  vertical-align: top;
+}
+.sr-pencil-host::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: calc(var(--sr-pencil-size) + var(--sr-pencil-gap));
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
-  vertical-align: top;
+  pointer-events: none;
 }
 .sr-pencil-host > img {
   display: block;
@@ -22,11 +33,12 @@ img[src*="sr-ink-"] {
 }
 .sr-pencil-button {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 0;
+  right: 0;
   z-index: 2;
-  width: 36px;
-  height: 36px;
+  width: var(--sr-pencil-size);
+  height: var(--sr-pencil-size);
+  min-width: 0;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -34,13 +46,26 @@ img[src*="sr-ink-"] {
   border-radius: 50%;
   background-color: var(--background-secondary);
   color: var(--text-muted);
-  box-shadow: var(--shadow-s);
+  box-shadow: none;
+  opacity: 0.6;
+  transition: opacity 120ms ease-in-out;
   touch-action: none;
   cursor: pointer;
 }
+.sr-pencil-button::before {
+  content: "";
+  position: absolute;
+  inset: -4px -4px -4px calc(var(--sr-pencil-gap) / -2);
+}
+.sr-pencil-button:hover,
+.sr-pencil-button:active,
+.sr-pencil-button:focus-visible {
+  opacity: 1;
+  color: var(--text-normal);
+}
 .sr-pencil-button svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   pointer-events: none;
 }
 .sr-card-editor-modal {
@@ -54,10 +79,17 @@ img[src*="sr-ink-"] {
 }
 .is-mobile .sr-card-editor-modal {
   width: 100vw;
-  height: 100%;
+  height: var(--sr-card-editor-height, 100%);
+  max-height: none;
+  flex-shrink: 0;
+  box-sizing: border-box;
   border-radius: 0;
   padding-top: var(--safe-area-inset-top);
   padding-bottom: var(--safe-area-inset-bottom);
+}
+.is-mobile .modal-container.sr-card-editor-container {
+  align-items: flex-start;
+  overflow-y: auto;
 }
 .sr-card-editor-modal .modal-content.sr-card-editor {
   flex: 1;
@@ -74,14 +106,23 @@ img[src*="sr-ink-"] {
 .sr-card-editor-chrome-hidden {
   display: none !important;
 }
+.sr-card-editor .sr-is-hidden {
+  display: none;
+}
 .sr-card-editor-header {
   display: flex;
   align-items: center;
   gap: var(--size-4-1);
   min-height: 40px;
 }
-.sr-card-editor-title {
+.sr-card-editor-title-wrap {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+}
+.sr-card-editor-title {
   min-width: 0;
   font-weight: var(--font-semibold);
   overflow: hidden;
@@ -89,9 +130,28 @@ img[src*="sr-ink-"] {
   white-space: nowrap;
 }
 .sr-card-editor-counter {
-  align-self: center;
+  flex: none;
+  padding: 1px var(--size-4-2);
+  border-radius: var(--radius-l);
+  background-color: rgba(var(--color-green-rgb), 0.15);
   color: var(--text-success);
-  font-size: var(--font-ui-small);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.sr-card-editor-pen-dot {
+  --sr-pen-dot-size: 8px;
+  width: var(--sr-pen-dot-size);
+  height: var(--sr-pen-dot-size);
+  border-radius: 50%;
+  background-color: currentColor;
+}
+.sr-card-editor-pen-size.is-thin .sr-card-editor-pen-dot {
+  --sr-pen-dot-size: 4px;
+}
+.sr-card-editor-pen-size.is-thick .sr-card-editor-pen-dot {
+  --sr-pen-dot-size: 13px;
 }
 .sr-card-editor-icon-button {
   width: 40px;
@@ -126,6 +186,7 @@ img[src*="sr-ink-"] {
 .sr-card-editor-footer button {
   height: 44px;
   font-size: var(--font-ui-medium);
+  white-space: nowrap;
 }
 .sr-card-editor-footer .sr-card-editor-discard {
   color: var(--text-error);
@@ -136,7 +197,6 @@ img[src*="sr-ink-"] {
 }
 .sr-card-editor-footer-spacer {
   flex: 1;
-  text-align: center;
 }
 .sr-card-editor-side {
   flex: 1;
@@ -164,19 +224,51 @@ img[src*="sr-ink-"] {
   overflow: hidden;
 }
 .sr-card-editor-mode-switch .sr-card-editor-mode-button {
+  position: relative;
   min-width: 44px;
   height: 32px;
-  padding: 0 var(--size-4-2);
+  padding: 0 var(--size-4-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--size-4-1);
   border: none;
   border-radius: 0;
   box-shadow: none;
   background-color: transparent;
   color: var(--text-muted);
-  font-size: var(--font-ui-medium);
+  font-size: var(--font-ui-small);
+  white-space: nowrap;
+}
+.sr-card-editor-mode-switch
+  .sr-card-editor-mode-button
+  + .sr-card-editor-mode-button {
+  border-inline-start: 1px solid var(--background-modifier-border);
 }
 .sr-card-editor-mode-switch .sr-card-editor-mode-button.is-active {
   background-color: var(--interactive-accent);
   color: var(--text-on-accent);
+}
+.sr-card-editor-mode-icon {
+  display: inline-flex;
+}
+.sr-card-editor-mode-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.sr-card-editor-mode-dot {
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--text-warning);
+  pointer-events: none;
+  display: none;
+}
+.sr-card-editor-mode-button.has-draft .sr-card-editor-mode-dot {
+  display: block;
 }
 .sr-card-editor-side-body {
   position: relative;
@@ -190,26 +282,35 @@ img[src*="sr-ink-"] {
   min-width: 0;
   min-height: 80px;
 }
-.sr-card-editor-text {
-  width: 100%;
-  resize: none;
+.sr-card-editor-side-body > .sr-card-editor-text,
+.sr-card-editor-ink > .sr-ink-field {
+  box-sizing: border-box;
+  margin: 0;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-l);
+  background-color: var(--background-primary);
+  box-shadow: none;
+}
+.sr-card-editor-side-body > .sr-card-editor-text {
+  width: 100%;
+  height: auto;
+  resize: none;
   padding: var(--size-4-2) var(--size-4-3);
   font-size: var(--font-text-size);
+  line-height: var(--line-height-normal);
+  color: var(--text-normal);
 }
-.sr-card-editor-text.sr-pen-switch {
-  touch-action: pan-y pinch-zoom;
+.sr-card-editor-side-body > .sr-card-editor-text:focus,
+.sr-card-editor-ink > .sr-ink-field:focus-visible {
+  border-color: var(--interactive-accent);
+  box-shadow: none;
+  outline: none;
 }
 .sr-card-editor-ink {
   display: flex;
 }
 .sr-card-editor-side-body > .sr-is-hidden {
   display: none;
-}
-.sr-card-editor-hint {
-  font-size: var(--font-ui-smaller);
-  color: var(--text-warning);
 }
 .sr-ink-field {
   --sr-ink-guide-spacing: 44px;
@@ -272,10 +373,30 @@ img[src*="sr-ink-"] {
   user-select: none;
   -webkit-user-select: none;
 }
+.sr-ink-eraser-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--sr-ink-eraser-size, 16px);
+  height: var(--sr-ink-eraser-size, 16px);
+  transform: translate(var(--sr-ink-eraser-x, 0), var(--sr-ink-eraser-y, 0));
+  box-sizing: border-box;
+  border: 1px solid var(--text-muted);
+  border-radius: 50%;
+  background-color: rgba(var(--mono-rgb-100), 0.08);
+  pointer-events: none;
+  display: none;
+  will-change: transform;
+}
+.sr-ink-eraser-cursor.is-visible {
+  display: block;
+}
 .sr-ink-placeholder {
   position: absolute;
   top: var(--size-4-2);
   inset-inline-start: var(--size-4-3);
+  font-size: var(--font-text-size);
+  line-height: var(--line-height-normal);
   color: var(--text-faint);
   pointer-events: none;
   display: none;
@@ -283,12 +404,29 @@ img[src*="sr-ink-"] {
 .sr-ink-field.is-empty .sr-ink-placeholder {
   display: block;
 }
+.is-phone .sr-card-editor-footer {
+  gap: var(--size-4-1);
+}
 .is-phone .sr-card-editor-footer button {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   height: 48px;
+  padding: 0 var(--size-4-2);
+  font-size: var(--font-ui-small);
+  line-height: 1.15;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 .is-phone .sr-card-editor-footer-spacer {
-  flex: 0 0 auto;
+  display: none;
+}
+.is-phone .sr-card-editor-icon-button {
+  width: 36px;
+  height: 36px;
+}
+.is-phone .sr-card-editor-icon-button.sr-card-editor-close {
+  margin-inline-start: var(--size-4-1);
 }
 
 /* src/ui/styles.css */

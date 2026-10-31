@@ -360,8 +360,6 @@ export interface IBaseLocale {
     CARD_EDITOR_DEFAULT_MODE_DESC: string;
     CARD_EDITOR_MODE_TEXT: string;
     CARD_EDITOR_MODE_INK: string;
-    CARD_EDITOR_PEN_SWITCHES_TO_INK: string;
-    CARD_EDITOR_PEN_SWITCHES_TO_INK_DESC: string;
     CARD_EDITOR_PEN_ONLY: string;
     CARD_EDITOR_PEN_ONLY_DESC: string;
     CARD_EDITOR_IMAGE_FOLDER: string;
@@ -382,12 +380,13 @@ export interface IBaseLocale {
     CARD_EDITOR_FRONT: string;
     CARD_EDITOR_BACK: string;
     CARD_EDITOR_CLOZE: string;
-    CARD_EDITOR_SWITCH_TO_TEXT: string;
-    CARD_EDITOR_SWITCH_TO_INK: string;
     CARD_EDITOR_TEXT_PLACEHOLDER: string;
     CARD_EDITOR_INK_PLACEHOLDER: string;
     CARD_EDITOR_HINT_REPLACES_TEXT: string;
     CARD_EDITOR_HINT_REPLACES_INK: string;
+    CARD_EDITOR_PEN_THIN: string;
+    CARD_EDITOR_PEN_MEDIUM: string;
+    CARD_EDITOR_PEN_THICK: string;
     CARD_EDITOR_ERASER: string;
     CARD_EDITOR_UNDO: string;
     CARD_EDITOR_CLEAR_SIDE: string;
@@ -396,7 +395,7 @@ export interface IBaseLocale {
     CARD_EDITOR_DISCARD_CONFIRM: string;
     CARD_EDITOR_SAVE_NEXT: string;
     CARD_EDITOR_SAVE_CLOSE: string;
-    CARD_EDITOR_CARDS_ADDED: string;
+    CARD_EDITOR_ADDED_BADGE: string;
     CARD_EDITOR_EDIT_HANDWRITTEN: string;
 
     // Card editor > notices

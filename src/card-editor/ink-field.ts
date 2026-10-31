@@ -1,4 +1,12 @@
-import { Point, Stroke, strokeHit, strokePath, StrokeStyle } from "src/card-editor/core/strokes";
+import {
+    eraserRadius,
+    eraseStrokes,
+    Point,
+    Stroke,
+    strokePath,
+    strokeSize,
+    StrokeStyle,
+} from "src/card-editor/core/strokes";
 import { CardEditorGuide } from "src/data/settings";
 
 export interface InkFieldOptions {
@@ -15,12 +23,13 @@ export interface InkFieldOptions {
     onChange: (field: InkField, previous: Stroke[]) => void;
 }
 
-const ERASER_RADIUS = 14;
 const MIN_GUIDE_SPACING = 8;
 
 /**
  * A writing area with guide lines. No Obsidian runtime dependency besides the DOM helpers.
- * Pen draws; the pen's side button (or the eraser end of a stylus, or the toolbar eraser) erases.
+ * Pen draws; the pen's side button (or the eraser end of a stylus, or the toolbar eraser) erases
+ * the ink under it (pixel eraser: strokes are cut, not removed whole), shown by a circle cursor
+ * (an element over the canvas, so a hovering pen doesn't repaint the strokes).
  *
  * To stay light on battery, the guides are a CSS background, the canvas only redraws once per
  * animation frame, finished strokes are cached as Path2D and a hidden field does not draw at all.
@@ -34,9 +43,20 @@ export class InkField {
     private current: Stroke | null = null;
     private erasing = false;
     private eraseSnapshot: Stroke[] | null = null;
+    /** Last eraser position of the gesture, the next move erases the stretch from here */
+    private eraseFrom: [number, number] | null = null;
+    /**
+     * The eraser circle (while erasing or hovering in eraser mode). An element on top of the
+     * canvas, so moving it doesn't repaint the strokes.
+     */
+    private cursorEl: HTMLDivElement;
+    private cursorShown = false;
+    /** The canvas' position on screen, read once per gesture or hover instead of on every move */
+    private rect: DOMRect | null = null;
     private activePointer: number | null = null;
     private frame = 0;
-    private paths = new WeakMap<Stroke, Path2D>();
+    /** Finished strokes as Path2D, with the size they were built for */
+    private paths = new WeakMap<Stroke, { size: number; path: Path2D }>();
     private inkColor: string | null = null;
     private resizeObserver: ResizeObserver | null = null;
 
@@ -45,10 +65,11 @@ export class InkField {
         private opts: InkFieldOptions,
     ) {
         this.el = parent.createDiv({ cls: "sr-ink-field" });
-        // Focusable, so typing while the field is focused can be noticed
+        // Focusable, so switching a side to pen can move the focus off the text area
         this.el.setAttr("tabindex", 0);
         this.el.createDiv({ cls: "sr-ink-placeholder", text: opts.placeholder });
         this.canvas = this.el.createEl("canvas", { cls: "sr-ink-canvas" });
+        this.cursorEl = this.el.createDiv({ cls: "sr-ink-eraser-cursor" });
         const ctx = this.canvas.getContext("2d");
         if (!ctx) throw new Error("Canvas not supported");
         this.ctx = ctx;
@@ -58,6 +79,8 @@ export class InkField {
         this.canvas.addEventListener("pointermove", this.onMove);
         this.canvas.addEventListener("pointerup", this.onUp);
         this.canvas.addEventListener("pointercancel", this.onCancel);
+        this.canvas.addEventListener("pointerleave", this.onLeave);
+        this.canvas.addEventListener("pointerenter", this.onEnter);
         // Long-press with the pen must not open a context menu
         this.canvas.addEventListener("contextmenu", this.onContextMenu);
 
@@ -72,10 +95,14 @@ export class InkField {
         return this.strokes.length === 0;
     }
 
-    /** Changes the pen thickness (used when re-opening a card written with another size) */
+    /**
+     * Changes the pen thickness. New strokes are written with it (each stroke keeps the size it
+     * was written with); strokes without their own size, e.g. those read back from a file, are
+     * drawn with it too. Cached paths are rebuilt only for strokes whose size changes.
+     */
     setStyle(style: StrokeStyle): void {
+        if (style.size === this.opts.style.size) return;
         this.opts.style = style;
-        this.paths = new WeakMap();
         this.schedule();
     }
 
@@ -92,15 +119,6 @@ export class InkField {
         this.opts.onChange(this, prev);
     }
 
-    /**
-     * Starts a stroke from a pointerdown that hit another element, e.g. the text area that turned
-     * into this field when the pen touched it. The canvas captures the pointer from here on.
-     */
-    beginStroke(e: PointerEvent): void {
-        this.resize();
-        this.onDown(e);
-    }
-
     destroy(): void {
         this.resizeObserver?.disconnect();
         if (this.frame) activeWindow.cancelAnimationFrame(this.frame);
@@ -109,6 +127,8 @@ export class InkField {
         this.canvas.removeEventListener("pointermove", this.onMove);
         this.canvas.removeEventListener("pointerup", this.onUp);
         this.canvas.removeEventListener("pointercancel", this.onCancel);
+        this.canvas.removeEventListener("pointerleave", this.onLeave);
+        this.canvas.removeEventListener("pointerenter", this.onEnter);
         this.canvas.removeEventListener("contextmenu", this.onContextMenu);
         // WebKit frees a canvas' memory only on garbage collection and caps the total of all
         // canvases; once over the cap, no new canvas gets a context. Free it right away.
@@ -119,7 +139,7 @@ export class InkField {
     // MARK: input
 
     private point(e: PointerEvent): Point {
-        const r = this.canvas.getBoundingClientRect();
+        const r = (this.rect ??= this.canvas.getBoundingClientRect());
         const pressure = e.pointerType === "pen" ? e.pressure || 0.5 : 0.5;
         return [e.clientX - r.left, e.clientY - r.top, pressure];
     }
@@ -141,6 +161,8 @@ export class InkField {
         if (this.activePointer !== null) return;
         e.preventDefault();
         this.activePointer = e.pointerId;
+        // The field may have moved since the last gesture (e.g. the soft keyboard closed)
+        this.rect = null;
         try {
             this.canvas.setPointerCapture(e.pointerId);
         } catch {
@@ -150,25 +172,59 @@ export class InkField {
         if (this.wantsErase(e)) {
             this.erasing = true;
             this.eraseSnapshot = this.strokes;
-            this.eraseAt(this.point(e));
+            const p = this.point(e);
+            this.eraseFrom = [p[0], p[1]];
+            this.eraseTo(p);
         } else {
-            this.current = { points: [this.point(e)], pressure: e.pointerType === "pen" };
+            this.hideCursor();
+            this.current = {
+                points: [this.point(e)],
+                pressure: e.pointerType === "pen",
+                size: this.opts.style.size,
+            };
             this.updateEmpty();
         }
         this.schedule();
     };
 
     private onMove = (e: PointerEvent) => {
+        if (this.activePointer === null) return this.hover(e);
         if (e.pointerId !== this.activePointer) return;
         e.preventDefault();
-        const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
-        const samples = events.length > 0 ? events : [e];
-        for (const ev of samples) {
-            const p = this.point(ev);
-            if (this.erasing) this.eraseAt(p);
-            else if (this.current) this.current.points.push(p);
+        if (this.erasing) {
+            // The eraser cuts along the whole path between moves, so coalesced samples add little;
+            // the canvas is only redrawn when ink was erased
+            this.eraseTo(this.point(e));
+        } else if (this.current) {
+            const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
+            const samples = events.length > 0 ? events : [e];
+            for (const ev of samples) this.current.points.push(this.point(ev));
+            this.schedule();
         }
-        this.schedule();
+    };
+
+    /**
+     * A hovering pen (or mouse) in eraser mode shows where it would erase. Only the cursor
+     * element moves; the strokes are not redrawn.
+     */
+    private hover(e: PointerEvent) {
+        if (e.pointerType === "touch") return;
+        if (this.wantsErase(e)) {
+            const [x, y] = this.point(e);
+            this.showCursor(x, y);
+        } else {
+            this.hideCursor();
+        }
+    }
+
+    private onEnter = () => {
+        this.rect = null;
+    };
+
+    private onLeave = (e: PointerEvent) => {
+        if (this.activePointer !== null) return;
+        if (e.pointerType === "touch") return;
+        this.hideCursor();
     };
 
     private onUp = (e: PointerEvent) => {
@@ -176,9 +232,12 @@ export class InkField {
         this.activePointer = null;
         if (this.erasing) {
             this.erasing = false;
+            this.eraseFrom = null;
+            this.hideCursor();
             const prev = this.eraseSnapshot;
             this.eraseSnapshot = null;
-            if (prev && prev.length !== this.strokes.length) this.opts.onChange(this, prev);
+            // One undo step for the whole gesture
+            if (prev && prev !== this.strokes) this.opts.onChange(this, prev);
         } else if (this.current) {
             const prev = this.strokes;
             this.strokes = [...this.strokes, this.current];
@@ -200,12 +259,37 @@ export class InkField {
         this.schedule();
     };
 
-    private eraseAt([x, y]: Point) {
-        const kept = this.strokes.filter((s) => !strokeHit(s, x, y, ERASER_RADIUS));
-        if (kept.length !== this.strokes.length) {
+    /** Erases the ink along the eraser's way from the last position to p */
+    private eraseTo([x, y]: Point) {
+        const from = this.eraseFrom ?? [x, y];
+        const size = this.opts.style.size;
+        const kept = eraseStrokes(this.strokes, from, [x, y], eraserRadius(size), size);
+        this.eraseFrom = [x, y];
+        this.showCursor(x, y);
+        if (kept !== this.strokes) {
             this.strokes = kept;
             this.updateEmpty();
+            this.schedule();
         }
+    }
+
+    private showCursor(x: number, y: number) {
+        const r = eraserRadius(this.opts.style.size);
+        this.cursorEl.setCssProps({
+            "--sr-ink-eraser-size": `${2 * r}px`,
+            "--sr-ink-eraser-x": `${x - r}px`,
+            "--sr-ink-eraser-y": `${y - r}px`,
+        });
+        if (!this.cursorShown) {
+            this.cursorShown = true;
+            this.cursorEl.addClass("is-visible");
+        }
+    }
+
+    private hideCursor() {
+        if (!this.cursorShown) return;
+        this.cursorShown = false;
+        this.cursorEl.removeClass("is-visible");
     }
 
     // MARK: drawing
@@ -243,6 +327,7 @@ export class InkField {
         if (width === 0 || height === 0) return;
         const w = Math.max(1, Math.round(width * dpr));
         const h = Math.max(1, Math.round(height * dpr));
+        this.rect = null;
         if (w !== this.canvas.width || h !== this.canvas.height) {
             this.canvas.width = w;
             this.canvas.height = h;
@@ -253,12 +338,12 @@ export class InkField {
     }
 
     private path(stroke: Stroke): Path2D {
-        let p = this.paths.get(stroke);
-        if (!p) {
-            p = new Path2D(strokePath(stroke, this.opts.style));
-            this.paths.set(stroke, p);
-        }
-        return p;
+        const size = strokeSize(stroke, this.opts.style);
+        const cached = this.paths.get(stroke);
+        if (cached && cached.size === size) return cached.path;
+        const path = new Path2D(strokePath(stroke, this.opts.style));
+        this.paths.set(stroke, { size, path });
+        return path;
     }
 
     redraw(): void {

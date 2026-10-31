@@ -115,9 +115,22 @@ describe("ink SVG", () => {
                     [10, 20, 0.4],
                     [30.3, 40, 0.8],
                 ],
+                size: 6,
             },
-            { pressure: false, points: [[5, 5, 0.5]] },
+            { pressure: false, points: [[5, 5, 0.5]], size: 6 },
         ]);
+    });
+
+    test("Strokes keep their own thickness", () => {
+        const thin = { ...line([[10, 10, 0.5]]), size: 1.5 };
+        const same = { ...line([[20, 20, 0.5]]), size: 4 };
+        const plain = line([[30, 30, 0.5]]);
+        const { svg } = strokesToSvg([thin, same, plain], { size: 4 });
+        const meta = JSON.parse(svg.match(/<metadata id="sr-ink">(.*?)<\/metadata>/)[1]) as {
+            strokes: { s?: number }[];
+        };
+        expect(meta.strokes.map((s) => s.s)).toEqual([1.5, undefined, undefined]);
+        expect(svgToStrokes(svg).strokes.map((s) => s.size)).toEqual([1.5, 4, 4]);
     });
 
     test("Other SVGs have no strokes", () => {
@@ -144,6 +157,8 @@ describe("ink SVG", () => {
             `{"v":1,"size":0,"strokes":[${ok}]}`,
             `{"v":1,"size":-3,"strokes":[${ok}]}`,
             `{"v":1,"size":"5","strokes":[${ok}]}`,
+            '{"v":1,"size":5,"strokes":[{"p":1,"s":0,"pts":[[1,2,0.5]]}]}',
+            '{"v":1,"size":5,"strokes":[{"p":1,"s":"2","pts":[[1,2,0.5]]}]}',
             "null",
             "[1]",
         ]) {
@@ -151,7 +166,7 @@ describe("ink SVG", () => {
         }
         expect(svgToStrokes(meta(`{"v":1,"size":5,"strokes":[${ok}]}`))).toEqual({
             size: 5,
-            strokes: [{ pressure: true, points: [[1, 2, 0.5]] }],
+            strokes: [{ pressure: true, points: [[1, 2, 0.5]], size: 5 }],
         });
     });
 

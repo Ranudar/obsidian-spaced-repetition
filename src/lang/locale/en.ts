@@ -428,9 +428,6 @@ const en: IBaseLocale = {
         "How the front and back of a new card start. You can switch each side between text and pen at any time.",
     CARD_EDITOR_MODE_TEXT: "Text",
     CARD_EDITOR_MODE_INK: "Pen",
-    CARD_EDITOR_PEN_SWITCHES_TO_INK: "Switch to pen when the pen touches a side",
-    CARD_EDITOR_PEN_SWITCHES_TO_INK_DESC:
-        "Touching a text side with a stylus switches that side to handwriting, so you never have to tap the switch.",
     CARD_EDITOR_PEN_ONLY: "Pen only",
     CARD_EDITOR_PEN_ONLY_DESC:
         "Ignore finger touches on the writing fields, so your hand can rest on the screen. Turn off to write with a finger or mouse.",
@@ -453,12 +450,13 @@ const en: IBaseLocale = {
     CARD_EDITOR_FRONT: "Front",
     CARD_EDITOR_BACK: "Back",
     CARD_EDITOR_CLOZE: "Card",
-    CARD_EDITOR_SWITCH_TO_TEXT: "Type",
-    CARD_EDITOR_SWITCH_TO_INK: "Write by hand",
     CARD_EDITOR_TEXT_PLACEHOLDER: "Type here",
     CARD_EDITOR_INK_PLACEHOLDER: "Write here with the pen",
     CARD_EDITOR_HINT_REPLACES_TEXT: "Saving replaces the text with handwriting",
     CARD_EDITOR_HINT_REPLACES_INK: "Saving replaces the handwriting with text",
+    CARD_EDITOR_PEN_THIN: "Thin",
+    CARD_EDITOR_PEN_MEDIUM: "Medium",
+    CARD_EDITOR_PEN_THICK: "Thick",
     CARD_EDITOR_ERASER: "Eraser (or hold the pen button)",
     CARD_EDITOR_UNDO: "Undo",
     CARD_EDITOR_CLEAR_SIDE: "Clear side",
@@ -467,7 +465,7 @@ const en: IBaseLocale = {
     CARD_EDITOR_DISCARD_CONFIRM: "Tap again to discard",
     CARD_EDITOR_SAVE_NEXT: "Save & next",
     CARD_EDITOR_SAVE_CLOSE: "Save & close",
-    CARD_EDITOR_CARDS_ADDED: "${count} card(s) added",
+    CARD_EDITOR_ADDED_BADGE: "${count} added",
     CARD_EDITOR_EDIT_HANDWRITTEN: "Edit handwritten card",
 
     // Card editor > notices

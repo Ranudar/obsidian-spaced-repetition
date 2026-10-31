@@ -10,16 +10,30 @@ img[src*="sr-ink-"] {
     height: auto;
 }
 
-/* A handwritten card image in a note or the review window: a box with a pencil in its corner */
+/* A handwritten card image in a note or the review window: the image in a frame, the pencil
+   outside the frame to its right, with a clear gap, so it never sits on or next to the ink.
+   (The frame is drawn by ::after, not on the image, so the dark mode filter doesn't change it.) */
 .sr-pencil-host {
+    --sr-pencil-size: 28px;
+    --sr-pencil-gap: 8px;
     position: relative;
     display: inline-block;
     max-width: 100%;
     box-sizing: border-box;
-    padding: 6px 44px 6px 6px;
+    padding: 4px calc(var(--sr-pencil-size) + var(--sr-pencil-gap) + 4px) 4px 4px;
+    vertical-align: top;
+}
+
+.sr-pencil-host::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: calc(var(--sr-pencil-size) + var(--sr-pencil-gap));
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--radius-m);
-    vertical-align: top;
+    pointer-events: none;
 }
 
 .sr-pencil-host > img {
@@ -29,11 +43,12 @@ img[src*="sr-ink-"] {
 
 .sr-pencil-button {
     position: absolute;
-    top: 4px;
-    right: 4px;
+    top: 0;
+    right: 0;
     z-index: 2;
-    width: 36px;
-    height: 36px;
+    width: var(--sr-pencil-size);
+    height: var(--sr-pencil-size);
+    min-width: 0;
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -41,14 +56,30 @@ img[src*="sr-ink-"] {
     border-radius: 50%;
     background-color: var(--background-secondary);
     color: var(--text-muted);
-    box-shadow: var(--shadow-s);
+    box-shadow: none;
+    opacity: 0.6;
+    transition: opacity 120ms ease-in-out;
     touch-action: none;
     cursor: pointer;
 }
 
+/* A slightly larger area to tap than the button shows; towards the image it stays in the gap */
+.sr-pencil-button::before {
+    content: "";
+    position: absolute;
+    inset: -4px -4px -4px calc(var(--sr-pencil-gap) / -2);
+}
+
+.sr-pencil-button:hover,
+.sr-pencil-button:active,
+.sr-pencil-button:focus-visible {
+    opacity: 1;
+    color: var(--text-normal);
+}
+
 .sr-pencil-button svg {
-    width: 18px;
-    height: 18px;
+    width: 15px;
+    height: 15px;
     pointer-events: none;
 }
 
@@ -64,13 +95,23 @@ img[src*="sr-ink-"] {
     flex-direction: column;
 }
 
-/* Fullscreen on phones and tablets: more room to write, no background to tap by accident */
+/* Fullscreen on phones and tablets: more room to write, no background to tap by accident.
+   The height is the window's without the soft keyboard (set by the editor), so the sides don't
+   change size when the keyboard opens or closes; the editor scrolls under the keyboard instead. */
 .is-mobile .sr-card-editor-modal {
     width: 100vw;
-    height: 100%;
+    height: var(--sr-card-editor-height, 100%);
+    max-height: none;
+    flex-shrink: 0;
+    box-sizing: border-box;
     border-radius: 0;
     padding-top: var(--safe-area-inset-top);
     padding-bottom: var(--safe-area-inset-bottom);
+}
+
+.is-mobile .modal-container.sr-card-editor-container {
+    align-items: flex-start;
+    overflow-y: auto;
 }
 
 .sr-card-editor-modal .modal-content.sr-card-editor {
@@ -92,6 +133,10 @@ img[src*="sr-ink-"] {
     display: none !important;
 }
 
+.sr-card-editor .sr-is-hidden {
+    display: none;
+}
+
 .sr-card-editor-header {
     display: flex;
     align-items: center;
@@ -99,8 +144,15 @@ img[src*="sr-ink-"] {
     min-height: 40px;
 }
 
-.sr-card-editor-title {
+.sr-card-editor-title-wrap {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--size-4-2);
+}
+
+.sr-card-editor-title {
     min-width: 0;
     font-weight: var(--font-semibold);
     overflow: hidden;
@@ -108,10 +160,34 @@ img[src*="sr-ink-"] {
     white-space: nowrap;
 }
 
+/* Cards added in this session */
 .sr-card-editor-counter {
-    align-self: center;
+    flex: none;
+    padding: 1px var(--size-4-2);
+    border-radius: var(--radius-l);
+    background-color: rgba(var(--color-green-rgb), 0.15);
     color: var(--text-success);
-    font-size: var(--font-ui-small);
+    font-size: var(--font-ui-smaller);
+    font-weight: var(--font-semibold);
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+/* Pen thickness: a dot of the current size */
+.sr-card-editor-pen-dot {
+    --sr-pen-dot-size: 8px;
+    width: var(--sr-pen-dot-size);
+    height: var(--sr-pen-dot-size);
+    border-radius: 50%;
+    background-color: currentColor;
+}
+
+.sr-card-editor-pen-size.is-thin .sr-card-editor-pen-dot {
+    --sr-pen-dot-size: 4px;
+}
+
+.sr-card-editor-pen-size.is-thick .sr-card-editor-pen-dot {
+    --sr-pen-dot-size: 13px;
 }
 
 .sr-card-editor-icon-button {
@@ -153,6 +229,7 @@ img[src*="sr-ink-"] {
 .sr-card-editor-footer button {
     height: 44px;
     font-size: var(--font-ui-medium);
+    white-space: nowrap;
 }
 
 .sr-card-editor-footer .sr-card-editor-discard {
@@ -166,7 +243,6 @@ img[src*="sr-ink-"] {
 
 .sr-card-editor-footer-spacer {
     flex: 1;
-    text-align: center;
 }
 
 /* MARK: Side editor */
@@ -201,20 +277,56 @@ img[src*="sr-ink-"] {
 }
 
 .sr-card-editor-mode-switch .sr-card-editor-mode-button {
+    position: relative;
     min-width: 44px;
     height: 32px;
-    padding: 0 var(--size-4-2);
+    padding: 0 var(--size-4-3);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--size-4-1);
     border: none;
     border-radius: 0;
     box-shadow: none;
     background-color: transparent;
     color: var(--text-muted);
-    font-size: var(--font-ui-medium);
+    font-size: var(--font-ui-small);
+    white-space: nowrap;
+}
+
+.sr-card-editor-mode-switch .sr-card-editor-mode-button + .sr-card-editor-mode-button {
+    border-inline-start: 1px solid var(--background-modifier-border);
 }
 
 .sr-card-editor-mode-switch .sr-card-editor-mode-button.is-active {
     background-color: var(--interactive-accent);
     color: var(--text-on-accent);
+}
+
+.sr-card-editor-mode-icon {
+    display: inline-flex;
+}
+
+.sr-card-editor-mode-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* The hidden mode holds a draft that saving would replace. Absolutely positioned: no shifting. */
+.sr-card-editor-mode-dot {
+    position: absolute;
+    top: 4px;
+    inset-inline-end: 4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: var(--text-warning);
+    pointer-events: none;
+    display: none;
+}
+
+.sr-card-editor-mode-button.has-draft .sr-card-editor-mode-dot {
+    display: block;
 }
 
 .sr-card-editor-side-body {
@@ -231,20 +343,33 @@ img[src*="sr-ink-"] {
     min-height: 80px;
 }
 
-.sr-card-editor-text {
-    width: 100%;
-    resize: none;
+/* Text and ink fill the same box (size, border, radius, background): switching only swaps the
+   content. Selectors are specific enough to win over the theme's textarea rules, focus included. */
+.sr-card-editor-side-body > .sr-card-editor-text,
+.sr-card-editor-ink > .sr-ink-field {
+    box-sizing: border-box;
+    margin: 0;
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--radius-l);
-    padding: var(--size-4-2) var(--size-4-3);
-    font-size: var(--font-text-size);
+    background-color: var(--background-primary);
+    box-shadow: none;
 }
 
-/* A pen touch on the text area switches to ink and draws. Fingers still scroll long text
-   vertically; a pen stroke that starts vertically may then be taken over by the browser for
-   scrolling (pointercancel), which loses only the start of that first stroke. */
-.sr-card-editor-text.sr-pen-switch {
-    touch-action: pan-y pinch-zoom;
+.sr-card-editor-side-body > .sr-card-editor-text {
+    width: 100%;
+    height: auto;
+    resize: none;
+    padding: var(--size-4-2) var(--size-4-3);
+    font-size: var(--font-text-size);
+    line-height: var(--line-height-normal);
+    color: var(--text-normal);
+}
+
+.sr-card-editor-side-body > .sr-card-editor-text:focus,
+.sr-card-editor-ink > .sr-ink-field:focus-visible {
+    border-color: var(--interactive-accent);
+    box-shadow: none;
+    outline: none;
 }
 
 .sr-card-editor-ink {
@@ -253,11 +378,6 @@ img[src*="sr-ink-"] {
 
 .sr-card-editor-side-body > .sr-is-hidden {
     display: none;
-}
-
-.sr-card-editor-hint {
-    font-size: var(--font-ui-smaller);
-    color: var(--text-warning);
 }
 
 /* MARK: Ink field */
@@ -325,10 +445,34 @@ img[src*="sr-ink-"] {
     -webkit-user-select: none;
 }
 
+/* The eraser circle: moved with a transform, so following the pen repaints no strokes */
+.sr-ink-eraser-cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--sr-ink-eraser-size, 16px);
+    height: var(--sr-ink-eraser-size, 16px);
+    transform: translate(var(--sr-ink-eraser-x, 0), var(--sr-ink-eraser-y, 0));
+    box-sizing: border-box;
+    border: 1px solid var(--text-muted);
+    border-radius: 50%;
+    background-color: rgba(var(--mono-rgb-100), 0.08);
+    pointer-events: none;
+    display: none;
+    will-change: transform;
+}
+
+.sr-ink-eraser-cursor.is-visible {
+    display: block;
+}
+
+/* Where the text area's placeholder is, so switching modes doesn't move it */
 .sr-ink-placeholder {
     position: absolute;
     top: var(--size-4-2);
     inset-inline-start: var(--size-4-3);
+    font-size: var(--font-text-size);
+    line-height: var(--line-height-normal);
     color: var(--text-faint);
     pointer-events: none;
     display: none;
@@ -340,11 +484,33 @@ img[src*="sr-ink-"] {
 
 /* MARK: Mobile */
 
+/* Phones: Discard · Save & close · Save & next share the width equally and always fit (360 px
+   and up); a label too long for its button wraps instead of being cut off */
+.is-phone .sr-card-editor-footer {
+    gap: var(--size-4-1);
+}
+
 .is-phone .sr-card-editor-footer button {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
     height: 48px;
+    padding: 0 var(--size-4-2);
+    font-size: var(--font-ui-small);
+    line-height: 1.15;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
 }
 
 .is-phone .sr-card-editor-footer-spacer {
-    flex: 0 0 auto;
+    display: none;
+}
+
+.is-phone .sr-card-editor-icon-button {
+    width: 36px;
+    height: 36px;
+}
+
+.is-phone .sr-card-editor-icon-button.sr-card-editor-close {
+    margin-inline-start: var(--size-4-1);
 }

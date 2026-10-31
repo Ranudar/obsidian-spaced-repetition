@@ -20,7 +20,8 @@ export interface SvgResult {
 /**
  * Renders strokes to a standalone SVG, cropped to the ink plus padding.
  * The SVG keeps the on-screen pixel size (no scaling), so small writing stays small on the card.
- * The raw strokes are stored in <metadata> so a card can be re-edited later.
+ * The raw strokes are stored in <metadata> so a card can be re-edited later. `style.size` is the
+ * thickness of strokes without their own size.
  */
 export function strokesToSvg(
     strokes: Stroke[],
@@ -50,6 +51,8 @@ export function strokesToSvg(
             offset: [round(ox), round(oy)],
             strokes: strokes.map((s) => ({
                 p: s.pressure ? 1 : 0,
+                // Only strokes written with another thickness than the file's carry their own
+                ...(s.size !== undefined && s.size !== style.size ? { s: s.size } : {}),
                 pts: s.points.map(([x, y, pr]) => [round(x), round(y), Math.round(pr * 100) / 100]),
             })),
         }),
@@ -95,22 +98,25 @@ export function svgToStrokes(svg: string): ParsedInk | null {
     if (!Array.isArray(data.strokes)) return null;
     const strokes: Stroke[] = [];
     for (const s of data.strokes) {
-        const stroke = parseStroke(s);
+        const stroke = parseStroke(s, data.size);
         if (!stroke) return null;
         strokes.push(stroke);
     }
     return { size: data.size, strokes };
 }
 
-function parseStroke(s: unknown): Stroke | null {
+/** Every stroke gets its thickness: its own if stored, else the file's */
+function parseStroke(s: unknown, fileSize: number): Stroke | null {
     if (!isObject(s) || (s.p !== 0 && s.p !== 1 && typeof s.p !== "boolean")) return null;
+    const size = s.s === undefined ? fileSize : s.s;
+    if (!isFiniteNumber(size) || size <= 0) return null;
     if (!Array.isArray(s.pts) || s.pts.length === 0) return null;
     const points: Point[] = [];
     for (const pt of s.pts) {
         if (!Array.isArray(pt) || pt.length !== 3 || !pt.every(isFiniteNumber)) return null;
         points.push([pt[0], pt[1], pt[2]]);
     }
-    return { pressure: s.p === 1 || s.p === true, points };
+    return { pressure: s.p === 1 || s.p === true, points, size };
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
