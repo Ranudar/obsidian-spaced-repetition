@@ -1,6 +1,7 @@
 import { now } from "moment";
 import { App, MarkdownView, Notice, Platform } from "obsidian";
 
+import { EditQuestionResult } from "src/card-editor/card-editor-service";
 import { DataManager } from "src/data/data-manager";
 import { Card } from "src/data/data-structures/card/card";
 import { Question } from "src/data/data-structures/card/questions/question";
@@ -20,7 +21,6 @@ import { CardContainer } from "src/ui/obsidian-ui-components/content-container/c
 import CardInfoNotice from "src/ui/obsidian-ui-components/content-container/card-container/toolbar/toolbar-buttons/card-info-notice";
 import { DeckContainer } from "src/ui/obsidian-ui-components/content-container/deck-container/deck-container";
 import { ConfirmationModal } from "src/ui/obsidian-ui-components/modals/confirmation-modal";
-import { FlashcardEditModal } from "src/ui/obsidian-ui-components/modals/edit-modal";
 import { ReviewQueueLoader } from "src/ui/review-queue-loader";
 import { UIManager, UIState } from "src/ui/ui-manager";
 import EmulatedPlatform from "src/utils/platform-detector";
@@ -374,42 +374,42 @@ export default class ContentManager {
 
     private async _doEditQuestionText(): Promise<void> {
         if (this.reviewSequencer === null) return;
-        const currentCard: Card | null = this.reviewSequencer.currentCard;
         const currentQ: Question = this.reviewSequencer.currentQuestion;
+        const service = this.plugin.cardEditorService;
 
-        // Just the question/answer text; without any preceding topic tag
-        const textPrompt = currentQ.questionText.actualQuestion;
         const currentUIState = this.uiManager.uiState;
         this.uiManager.setUIState(UIState.EditModal);
-        const editModal = FlashcardEditModal.Prompt(
-            this.app,
-            this.settings,
-            currentCard,
-            textPrompt,
-            currentQ.questionText.textDirection,
-        );
-        await editModal
-            .then(async (modifiedCardText) => {
-                if (this.reviewSequencer === null) return;
-                await this.reviewSequencer.updateCurrentQuestionTextAndCards(modifiedCardText);
-                this.uiManager.setUIState(currentUIState);
+        let result: EditQuestionResult | null = null;
+        try {
+            result = await service.editQuestion(currentQ);
+        } catch (error) {
+            console.error("SR: editing the card failed", error);
+            new Notice(t("CARD_EDITOR_EDIT_FAILED", { error: String(error) }));
+        }
+        this.uiManager.setUIState(currentUIState);
+        if (result === null || this.reviewSequencer === null) return;
 
-                if (this.sessionData !== null) {
-                    if (this.uiManager.uiState === UIState.CardFront) {
-                        await this.cardContainer.drawCardFront(this.sessionData, this.settings);
-                    }
+        // Ink-only changes rewrite the images but leave the note (and its schedule) untouched
+        if (result.textChanged) {
+            await this.reviewSequencer.updateCurrentQuestionTextAndCards(result.text);
+        }
+        service.refreshImages(result.changedImages);
 
-                    if (this.uiManager.uiState === UIState.CardBack) {
-                        await this.cardContainer.drawBack(
-                            this.sessionData,
-                            this.reviewMode,
-                            this.settings,
-                            this._determineButtonSchedule.bind(this),
-                        );
-                    }
-                }
-            })
-            .catch((reason) => console.log(reason));
+        // Always redraw, so rewritten images don't show stale ink
+        if (this.sessionData !== null) {
+            if (this.uiManager.uiState === UIState.CardFront) {
+                await this.cardContainer.drawCardFront(this.sessionData, this.settings);
+            }
+
+            if (this.uiManager.uiState === UIState.CardBack) {
+                await this.cardContainer.drawBack(
+                    this.sessionData,
+                    this.reviewMode,
+                    this.settings,
+                    this._determineButtonSchedule.bind(this),
+                );
+            }
+        }
     }
 
     public async _jumpToCurrentCard(): Promise<void> {

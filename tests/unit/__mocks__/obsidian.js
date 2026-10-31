@@ -107,6 +107,11 @@ module.exports = {
     },
 
     Notice: jest.fn().mockImplementation(),
+    normalizePath: (path) =>
+        path
+            .replace(/[\\/]+/g, "/")
+            .replace(/^\/|\/$/g, "")
+            .trim(),
     setIcon: jest.fn(),
     Modal,
     ButtonComponent,

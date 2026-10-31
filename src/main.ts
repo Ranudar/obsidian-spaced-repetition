@@ -1,5 +1,6 @@
 import { Plugin } from "obsidian";
 
+import { CardEditorService } from "src/card-editor/card-editor-service";
 import { CommandManager } from "src/command-manager";
 import { DataManager } from "src/data/data-manager";
 import { DebugLoggerInstance } from "src/data/debug-logger";
@@ -21,6 +22,7 @@ export default class SRPlugin extends Plugin {
     private _nextNoteReviewHandler: NextNoteReviewHandler | null = null;
     private _commandManager: CommandManager | null = null;
     private _reminderManager: ReminderManager | null = null;
+    private _cardEditorService: CardEditorService | null = null;
     public isInitialized: boolean = false;
 
     async onload(): Promise<void> {
@@ -37,6 +39,7 @@ export default class SRPlugin extends Plugin {
             );
 
             this.dataManager = new DataManager(this, pluginDataManager, settingsManager);
+            this._cardEditorService = new CardEditorService(this, settingsManager);
             const uiManager = new UIManager(this, settingsManager);
             this.uiManager = uiManager;
             this.commandManager = new CommandManager(this, settingsManager, uiManager);
@@ -85,6 +88,12 @@ export default class SRPlugin extends Plugin {
     get reminderManager(): ReminderManager {
         if (this._reminderManager === null) throw new Error("Reminder manager not initialized!!!");
         return this._reminderManager;
+    }
+
+    get cardEditorService(): CardEditorService {
+        if (this._cardEditorService === null)
+            throw new Error("Card editor service not initialized!!!");
+        return this._cardEditorService;
     }
 
     get uiManager(): UIManager {
