@@ -265,4 +265,16 @@ describe("SettingsUtil", () => {
             reviewReminderBounceDock: DEFAULT_SETTINGS.reviewReminderBounceDock,
         });
     });
+
+    test("card editor defaults", () => {
+        expect(DEFAULT_SETTINGS).toMatchObject({
+            cardEditorDefaultMode: "text",
+            cardEditorPenSwitchesToInk: true,
+            cardEditorPenOnly: true,
+            cardEditorImageFolder: "pencards",
+            cardEditorGuide: "lined",
+            cardEditorGuideSpacing: 44,
+            cardEditorPenSize: 5,
+        });
+    });
 });

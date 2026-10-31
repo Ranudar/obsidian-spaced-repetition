@@ -3,6 +3,11 @@ import { t } from "src/lang/helpers";
 import { SRAlgorithmType } from "src/scheduling/algorithms/base/isr-algorithm";
 import { pathMatchesPattern } from "src/utils/fs";
 
+/** Input mode of a card side in the card editor */
+export type CardEditorInputMode = "text" | "ink";
+/** Background guides of the card editor's ink fields */
+export type CardEditorGuide = "lined" | "dotted" | "grid" | "none";
+
 export interface SRSettings {
     // flashcards
     flashcardTags: string[];
@@ -70,6 +75,16 @@ export interface SRSettings {
     openViewInNewTab: boolean;
     useCustomHotkeys: boolean;
     useCalloutsForSchedulingComments: boolean;
+
+    // card editor
+    cardEditorDefaultMode: CardEditorInputMode;
+    cardEditorPenSwitchesToInk: boolean;
+    cardEditorPenOnly: boolean;
+    // Folder for handwritten card images; empty = Obsidian's attachment location
+    cardEditorImageFolder: string;
+    cardEditorGuide: CardEditorGuide;
+    cardEditorGuideSpacing: number;
+    cardEditorPenSize: number;
 
     // algorithm
     algorithm: SRAlgorithmType;
@@ -160,6 +175,15 @@ export const DEFAULT_SETTINGS: SRSettings = {
     openViewInNewTabMobile: false,
     useCustomHotkeys: false,
     useCalloutsForSchedulingComments: false,
+
+    // card editor
+    cardEditorDefaultMode: "text",
+    cardEditorPenSwitchesToInk: true,
+    cardEditorPenOnly: true,
+    cardEditorImageFolder: "pencards",
+    cardEditorGuide: "lined",
+    cardEditorGuideSpacing: 44,
+    cardEditorPenSize: 5,
 
     // algorithm
     algorithm: SRAlgorithmType.SM_2_OSR,
