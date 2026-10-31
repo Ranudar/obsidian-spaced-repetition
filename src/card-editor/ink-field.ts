@@ -69,12 +69,26 @@ export class InkField {
      * canvas is not laid out), read once per gesture or hover instead of on every move, and
      * again after anything that can move the field: resize, scroll, the soft keyboard.
      */
-    private view: { left: number; top: number; box: Box | null } | null = null;
+    private view: View | null = null;
+    /**
+     * Set once per animation frame while the pen is down: the next sample checks that the canvas
+     * is still where the view says (one getBoundingClientRect), for shifts no event reports.
+     */
+    private recheckView = false;
+    private recheckFrame = 0;
     /**
      * The view the gesture's last sample was taken in. When the field moves mid-gesture, the
      * samples before and after are in different coordinates and must not be joined.
      */
     private gestureView: { left: number; top: number } | null = null;
+    /**
+     * When the event that marked the view stale fired (its timeStamp, on the pointer events'
+     * clock). Coalesced samples taken before it were in the old place: they are dropped instead
+     * of being placed with the new offset. -Infinity when the time is not known (a ResizeObserver
+     * or the frame's check): then a batch that straddles the shift may start the new stroke with
+     * a few samples (one frame at most) placed with the new offset.
+     */
+    private viewChangedAt = -Infinity;
     private win: Window;
     private activePointer: number | null = null;
     private frame = 0;
@@ -156,6 +170,7 @@ export class InkField {
         this.win.visualViewport?.removeEventListener("scroll", this.invalidateView);
         if (this.frame) activeWindow.cancelAnimationFrame(this.frame);
         this.frame = 0;
+        this.stopRecheck();
         this.canvas.removeEventListener("pointerdown", this.onDown);
         this.canvas.removeEventListener("pointermove", this.onMove);
         this.canvas.removeEventListener("pointerup", this.onUp);
@@ -172,18 +187,55 @@ export class InkField {
     // MARK: input
 
     private point(e: PointerEvent): Point {
-        const v = (this.view ??= this.measure());
+        const v = this.currentView();
         const pressure = e.pointerType === "pen" ? e.pressure || 0.5 : 0.5;
         return [e.clientX - v.left, e.clientY - v.top, pressure];
     }
 
-    private invalidateView = () => {
+    private invalidateView = (e: Event) => {
         this.view = null;
+        this.viewChangedAt = e.timeStamp;
     };
 
+    /** Whether a sample was taken before the field moved, so its offset is no longer known */
+    private stale(e: PointerEvent): boolean {
+        return e.timeStamp < this.viewChangedAt;
+    }
+
+    /**
+     * The view, measured again when an event marked it stale or, once a frame while the pen is
+     * down, when the canvas is no longer where it was (the soft keyboard closing moves the field
+     * without any event before the next samples arrive).
+     */
+    private currentView(): View {
+        if (this.view !== null && this.recheckView) {
+            this.recheckView = false;
+            const r = this.canvas.getBoundingClientRect();
+            if (r.left !== this.view.left || r.top !== this.view.top) {
+                this.view = this.measure(r);
+                this.viewChangedAt = -Infinity;
+            }
+        }
+        return (this.view ??= this.measure());
+    }
+
+    /** While the pen is down: allow one cheap check of the canvas' position per frame */
+    private watchView() {
+        if (this.recheckFrame) return;
+        this.recheckFrame = activeWindow.requestAnimationFrame(() => {
+            this.recheckFrame = 0;
+            if (this.activePointer !== null) this.recheckView = true;
+        });
+    }
+
+    private stopRecheck() {
+        if (this.recheckFrame) activeWindow.cancelAnimationFrame(this.recheckFrame);
+        this.recheckFrame = 0;
+        this.recheckView = false;
+    }
+
     /** The visible part of the canvas: see visibleBox() */
-    private measure() {
-        const r = this.canvas.getBoundingClientRect();
+    private measure(r: DOMRect = this.canvas.getBoundingClientRect()): View {
         const box = visibleBox(this.canvas, r, this.win);
         if (box === null) return { left: r.left, top: r.top, box: null };
         return {
@@ -200,13 +252,13 @@ export class InkField {
 
     /** Whether a point (canvas coordinates, as from point()) can be seen */
     private visible(p: Point): boolean {
-        const box = (this.view ??= this.measure()).box;
+        const box = this.currentView().box;
         return box === null || inBox(box, p[0], p[1]);
     }
 
     /** The part of the move from a to b that can be seen, null when none of it */
     private clip(a: Point, b: Point): [Point, Point] | null {
-        const box = (this.view ??= this.measure()).box;
+        const box = this.currentView().box;
         return box === null ? [a, b] : clipSegment(a, b, box);
     }
 
@@ -227,8 +279,13 @@ export class InkField {
         if (this.activePointer !== null) return;
         e.preventDefault();
         this.activePointer = e.pointerId;
+        // A text area that still has the focus keeps the soft keyboard open: closing it moves the
+        // field, so it closes now, before the field is measured, not while the pen writes
+        this.releaseTextFocus();
         // The field may have moved since the last gesture (e.g. the soft keyboard closed)
         this.view = null;
+        this.viewChangedAt = -Infinity;
+        this.recheckView = false;
         try {
             this.canvas.setPointerCapture(e.pointerId);
         } catch {
@@ -252,20 +309,35 @@ export class InkField {
             if (this.visible(p)) this.current = this.newStroke(p);
             this.updateEmpty();
         }
+        this.watchView();
         this.schedule();
     };
+
+    /**
+     * Takes the focus off a text field (closing the soft keyboard) and gives it to the ink field,
+     * without scrolling, so Ctrl/Cmd+Z undoes the ink.
+     */
+    private releaseTextFocus() {
+        const focused = this.el.ownerDocument.activeElement;
+        if (!focused?.instanceOf(HTMLElement) || !isTextInput(focused)) return;
+        focused.blur();
+        this.el.focus({ preventScroll: true });
+    }
 
     private onMove = (e: PointerEvent) => {
         if (this.activePointer === null) return this.hover(e);
         if (e.pointerId !== this.activePointer) return;
         e.preventDefault();
+        this.watchView();
         if (this.erasing) {
             // The eraser cuts along the whole path between moves, so coalesced samples add little;
             // the canvas is only redrawn when ink was erased
             const p = this.point(e);
             if (this.fieldMoved()) this.eraseFrom = null;
+            if (this.stale(e)) return;
             this.eraseTo(p);
-        } else if (this.lastSample) {
+        } else {
+            // lastSample may be null here: after a shift, until the first sample in the new place
             const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
             const samples = events.length > 0 ? events : [e];
             for (const ev of samples) {
@@ -274,6 +346,8 @@ export class InkField {
                     this.endStroke();
                     this.lastSample = null;
                 }
+                // Taken before the shift: in old coordinates, which no longer apply
+                if (this.stale(ev)) continue;
                 this.addSample(p);
             }
             this.updateEmpty();
@@ -355,6 +429,7 @@ export class InkField {
     private onUp = (e: PointerEvent) => {
         if (e.pointerId !== this.activePointer) return;
         this.activePointer = null;
+        this.stopRecheck();
         if (this.erasing) {
             this.erasing = false;
             this.eraseFrom = null;
@@ -384,6 +459,7 @@ export class InkField {
         // What was erased so far was already shown gone, so it stays erased
         if (this.erasing) return this.onUp(e);
         this.activePointer = null;
+        this.stopRecheck();
         this.resetGesture();
         this.updateEmpty();
         this.schedule();
@@ -467,6 +543,7 @@ export class InkField {
         const w = Math.max(1, Math.round(width * dpr));
         const h = Math.max(1, Math.round(height * dpr));
         this.view = null;
+        this.viewChangedAt = -Infinity;
         if (w !== this.canvas.width || h !== this.canvas.height) {
             this.canvas.width = w;
             this.canvas.height = h;
@@ -502,6 +579,33 @@ export class InkField {
         // The stroke in progress changes every frame, so it is not cached
         if (this.current) ctx.fill(new Path2D(strokePath(this.current, this.opts.style)));
     }
+}
+
+/** Where the canvas is on screen and its visible part (canvas coordinates) */
+interface View {
+    left: number;
+    top: number;
+    box: Box | null;
+}
+
+/** Whether focusing the element (may have) opened the soft keyboard */
+function isTextInput(el: HTMLElement): boolean {
+    if (el.isContentEditable) return true;
+    const tag = el.tagName;
+    if (tag === "TEXTAREA") return true;
+    if (tag !== "INPUT") return false;
+    const type = (el as HTMLInputElement).type;
+    return ![
+        "button",
+        "checkbox",
+        "radio",
+        "range",
+        "color",
+        "file",
+        "submit",
+        "reset",
+        "image",
+    ].includes(type);
 }
 
 const SCROLL_OPTIONS: AddEventListenerOptions = { capture: true, passive: true };
