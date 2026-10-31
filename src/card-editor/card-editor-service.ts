@@ -11,6 +11,7 @@ import {
     composeCardText,
     inkEmbed,
     inkEmbedFileName,
+    inkEmbedFileNames,
     newCardBody,
     splitCardText,
 } from "src/card-editor/core/card-text";
@@ -58,6 +59,8 @@ export class CardEditorService {
     private settingsManager: SettingsManager;
     /** The unsaved card of the last add editor closed without saving */
     private draft: CardEditorSides | null = null;
+    /** A card from a note is being edited; ignores a second tap on a pencil meanwhile */
+    private editingInNote = false;
 
     constructor(plugin: SRPlugin, settingsManager: SettingsManager) {
         this.plugin = plugin;
@@ -136,6 +139,45 @@ export class CardEditorService {
                 closed: () => resolve(result),
             }).open();
         });
+    }
+
+    /**
+     * Opens the editor for the card in the note that shows the ink image (pencil button in a note).
+     * Writes the card's text back to the note if it changed, then rescans the vault.
+     */
+    async editInNote(noteFile: TFile, imageName: string): Promise<void> {
+        if (this.editingInNote) return;
+        this.editingInNote = true;
+        try {
+            const note = await this.plugin.dataManager.loadNote(noteFile);
+            const question = note ? findQuestionWithInk(note.questionList, imageName) : null;
+            if (question === null) {
+                new Notice(t("CARD_EDITOR_CARD_NOT_FOUND"));
+                return;
+            }
+
+            const result = await this.editQuestion(question);
+            if (result === null) return;
+            if (result.textChanged) {
+                // Replaces just the question's text, so its schedule comment stays
+                question.questionText.actualQuestion = result.text;
+                await question.writeQuestion(this.settings);
+            }
+            this.refreshImages(result.changedImages);
+            if (result.textChanged && this.plugin.isInitialized)
+                await this.plugin.dataManager.sync();
+        } catch (err) {
+            console.error("SR: editing the card failed", err);
+            new Notice(t("CARD_EDITOR_EDIT_FAILED", { error: String(err) }));
+        } finally {
+            this.editingInNote = false;
+        }
+    }
+
+    /** Pencil button in the review window: the same as the toolbar's Edit button */
+    async editInReview(): Promise<void> {
+        if (!this.plugin.isUiManagerLoaded()) return;
+        await this.plugin.uiManager.contentManager?.editCurrentQuestion();
     }
 
     /**
@@ -308,4 +350,13 @@ export class CardEditorService {
 
         return { front: frontText, back: backText, changedImages };
     }
+}
+
+/** The first question whose text embeds the ink image with that file name, or null */
+export function findQuestionWithInk(questions: Question[], imageName: string): Question | null {
+    return (
+        questions.find((question) =>
+            inkEmbedFileNames(question.questionText.actualQuestion).includes(imageName),
+        ) ?? null
+    );
 }

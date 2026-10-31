@@ -7,7 +7,7 @@ import {
     CardEditorSides,
     SideResult,
 } from "src/card-editor/card-editor-modal";
-import { CardEditorService } from "src/card-editor/card-editor-service";
+import { CardEditorService, findQuestionWithInk } from "src/card-editor/card-editor-service";
 import { inkEmbedFileName } from "src/card-editor/core/card-text";
 import { parseInkFileName, strokesToSvg, svgToStrokes } from "src/card-editor/core/ink-svg";
 import { Stroke } from "src/card-editor/core/strokes";
@@ -114,6 +114,9 @@ let service: CardEditorService;
 /** Tags of the notes, as Obsidian's metadata cache reports them */
 let noteTags: string[];
 const sync = jest.fn(() => Promise.resolve());
+/** What dataManager.loadNote returns */
+let loadedNote: Note | null;
+const editCurrentQuestion = jest.fn(() => Promise.resolve());
 
 beforeAll(() => {
     setupStaticDateProvider20230906();
@@ -126,6 +129,8 @@ beforeEach(() => {
     settings = { ...DEFAULT_SETTINGS };
     noteTags = ["#flashcards"];
     sync.mockClear();
+    loadedNote = null;
+    editCurrentQuestion.mockClear();
     jest.mocked(Notice).mockClear();
     const plugin = {
         app: vault.app,
@@ -134,7 +139,10 @@ beforeEach(() => {
         dataManager: {
             createSRNoteTFile: () => ({ getAllTagsFromCache: () => noteTags }),
             sync,
+            loadNote: jest.fn(() => Promise.resolve(loadedNote)),
         },
+        isUiManagerLoaded: () => true,
+        uiManager: { contentManager: { editCurrentQuestion } },
     } as unknown as SRPlugin;
     service = new CardEditorService(plugin, new SettingsManager(settings, () => Promise.resolve()));
 });
@@ -599,4 +607,118 @@ describe("adding cards", () => {
         openAdd();
         expect(Notice).toHaveBeenCalledTimes(1);
     });
+});
+
+describe("editing from a note", () => {
+    const pencilNote = `#flashcards
+
+What is the powerhouse of the cell?
+?
+![[pencards/pencard-20261031-141502123-back.svg]]
+<!--SR:!2026-10-27,3,250-->
+
+Draw a cell::![](pencards/pencard-xyz-back.svg)
+`;
+    let noteFile: UnitTestSRFile;
+
+    beforeEach(async () => {
+        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        vault.add("pencards/pencard-xyz-back.svg", svgOf([stroke(1)]));
+        noteFile = new UnitTestSRFile(pencilNote, NOTE_PATH);
+        const parser = createTestNoteQuestionParser(settings);
+        const questions = await parser.createQuestionList(
+            noteFile,
+            TextDirection.Ltr,
+            TopicPath.emptyPath,
+            true,
+        );
+        loadedNote = new Note(noteFile, questions);
+    });
+
+    /** Taps the pencil on an image and waits until the editor is shown */
+    async function tapPencil(imageName: string) {
+        const done = service.editInNote({ path: NOTE_PATH } as TFile, imageName);
+        for (let i = 0; i < 20 && ModalMock.mock.calls.length === 0; i++) await Promise.resolve();
+        const opts = ModalMock.mock.calls[0]?.[2];
+        return { done, opts: opts?.kind === "edit" ? opts : null };
+    }
+
+    test("finds the card whose text embeds the image, in either embed form", () => {
+        const [first, second] = loadedNote.questionList;
+        expect(
+            findQuestionWithInk(loadedNote.questionList, "pencard-20261031-141502123-back.svg"),
+        ).toBe(first);
+        expect(findQuestionWithInk(loadedNote.questionList, "pencard-xyz-back.svg")).toBe(second);
+        expect(findQuestionWithInk(loadedNote.questionList, "pencard-other-back.svg")).toBeNull();
+    });
+
+    test("opens the whole card, a typed front and a handwritten back", async () => {
+        const { opts } = await tapPencil("pencard-20261031-141502123-back.svg");
+        expect(opts.initial.front.mode).toEqual("text");
+        expect(opts.initial.front.text).toEqual("What is the powerhouse of the cell?");
+        expect(opts.initial.back.mode).toEqual("ink");
+    });
+
+    test("a changed text is written to the note, keeping the schedule, and the vault is rescanned", async () => {
+        const { done, opts } = await tapPencil("pencard-20261031-141502123-back.svg");
+        await opts.save({
+            front: text("What is the powerhouse of the eukaryotic cell?"),
+            back: unchanged(opts.initial.back),
+        });
+        opts.closed();
+        await done;
+
+        expect(noteFile.content).toEqual(
+            pencilNote.replace("of the cell?", "of the eukaryotic cell?"),
+        );
+        expect(sync).toHaveBeenCalledTimes(1);
+    });
+
+    test("changed ink rewrites only the image, and its copies are reloaded", async () => {
+        const refresh = jest.spyOn(service.inkFiles, "refresh");
+        const { done, opts } = await tapPencil("pencard-xyz-back.svg");
+        await opts.save({ front: unchanged(opts.initial.front), back: ink([stroke(7)]) });
+        opts.closed();
+        await done;
+
+        expect(noteFile.content).toEqual(pencilNote);
+        expect(sync).not.toHaveBeenCalled();
+        expect(refresh).toHaveBeenCalledWith([vault.byName("pencard-xyz-back.svg")]);
+        expect(svgToStrokes(vault.content("pencards/pencard-xyz-back.svg")).strokes).toEqual([
+            stroke(7),
+        ]);
+    });
+
+    test("cancel writes nothing", async () => {
+        const { done, opts } = await tapPencil("pencard-xyz-back.svg");
+        opts.closed();
+        await done;
+        expect(noteFile.content).toEqual(pencilNote);
+        expect(sync).not.toHaveBeenCalled();
+    });
+
+    test("a second tap while the editor is open is ignored", async () => {
+        const { done, opts } = await tapPencil("pencard-xyz-back.svg");
+        await service.editInNote({ path: NOTE_PATH } as TFile, "pencard-xyz-back.svg");
+        expect(ModalMock).toHaveBeenCalledTimes(1);
+        opts.closed();
+        await done;
+    });
+
+    test("an image that is not part of a card gets a notice", async () => {
+        const { done, opts } = await tapPencil("pencard-other-back.svg");
+        await done;
+        expect(opts).toBeNull();
+        expect(Notice).toHaveBeenCalledWith("This image is not part of any card in this note.");
+
+        loadedNote = null;
+        await service.editInNote({ path: NOTE_PATH } as TFile, "pencard-xyz-back.svg");
+        expect(Notice).toHaveBeenCalledTimes(2);
+        expect(ModalMock).not.toHaveBeenCalled();
+    });
+});
+
+test("the pencil in the review window edits like the toolbar's Edit button", async () => {
+    await service.editInReview();
+    expect(editCurrentQuestion).toHaveBeenCalledTimes(1);
 });

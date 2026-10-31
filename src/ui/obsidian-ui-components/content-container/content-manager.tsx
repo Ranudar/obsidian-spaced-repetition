@@ -372,6 +372,16 @@ export default class ContentManager {
         );
     }
 
+    /**
+     * Opens the card editor for the card shown in the review window, like the toolbar's Edit button.
+     * Does nothing while no card is shown, e.g. when the editor is already open.
+     */
+    public async editCurrentQuestion(): Promise<void> {
+        const state = this.uiManager.uiState;
+        if (state !== UIState.CardFront && state !== UIState.CardBack) return;
+        await this._doEditQuestionText();
+    }
+
     private async _doEditQuestionText(): Promise<void> {
         if (this.reviewSequencer === null) return;
         const currentQ: Question = this.reviewSequencer.currentQuestion;

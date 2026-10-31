@@ -95,6 +95,8 @@ class ButtonComponent {
     }
 }
 
+class TFile {}
+
 module.exports = {
     moment: {
         locale: jest.fn(() => "en"),
@@ -115,4 +117,5 @@ module.exports = {
     setIcon: jest.fn(),
     Modal,
     ButtonComponent,
+    TFile,
 };

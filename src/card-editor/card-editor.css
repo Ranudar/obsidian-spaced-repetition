@@ -10,6 +10,48 @@ img[src*="pencard-"] {
     height: auto;
 }
 
+/* A handwritten card image in a note or the review window: a box with a pencil in its corner */
+.sr-pencil-host {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 6px 44px 6px 6px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-m);
+    vertical-align: top;
+}
+
+.sr-pencil-host > img {
+    display: block;
+    max-width: 100%;
+}
+
+.sr-pencil-button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 2;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: var(--background-secondary);
+    color: var(--text-muted);
+    box-shadow: var(--shadow-s);
+    touch-action: none;
+    cursor: pointer;
+}
+
+.sr-pencil-button svg {
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+}
+
 /* MARK: Card editor modal */
 
 .sr-card-editor-modal {

@@ -1,0 +1,271 @@
+import { App, MarkdownPostProcessorContext, TFile } from "obsidian";
+
+import { InkFiles } from "src/card-editor/ink-files";
+import { PencilButtonActions, PencilButtons } from "src/card-editor/pencil-buttons";
+
+const INK_SRC = "app://vault/pencards/pencard-20261031-141502123-back.svg?1730380000";
+const INK_NAME = "pencard-20261031-141502123-back.svg";
+
+function tFile(path: string): TFile {
+    return Object.assign(new TFile(), { path, name: path.substring(path.lastIndexOf("/") + 1) });
+}
+
+const note = tFile("notes/bio.md");
+const otherNote = tFile("notes/chem.md");
+
+let leaves: { view: { containerEl: HTMLElement; file: TFile | null } }[];
+let editInNote: jest.Mock;
+let editInReview: jest.Mock;
+let applyVersion: jest.Mock;
+let buttons: PencilButtons;
+
+beforeEach(() => {
+    leaves = [];
+    const app = {
+        vault: {
+            getAbstractFileByPath: (path: string) => (path === note.path ? note : null),
+        },
+        workspace: { getLeavesOfType: () => leaves },
+    } as unknown as App;
+    editInNote = jest.fn(() => Promise.resolve());
+    editInReview = jest.fn(() => Promise.resolve());
+    applyVersion = jest.fn();
+    const actions = {
+        editInNote,
+        editInReview,
+        inkFiles: { applyVersion } as unknown as InkFiles,
+    } as PencilButtonActions;
+    buttons = new PencilButtons(app, actions);
+});
+
+afterEach(() => {
+    buttons.destroy();
+    document.body.replaceChildren();
+});
+
+/** Waits for MutationObserver callbacks */
+const mutations = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** An image embed as Obsidian renders it: a span with the image inside */
+function embed(src = INK_SRC, parent: HTMLElement = document.body): HTMLImageElement {
+    const span = parent.createSpan({ cls: "internal-embed image-embed" });
+    const img = span.createEl("img");
+    img.setAttribute("src", src);
+    return img;
+}
+
+/** Renders like a post-processed section of the note at sourcePath */
+function postProcess(el: HTMLElement, sourcePath = note.path) {
+    buttons.postProcess(el, { sourcePath } as MarkdownPostProcessorContext);
+}
+
+const buttonOf = (img: HTMLImageElement) =>
+    img.parentElement.querySelector<HTMLButtonElement>(".sr-pencil-button");
+
+function fire(el: HTMLElement, type: string, init: MouseEventInit = {}): MouseEvent {
+    const e = new MouseEvent(type, { bubbles: true, cancelable: true, ...init });
+    el.dispatchEvent(e);
+    return e;
+}
+
+/** A pen or finger tap: pointer events, then the mouse events and click the browser adds */
+function tap(el: HTMLElement): MouseEvent[] {
+    return ["pointerdown", "mousedown", "pointerup", "mouseup"]
+        .map((type) => fire(el, type))
+        .concat(fire(el, "click", { detail: 1 }));
+}
+
+describe("adding the buttons", () => {
+    test("rendered ink images get a bordered box with a pencil", () => {
+        const section = document.body.createDiv();
+        const img = embed(INK_SRC, section);
+        postProcess(section);
+
+        const button = buttonOf(img);
+        expect(button).not.toBeNull();
+        expect(button.getAttribute("aria-label")).toEqual("Edit handwritten card");
+        expect(img.parentElement.classList.contains("sr-pencil-host")).toBe(true);
+        expect(applyVersion).toHaveBeenCalledWith(img);
+
+        // Processing the same image again adds no second button
+        postProcess(section);
+        expect(img.parentElement.querySelectorAll(".sr-pencil-button")).toHaveLength(1);
+    });
+
+    test("other images get no button", () => {
+        const section = document.body.createDiv();
+        const photo = embed("app://vault/photo.png", section);
+        const notInk = embed("app://vault/pencards/pencard-sketch.svg", section);
+        postProcess(section);
+
+        expect(buttonOf(photo)).toBeNull();
+        expect(buttonOf(notInk)).toBeNull();
+    });
+
+    test("images inside the card editor get no button", () => {
+        const modal = document.body.createDiv({ cls: "sr-card-editor-modal" });
+        const img = embed(INK_SRC, modal);
+        postProcess(modal);
+        expect(buttonOf(img)).toBeNull();
+    });
+
+    test("an embed whose image is loaded after rendering gets its button then", async () => {
+        const section = document.body.createDiv();
+        const span = section.createSpan({ cls: "internal-embed image-embed" });
+        span.setAttribute("src", "pencards/pencard-20261031-141502123-back.svg");
+        postProcess(section);
+
+        const img = span.createEl("img");
+        img.setAttribute("src", INK_SRC);
+        await mutations();
+        expect(buttonOf(img)).not.toBeNull();
+    });
+
+    test("destroy removes the buttons and the boxes", () => {
+        const section = document.body.createDiv();
+        const img = embed(INK_SRC, section);
+        postProcess(section);
+        buttons.destroy();
+
+        expect(buttonOf(img)).toBeNull();
+        expect(img.parentElement.classList.contains("sr-pencil-host")).toBe(false);
+    });
+});
+
+describe("tapping the pencil", () => {
+    let img: HTMLImageElement;
+    let parentListener: jest.Mock;
+
+    beforeEach(() => {
+        const section = document.body.createDiv();
+        parentListener = jest.fn();
+        ["touchstart", "mousedown", "mouseup", "pointerdown", "pointerup", "click"].forEach(
+            (type) => section.addEventListener(type, parentListener),
+        );
+        img = embed(INK_SRC, section);
+        postProcess(section);
+    });
+
+    test("a tap opens the card of the note once, and no part of it reaches the page", () => {
+        const events = tap(buttonOf(img));
+
+        expect(editInNote).toHaveBeenCalledTimes(1);
+        expect(editInNote).toHaveBeenCalledWith(note, INK_NAME);
+        expect(editInReview).not.toHaveBeenCalled();
+        expect(events.every((e) => e.defaultPrevented)).toBe(true);
+        expect(parentListener).not.toHaveBeenCalled();
+    });
+
+    test("touch events are swallowed too", () => {
+        const e = new Event("touchstart", { bubbles: true, cancelable: true });
+        buttonOf(img).dispatchEvent(e);
+        expect(e.defaultPrevented).toBe(true);
+        expect(parentListener).not.toHaveBeenCalled();
+    });
+
+    test("a pointer released without being pressed on the button, or cancelled, opens nothing", () => {
+        const button = buttonOf(img);
+        fire(button, "pointerup");
+        fire(button, "pointerdown");
+        fire(button, "pointercancel");
+        fire(button, "pointerup");
+        expect(editInNote).not.toHaveBeenCalled();
+    });
+
+    test("Enter or Space (a click without pointer events) opens the card", () => {
+        fire(buttonOf(img), "click", { detail: 0 });
+        expect(editInNote).toHaveBeenCalledWith(note, INK_NAME);
+    });
+
+    test("nothing opens when the note can't be found", () => {
+        const section = document.body.createDiv();
+        const other = embed(INK_SRC, section);
+        postProcess(section, otherNote.path);
+        tap(buttonOf(other));
+        expect(editInNote).not.toHaveBeenCalled();
+    });
+});
+
+test("in the review window the pencil edits the card under review", () => {
+    const view = document.body.createDiv({ cls: "sr-view" });
+    const card = view.createDiv();
+    const img = embed(INK_SRC, card);
+    postProcess(card);
+
+    tap(buttonOf(img));
+    expect(editInReview).toHaveBeenCalledTimes(1);
+    expect(editInNote).not.toHaveBeenCalled();
+});
+
+describe("live preview", () => {
+    let sourceView: HTMLElement;
+    let readingView: HTMLElement;
+    let file: TFile | null;
+
+    beforeEach(() => {
+        const containerEl = document.body.createDiv({ cls: "workspace-leaf-content" });
+        sourceView = containerEl.createDiv({ cls: "markdown-source-view" });
+        readingView = containerEl.createDiv({ cls: "markdown-reading-view" });
+        file = note;
+        const view = {
+            containerEl,
+            get file() {
+                return file;
+            },
+        };
+        leaves = [{ view }];
+    });
+
+    test("images already in the editor and added later get a button", async () => {
+        const existing = embed(INK_SRC, sourceView);
+        buttons.watchLivePreview();
+        expect(buttonOf(existing)).not.toBeNull();
+
+        const line = document.createElement("div");
+        const added = embed(INK_SRC, line);
+        sourceView.appendChild(line);
+        await mutations();
+        expect(buttonOf(added)).not.toBeNull();
+
+        // The image of an embed is often given its src after it was added
+        const late = embed("", sourceView);
+        await mutations();
+        late.setAttribute("src", INK_SRC);
+        await mutations();
+        expect(buttonOf(late)).not.toBeNull();
+    });
+
+    test("the pencil edits the card of the note the editor shows at the time of the tap", async () => {
+        buttons.watchLivePreview();
+        const img = embed(INK_SRC, sourceView);
+        await mutations();
+
+        file = otherNote;
+        tap(buttonOf(img));
+        expect(editInNote).toHaveBeenCalledWith(otherNote, INK_NAME);
+    });
+
+    test("only the live preview is watched; embedded notes are left to the post-processor", async () => {
+        buttons.watchLivePreview();
+        const inReading = embed(INK_SRC, readingView);
+        const transclusion = sourceView.createDiv({ cls: "internal-embed markdown-embed" });
+        const inEmbeddedNote = embed(INK_SRC, transclusion);
+        await mutations();
+
+        expect(buttonOf(inReading)).toBeNull();
+        expect(buttonOf(inEmbeddedNote)).toBeNull();
+    });
+
+    test("an editor is watched only once, and not after destroy", async () => {
+        buttons.watchLivePreview();
+        buttons.watchLivePreview();
+        const img = embed(INK_SRC, sourceView);
+        await mutations();
+        expect(img.parentElement.querySelectorAll(".sr-pencil-button")).toHaveLength(1);
+
+        buttons.destroy();
+        const after = embed(INK_SRC, sourceView);
+        await mutations();
+        expect(buttonOf(after)).toBeNull();
+    });
+});

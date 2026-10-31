@@ -4,6 +4,7 @@ import {
     composeCardText,
     inkEmbed,
     inkEmbedFileName,
+    inkEmbedFileNames,
     newCardBody,
     splitCardText,
 } from "src/card-editor/core/card-text";
@@ -277,6 +278,26 @@ describe("inkEmbedFileName", () => {
         expect(inkEmbedFileName(inkEmbed("pencards/pencard-x-front.svg"))).toEqual(
             "pencard-x-front.svg",
         );
+    });
+});
+
+describe("inkEmbedFileNames", () => {
+    test("finds ink embeds anywhere in the text, in both embed forms", () => {
+        const text = [
+            "Label this: ![[pencards/pencard-a-front.svg|200]] and ![[diagram.png]]",
+            "?",
+            '![drawn](<my%20folder/pencard-b-back.svg>) or ![](pencard-c-back.svg "title")',
+            "[[pencard-not-embedded-front.svg]]",
+        ].join("\n");
+        expect(inkEmbedFileNames(text)).toEqual([
+            "pencard-a-front.svg",
+            "pencard-b-back.svg",
+            "pencard-c-back.svg",
+        ]);
+    });
+
+    test("no ink embeds", () => {
+        expect(inkEmbedFileNames("Q::A ![[photo.svg]]")).toEqual([]);
     });
 });
 

@@ -1,12 +1,14 @@
-import { Plugin } from "obsidian";
+import { Notice, Plugin } from "obsidian";
 
 import { CardEditorService } from "src/card-editor/card-editor-service";
+import { PencilButtons } from "src/card-editor/pencil-buttons";
 import { CommandManager } from "src/command-manager";
 import { DataManager } from "src/data/data-manager";
 import { DebugLoggerInstance } from "src/data/debug-logger";
 import { PluginDataError, PluginDataManager } from "src/data/plugin-data-manager";
 import { SRSettings } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
+import { t } from "src/lang/helpers";
 import { LocaleManagerInstance } from "src/lang/locale-manager";
 import { NextNoteReviewHandler } from "src/note/next-note-review-handler";
 import { NoteReviewQueue } from "src/note/note-review-queue";
@@ -23,6 +25,7 @@ export default class SRPlugin extends Plugin {
     private _commandManager: CommandManager | null = null;
     private _reminderManager: ReminderManager | null = null;
     private _cardEditorService: CardEditorService | null = null;
+    private _pencilButtons: PencilButtons | null = null;
     public isInitialized: boolean = false;
 
     async onload(): Promise<void> {
@@ -40,6 +43,9 @@ export default class SRPlugin extends Plugin {
 
             this.dataManager = new DataManager(this, pluginDataManager, settingsManager);
             this._cardEditorService = new CardEditorService(this, settingsManager);
+            const pencilButtons = new PencilButtons(this.app, this._cardEditorService);
+            this._pencilButtons = pencilButtons;
+            this.registerMarkdownPostProcessor((el, ctx) => pencilButtons.postProcess(el, ctx));
             const uiManager = new UIManager(this, settingsManager);
             this.uiManager = uiManager;
             this.commandManager = new CommandManager(this, settingsManager, uiManager);
@@ -70,6 +76,18 @@ export default class SRPlugin extends Plugin {
 
                 this.isInitialized = true;
                 this._reminderManager.restartReviewReminders();
+
+                // Editors opened later (also deferred tabs, loaded once shown) are watched as they appear
+                pencilButtons.watchLivePreview();
+                this.registerEvent(
+                    this.app.workspace.on("layout-change", () => pencilButtons.watchLivePreview()),
+                );
+                this.registerEvent(
+                    this.app.workspace.on("active-leaf-change", () =>
+                        pencilButtons.watchLivePreview(),
+                    ),
+                );
+                this.warnIfPenCardsEnabled();
             });
         } catch (error) {
             if (error instanceof PluginDataError || error instanceof Error) {
@@ -138,6 +156,7 @@ export default class SRPlugin extends Plugin {
     }
 
     onunload(): void {
+        this._pencilButtons?.destroy();
         this.reminderManager.stopReviewReminders();
         this.app.workspace.getLeavesOfType(REVIEW_QUEUE_VIEW_TYPE).forEach((leaf) => leaf.detach());
         this.uiManager.destroy();
@@ -150,6 +169,18 @@ export default class SRPlugin extends Plugin {
 
     public removeCustomHotkeys() {
         this.commandManager.removeCustomHotkeys();
+    }
+
+    /**
+     * The card editor replaces the Pen Cards plugin; with both enabled, handwritten cards get two pencils.
+     */
+    private warnIfPenCardsEnabled(): void {
+        // Obsidian doesn't expose the list of enabled plugins in its API
+        const plugins = (this.app as unknown as { plugins?: { enabledPlugins?: Set<string> } })
+            .plugins;
+        if (plugins?.enabledPlugins?.has("pen-cards")) {
+            new Notice(t("CARD_EDITOR_PEN_CARDS_ENABLED"), 0);
+        }
     }
 
     /**

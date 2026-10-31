@@ -35,6 +35,19 @@ export function inkEmbedFileName(sideText: string): string | null {
     return name;
 }
 
+// The embed regexes above, unanchored, to find embeds anywhere in a text
+const ANY_EMBED_REGEX = /!\[\[[^\]]+\]\]|!\[[^\]]*\]\((?:<[^>]+>|[^)\s]+)(?:\s+"[^"]*")?\)/g;
+
+/** File names of all ink SVGs embedded anywhere in the text. */
+export function inkEmbedFileNames(text: string): string[] {
+    const names: string[] = [];
+    for (const match of text.matchAll(ANY_EMBED_REGEX)) {
+        const name = inkEmbedFileName(match[0]);
+        if (name !== null) names.push(name);
+    }
+    return names;
+}
+
 /** The embed stored in the note for a handwritten side, e.g. "![[pencards/x.svg]]". */
 export function inkEmbed(linkPath: string): string {
     return `![[${linkPath}]]`;
