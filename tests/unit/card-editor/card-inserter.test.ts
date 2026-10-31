@@ -1,6 +1,7 @@
 import { App, EditorPosition, MarkdownView, TFile } from "obsidian";
 
-import { CardInserter } from "src/card-editor/card-inserter";
+import { CardInserter, insertionLine } from "src/card-editor/card-inserter";
+import { DEFAULT_SETTINGS, SRSettings } from "src/data/settings";
 
 /** A text editor over a string, with the part of Obsidian's Editor API the inserter uses */
 class FakeEditor {
@@ -59,7 +60,7 @@ function viewOf(editor: FakeEditor, mode = "source", viewFile: TFile = file): Fa
 }
 
 const inserterFor = (view: FakeView | null) =>
-    new CardInserter(app, file, view as unknown as MarkdownView | null);
+    new CardInserter(app, file, view as unknown as MarkdownView | null, DEFAULT_SETTINGS);
 
 beforeEach(() => {
     disk = "";
@@ -105,6 +106,52 @@ describe("inserting into the editor", () => {
         await inserter.insert("Q\n?\nA");
         await inserter.flush();
         expect(view.save).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("where the first card goes", () => {
+    const at = (text: string, cursorLine: number, settings: Partial<SRSettings> = {}) =>
+        insertionLine(text, cursorLine, { ...DEFAULT_SETTINGS, ...settings });
+
+    test("not inside the frontmatter", () => {
+        const text = "---\ntags: flashcards\n---\nIntro\n\nMore";
+        expect(at(text, 0)).toEqual(2);
+        expect(at(text, 1)).toEqual(2);
+        expect(at(text, 2)).toEqual(2);
+        expect(at(text, 3)).toEqual(3);
+    });
+
+    test("not between a card and its schedule comment", () => {
+        const text =
+            "#flashcards\n\nQ\n?\nA\n<!--SR:!2026-11-05,3,250-->\n\nQ2::A2\n<!--SR:!2026-11-05,3,250-->";
+        for (const line of [2, 3, 4, 5]) expect(at(text, line)).toEqual(5);
+        expect(at(text, 7)).toEqual(8);
+    });
+
+    test("not inside a card with an end marker, which may have blank lines", () => {
+        const text = "Q\n?\nA\n\nmore A\n+++\nText";
+        for (const line of [0, 2, 3, 4, 5])
+            expect(at(text, line, { multilineCardEndMarker: "+++" })).toEqual(6);
+    });
+
+    test("not inside a code block or a paragraph", () => {
+        const text = "Intro\n\n```\ncode\n\nmore code\n```\n\nline 1\nline 2\n\nEnd";
+        expect(at(text, 3)).toEqual(6);
+        expect(at(text, 4)).toEqual(6);
+        expect(at(text, 8)).toEqual(9);
+    });
+
+    test("below the cursor's line on a blank line or a heading", () => {
+        const text = "# Heading\nText\n\n## Next\nMore";
+        expect(at(text, 0)).toEqual(0);
+        expect(at(text, 1)).toEqual(1);
+        expect(at(text, 2)).toEqual(2);
+    });
+
+    test("in the editor: the card goes after the frontmatter, keeping it intact", async () => {
+        const editor = new FakeEditor("---\ntags: flashcards\n---\n\nText", { line: 0, ch: 0 });
+        await inserterFor(viewOf(editor)).insert("Q\n?\nA");
+        expect(editor.value).toEqual("---\ntags: flashcards\n---\n\nQ\n?\nA\n\nText");
     });
 });
 

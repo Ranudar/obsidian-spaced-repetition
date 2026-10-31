@@ -10,9 +10,10 @@ import { CardInserter } from "src/card-editor/card-inserter";
 import {
     composeCardText,
     inkEmbed,
-    inkEmbedFileName,
     inkEmbedFileNames,
+    inkEmbedPath,
     newCardBody,
+    protectBlankLines,
     splitCardText,
 } from "src/card-editor/core/card-text";
 import {
@@ -25,7 +26,7 @@ import {
 } from "src/card-editor/core/ink-svg";
 import { InkFiles } from "src/card-editor/ink-files";
 import { SideState } from "src/card-editor/side-editor";
-import { Question } from "src/data/data-structures/card/questions/question";
+import { CardType, Question } from "src/data/data-structures/card/questions/question";
 import { SettingsUtil, SRSettings } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
 import { t } from "src/lang/helpers";
@@ -40,13 +41,33 @@ export interface EditQuestionResult {
     changedImages: TFile[];
 }
 
+/**
+ * Writes the edited question text to the note.
+ * Resolves to false, writing nothing, when the card's text is no longer in the note.
+ */
+export type WriteQuestionText = (text: string) => Promise<boolean>;
+
 /** A side of an existing card, as found in the note */
 interface LoadedSide {
     /** The side's text in the note */
     text: string;
     /** The ink file, if the side is handwritten and its strokes could be read */
     file: TFile | null;
+    /** The ink file's content, to restore it when a save fails */
+    svg: string;
     state: SideState;
+}
+
+/** An existing card, as found in the note */
+interface LoadedCard {
+    cardType: CardType;
+    /** The question text, without topic path and schedule */
+    original: string;
+    /** The separator as written in the note */
+    separator: string | null;
+    front: LoadedSide;
+    back: LoadedSide | null;
+    sourcePath: string;
 }
 
 /**
@@ -86,7 +107,7 @@ export class CardEditorService {
             );
         }
 
-        const inserter = new CardInserter(this.plugin.app, file, view);
+        const inserter = new CardInserter(this.plugin.app, file, view, this.settings);
         let added = 0;
         new CardEditorModal(this.plugin.app, this.settings, {
             kind: "add",
@@ -105,11 +126,15 @@ export class CardEditorService {
     }
 
     /**
-     * Opens the editor for a question and writes its ink files on save.
-     * Resolves to the new question text, or null when the editor was closed without saving.
-     * Does not write the note: that is up to the caller, and only needed when textChanged is set.
+     * Opens the editor for a question. On save, writes its ink files and, if the text changed,
+     * the note through writeText. Writing the note is the commit point: if it fails, new ink files
+     * are removed, rewritten ones restored, and the editor stays open with a notice.
+     * Resolves to the result, or null when the editor was closed without saving.
      */
-    async editQuestion(question: Question): Promise<EditQuestionResult | null> {
+    async editQuestion(
+        question: Question,
+        writeText: WriteQuestionText,
+    ): Promise<EditQuestionResult | null> {
         const cardType = question.questionType;
         const original = question.questionText.actualQuestion;
         const sourcePath = question.note.file.path;
@@ -117,6 +142,14 @@ export class CardEditorService {
         const split = splitCardText(cardType, original, this.settings);
         const front = await this.loadSide(split.front, sourcePath);
         const back = split.back === null ? null : await this.loadSide(split.back, sourcePath);
+        const card: LoadedCard = {
+            cardType,
+            original,
+            separator: split.separator,
+            front,
+            back,
+            sourcePath,
+        };
         const initial: CardEditorSides = { front: front.state, back: back?.state ?? null };
 
         return new Promise((resolve) => {
@@ -128,13 +161,7 @@ export class CardEditorService {
                 initial,
                 cardType,
                 save: async (r: CardEditorResult) => {
-                    const sides = await this.saveSides(r, front, back, sourcePath);
-                    const text = composeCardText(cardType, sides.front, sides.back, this.settings);
-                    result = {
-                        text,
-                        textChanged: text !== original,
-                        changedImages: sides.changedImages,
-                    };
+                    result = await this.saveCard(r, card, writeText);
                 },
                 closed: () => resolve(result),
             }).open();
@@ -149,6 +176,7 @@ export class CardEditorService {
         if (this.editingInNote) return;
         this.editingInNote = true;
         try {
+            await this.saveOpenEditors(noteFile);
             const note = await this.plugin.dataManager.loadNote(noteFile);
             const question = note ? findQuestionWithInk(note.questionList, imageName) : null;
             if (question === null) {
@@ -156,13 +184,19 @@ export class CardEditorService {
                 return;
             }
 
-            const result = await this.editQuestion(question);
-            if (result === null) return;
-            if (result.textChanged) {
+            const result = await this.editQuestion(question, async (text) => {
                 // Replaces just the question's text, so its schedule comment stays
-                question.questionText.actualQuestion = result.text;
-                await question.writeQuestion(this.settings);
-            }
+                const previous = question.questionText.actualQuestion;
+                question.questionText.actualQuestion = text;
+                let written = false;
+                try {
+                    written = await question.writeQuestion(this.settings);
+                } finally {
+                    if (!written) question.questionText.actualQuestion = previous;
+                }
+                return written;
+            });
+            if (result === null) return;
             this.refreshImages(result.changedImages);
             if (result.textChanged && this.plugin.isInitialized)
                 await this.plugin.dataManager.sync();
@@ -171,6 +205,14 @@ export class CardEditorService {
             new Notice(t("CARD_EDITOR_EDIT_FAILED", { error: String(err) }));
         } finally {
             this.editingInNote = false;
+        }
+    }
+
+    /** Writes unsaved typing in editors showing the note, so the card is read as it is on screen */
+    private async saveOpenEditors(file: TFile): Promise<void> {
+        for (const leaf of this.plugin.app.workspace.getLeavesOfType("markdown")) {
+            const view = leaf.view;
+            if (view instanceof MarkdownView && view.file?.path === file.path) await view.save();
         }
     }
 
@@ -194,7 +236,7 @@ export class CardEditorService {
         try {
             const sideText = async (r: SideResult | null, side: InkSide): Promise<string> => {
                 if (r === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
-                if (r.mode === "text") return r.text.trim();
+                if (r.mode === "text") return protectBlankLines(r.text.trim(), this.settings);
                 const svg = strokesToSvg(r.strokes, { size: r.penSize });
                 if (svg === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
                 const file = await this.inkFiles.create(
@@ -256,20 +298,24 @@ export class CardEditorService {
         const asText: LoadedSide = {
             text,
             file: null,
+            svg: "",
             state: { mode: "text", text, strokes: [], penSize },
         };
 
-        const name = inkEmbedFileName(text);
-        if (name === null) return asText;
-        const file = this.inkFiles.resolve(name, sourcePath);
+        // The embed's own link path, so a file of the same name in another folder isn't used
+        const linkPath = inkEmbedPath(text);
+        if (linkPath === null) return asText;
+        const file = this.inkFiles.resolve(linkPath, sourcePath);
         if (file === null) return asText;
 
         try {
-            const ink = svgToStrokes(await this.inkFiles.read(file));
+            const svg = await this.inkFiles.read(file);
+            const ink = svgToStrokes(svg);
             if (ink === null) return asText;
             return {
                 text,
                 file,
+                svg,
                 state: { mode: "ink", text: "", strokes: ink.strokes, penSize: ink.size },
             };
         } catch (err) {
@@ -279,19 +325,25 @@ export class CardEditorService {
     }
 
     /**
-     * Writes the ink files of an edited card and returns the new text of its sides:
+     * Saves an edited card:
      * - ink → ink: overwrites the SVG if the strokes changed, the side's text stays as it is
      * - text → ink: a new SVG, named after the card's other ink side if it has one
-     * - ink → text: the SVG goes to the trash
+     * - ink → text: the SVG goes to the trash, once the note is written
+     * Then writes the note if the text changed. On failure, everything is undone.
      */
-    private async saveSides(
+    private async saveCard(
         result: CardEditorResult,
-        front: LoadedSide,
-        back: LoadedSide | null,
-        sourcePath: string,
-    ): Promise<{ front: string; back: string | null; changedImages: TFile[] }> {
-        const changedImages: TFile[] = [];
+        card: LoadedCard,
+        writeText: WriteQuestionText,
+    ): Promise<EditQuestionResult> {
+        const { front, back, sourcePath } = card;
+        const created: TFile[] = [];
+        const overwritten: LoadedSide[] = [];
         const toTrash: TFile[] = [];
+        // Without an end marker, a blank line would end a multi-line or cloze card
+        const protect =
+            card.cardType !== CardType.SingleLineBasic &&
+            card.cardType !== CardType.SingleLineReversed;
 
         // Both sides of a card share the stem of their file names (Pen Cards' scheme)
         let stem: string | null = null;
@@ -303,7 +355,8 @@ export class CardEditorService {
             }
         }
         const newStem = (side: InkSide): string => {
-            // Never reuse a name that is already taken, e.g. by a file left over from a deleted card
+            // Never reuse a name taken anywhere in the vault, e.g. by a file left over from a
+            // deleted card: the bare name finds a file of that name in any folder
             if (
                 stem !== null &&
                 this.inkFiles.resolve(inkFileName(stem, side), sourcePath) === null
@@ -319,8 +372,10 @@ export class CardEditorService {
             side: InkSide,
         ): Promise<string> => {
             if (r.mode === "text") {
+                if (r.text === loaded.text) return r.text;
                 if (loaded.file) toTrash.push(loaded.file);
-                return r.text;
+                const text = r.text.trim();
+                return protect ? protectBlankLines(text, this.settings) : text;
             }
 
             if (loaded.file && !r.changed) return loaded.text;
@@ -328,7 +383,7 @@ export class CardEditorService {
             if (svg === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
             if (loaded.file) {
                 await this.inkFiles.overwrite(loaded.file, svg.svg);
-                changedImages.push(loaded.file);
+                overwritten.push(loaded);
                 return loaded.text;
             }
             const file = await this.inkFiles.create(
@@ -336,19 +391,56 @@ export class CardEditorService {
                 svg.svg,
                 sourcePath,
             );
+            created.push(file);
             return inkEmbed(this.inkFiles.linkPath(file, sourcePath));
         };
 
-        const frontText = await saveSide(result.front, front, "front");
-        const backText =
-            back !== null && result.back !== null
-                ? await saveSide(result.back, back, "back")
-                : null;
+        let text: string;
+        try {
+            const frontText = await saveSide(result.front, front, "front");
+            const backText =
+                back !== null && result.back !== null
+                    ? await saveSide(result.back, back, "back")
+                    : null;
+            text = composeCardText(
+                card.cardType,
+                frontText,
+                backText,
+                this.settings,
+                card.separator,
+            );
+            if (text !== card.original && !(await writeText(text)))
+                throw new Error(t("CARD_EDITOR_TEXT_NOT_FOUND"));
+        } catch (err) {
+            await this.undoSave(created, overwritten);
+            throw err;
+        }
 
-        // Only after all new files exist, so a failed save leaves the card as it was
-        for (const file of toTrash) await this.inkFiles.trash(file);
+        // The note no longer shows these images
+        for (const file of toTrash) {
+            await this.inkFiles
+                .trash(file)
+                .catch((e) => console.error("SR: removing the ink image failed", e));
+        }
+        return {
+            text,
+            textChanged: text !== card.original,
+            changedImages: overwritten.map((side) => side.file),
+        };
+    }
 
-        return { front: frontText, back: backText, changedImages };
+    /** Leaves the ink files of a card as they were before a failed save */
+    private async undoSave(created: TFile[], overwritten: LoadedSide[]): Promise<void> {
+        for (const file of created) {
+            await this.inkFiles
+                .trash(file)
+                .catch((e) => console.error("SR: removing the ink image failed", e));
+        }
+        for (const side of overwritten) {
+            await this.inkFiles
+                .overwrite(side.file, side.svg)
+                .catch((e) => console.error("SR: restoring the ink image failed", e));
+        }
     }
 }
 

@@ -1,9 +1,11 @@
-import { App, normalizePath, TFile } from "obsidian";
+import { App, normalizePath, TFile, TFolder } from "obsidian";
 
 import { INK_FILE_PREFIX } from "src/card-editor/core/card-text";
+import { t } from "src/lang/helpers";
 
 /** Query parameter added to the src of images rewritten in this session */
 const VERSION_PARAM = "sr-ink";
+const INK_IMAGE_SELECTOR = `img[src*="${INK_FILE_PREFIX}"]`;
 
 /**
  * Reads and writes the SVG files of handwritten card sides,
@@ -12,7 +14,10 @@ const VERSION_PARAM = "sr-ink";
 export class InkFiles {
     private app: App;
     private imageFolder: () => string;
-    /** Ink images rewritten in this session → cache-busting value, so every copy shows the new ink */
+    /**
+     * Ink images rewritten in this session (by resource path without query) → cache-busting value,
+     * so every copy shows the new ink
+     */
     private versions = new Map<string, number>();
 
     /** imageFolder: the configured folder; empty means Obsidian's attachment folder */
@@ -21,9 +26,12 @@ export class InkFiles {
         this.imageFolder = imageFolder;
     }
 
-    /** The ink file an embed in the note at sourcePath links to, or null if there is none */
-    resolve(name: string, sourcePath: string): TFile | null {
-        return this.app.metadataCache.getFirstLinkpathDest(name, sourcePath);
+    /**
+     * The file a link path (e.g. from an embed) in the note at sourcePath links to, or null.
+     * A bare file name finds a file of that name anywhere in the vault.
+     */
+    resolve(linkPath: string, sourcePath: string): TFile | null {
+        return this.app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath);
     }
 
     async read(file: TFile): Promise<string> {
@@ -35,13 +43,31 @@ export class InkFiles {
         const folder = this.imageFolder().trim();
         let path: string;
         if (folder) {
-            const dir = normalizePath(folder);
-            if (!this.app.vault.getAbstractFileByPath(dir)) await this.app.vault.createFolder(dir);
+            const dir = await this.ensureFolder(normalizePath(folder));
             path = normalizePath(`${dir}/${name}`);
         } else {
             path = await this.app.fileManager.getAvailablePathForAttachment(name, sourcePath);
         }
         return this.app.vault.create(path, svg);
+    }
+
+    /**
+     * The path of the folder, created if missing. A folder that exists with another letter case
+     * (on a case-insensitive file system) is used as it is.
+     */
+    private async ensureFolder(dir: string): Promise<string> {
+        const vault = this.app.vault;
+        const exact = vault.getAbstractFileByPath(dir);
+        if (exact instanceof TFolder) return exact.path;
+        if (exact !== null) throw new Error(t("CARD_EDITOR_IMAGE_FOLDER_IS_FILE", { path: dir }));
+
+        const lower = dir.toLowerCase();
+        const sameName = vault
+            .getAllLoadedFiles()
+            .find((f) => f.path.toLowerCase() === lower && f instanceof TFolder);
+        if (sameName) return sameName.path;
+        await vault.createFolder(dir);
+        return dir;
     }
 
     /** Same file, same name: the card text stays unchanged */
@@ -60,32 +86,55 @@ export class InkFiles {
     }
 
     /**
-     * Reloads every image showing one of the files,
+     * Reloads every image showing one of the files, in every window,
      * and remembers the files so images rendered later in the session can be updated too.
      */
     refresh(files: TFile[]): void {
+        const documents = this.openDocuments();
         for (const file of files) {
             const version = Date.now();
-            this.versions.set(file.name, version);
             const src = this.app.vault.getResourcePath(file);
-            activeDocument
-                .querySelectorAll<HTMLImageElement>(`img[src*="${INK_FILE_PREFIX}"]`)
-                .forEach((img) => {
-                    if (imageFileName(img) === file.name) img.src = withVersion(src, version);
+            const key = withoutQuery(src);
+            this.versions.set(key, version);
+            for (const doc of documents) {
+                doc.querySelectorAll<HTMLImageElement>(INK_IMAGE_SELECTOR).forEach((img) => {
+                    if (imageKey(img) === key) img.src = withVersion(src, version);
                 });
+            }
         }
     }
 
     /** Loads the latest version of an ink image rendered after its file was rewritten */
     applyVersion(img: HTMLImageElement): void {
-        const name = imageFileName(img);
-        if (name === null) return;
-        const version = this.versions.get(name);
+        const key = imageKey(img);
+        if (key === null) return;
+        const version = this.versions.get(key);
         const src = img.getAttribute("src") ?? "";
         if (version !== undefined && !src.includes(`${VERSION_PARAM}=${version}`)) {
             img.src = withVersion(src, version);
         }
     }
+
+    /** The documents of the main window and of every popout window */
+    private openDocuments(): Document[] {
+        const documents = new Set<Document>([activeDocument]);
+        this.app.workspace.iterateAllLeaves((leaf) => {
+            const doc = leaf.view?.containerEl?.ownerDocument;
+            if (doc) documents.add(doc);
+        });
+        return [...documents];
+    }
+}
+
+/** The src of an ink image without query and hash (which file it shows), or null for other images */
+function imageKey(img: HTMLImageElement): string | null {
+    const src = img.getAttribute("src");
+    if (!src || !src.includes(INK_FILE_PREFIX)) return null;
+    return withoutQuery(src);
+}
+
+function withoutQuery(src: string): string {
+    return src.split(/[?#]/)[0];
 }
 
 /** File name of the ink image an <img> shows, or null for other images */

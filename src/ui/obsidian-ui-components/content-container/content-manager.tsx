@@ -383,15 +383,20 @@ export default class ContentManager {
     }
 
     private async _doEditQuestionText(): Promise<void> {
-        if (this.reviewSequencer === null) return;
-        const currentQ: Question = this.reviewSequencer.currentQuestion;
+        const sequencer = this.reviewSequencer;
+        if (sequencer === null) return;
+        const currentQ: Question = sequencer.currentQuestion;
         const service = this.plugin.cardEditorService;
 
         const currentUIState = this.uiManager.uiState;
         this.uiManager.setUIState(UIState.EditModal);
         let result: EditQuestionResult | null = null;
         try {
-            result = await service.editQuestion(currentQ);
+            // Only called when the text changed: ink-only changes leave the note (and its
+            // schedule) untouched
+            result = await service.editQuestion(currentQ, (text) =>
+                sequencer.updateCurrentQuestionTextAndCards(text),
+            );
         } catch (error) {
             console.error("SR: editing the card failed", error);
             new Notice(t("CARD_EDITOR_EDIT_FAILED", { error: String(error) }));
@@ -399,10 +404,6 @@ export default class ContentManager {
         this.uiManager.setUIState(currentUIState);
         if (result === null || this.reviewSequencer === null) return;
 
-        // Ink-only changes rewrite the images but leave the note (and its schedule) untouched
-        if (result.textChanged) {
-            await this.reviewSequencer.updateCurrentQuestionTextAndCards(result.text);
-        }
         service.refreshImages(result.changedImages);
 
         // Always redraw, so rewritten images don't show stale ink

@@ -199,6 +199,12 @@ export class InkField {
         this.el.toggleClass("is-empty", this.isEmpty && !this.current);
     }
 
+    /** The ink color follows the theme: read it again and redraw */
+    themeChanged(): void {
+        this.inkColor = null;
+        this.schedule();
+    }
+
     /** The guides are drawn by CSS, so the canvas never has to repaint them */
     private applyGuides() {
         const { guide, guideSpacing } = this.opts;

@@ -5,7 +5,10 @@ import {
     inkEmbed,
     inkEmbedFileName,
     inkEmbedFileNames,
+    inkEmbedPath,
+    isInkFileName,
     newCardBody,
+    protectBlankLines,
     splitCardText,
 } from "src/card-editor/core/card-text";
 import { CardType, Question } from "src/data/data-structures/card/questions/question";
@@ -73,6 +76,17 @@ function split(question: Question, settings: SRSettings = DEFAULT_SETTINGS) {
     return splitCardText(question.questionType, question.questionText.actualQuestion, settings);
 }
 
+function sides(question: Question, settings: SRSettings = DEFAULT_SETTINGS) {
+    const { front, back } = split(question, settings);
+    return { front, back };
+}
+
+/** split, then compose: the text the editor saves for a card that wasn't changed */
+function roundTrip(question: Question, settings: SRSettings = DEFAULT_SETTINGS): string {
+    const { front, back, separator } = split(question, settings);
+    return composeCardText(question.questionType, front, back, settings, separator);
+}
+
 beforeAll(() => {
     setupStaticDateProvider20230906();
     unitTestSetupStandardDataStoreAlgorithm(DEFAULT_SETTINGS);
@@ -81,11 +95,11 @@ beforeAll(() => {
 describe("splitCardText", () => {
     test("Splits multi-line cards only at the separator line", async () => {
         const questions = await parseQuestions(noteText, DEFAULT_SETTINGS);
-        expect(split(questions[0])).toEqual({
+        expect(sides(questions[0])).toEqual({
             front: "When plugged in, bad chargers spark 80% of the time. What's the probability that a sparking charger is bad?",
             back: "**Prior odds:** $\\text{bad} : \\text{good} = 3 : 97$\n**Probability:** $\\frac{48}{48 + 97} \\approx 33\\%$",
         });
-        expect(split(questions[2])).toEqual({
+        expect(sides(questions[2])).toEqual({
             front: "Set up and solve:\n- The test is negative, what's the probability of being pregnant nevertheless?",
             back: '1. Posterior: is it "pregnant"?\n2. Prior: pregnant : not pregnant $= 30 : 70$.',
         });
@@ -94,12 +108,12 @@ describe("splitCardText", () => {
     test("Splits single-line cards at the first separator", async () => {
         const questions = await parseQuestions(noteText, DEFAULT_SETTINGS);
         expect(questions[3].questionType).toEqual(CardType.SingleLineBasic);
-        expect(split(questions[3])).toEqual({
+        expect(sides(questions[3])).toEqual({
             front: "Is $P(E \\mid H) = P(H \\mid E)$?",
             back: "No, it's conditioned the other way round?",
         });
         expect(questions[4].questionType).toEqual(CardType.SingleLineReversed);
-        expect(split(questions[4])).toEqual({
+        expect(sides(questions[4])).toEqual({
             front: "Mitochondria",
             back: "Powerhouse of the cell::really",
         });
@@ -108,14 +122,14 @@ describe("splitCardText", () => {
     test("Splits reversed multi-line cards", async () => {
         const questions = await parseQuestions(noteText, DEFAULT_SETTINGS);
         expect(questions[5].questionType).toEqual(CardType.MultiLineReversed);
-        expect(split(questions[5])).toEqual({ front: "Capital of France", back: "Paris" });
+        expect(sides(questions[5])).toEqual({ front: "Capital of France", back: "Paris" });
     });
 
     test("Cloze cards have no back", async () => {
         const questions = await parseQuestions(noteText, DEFAULT_SETTINGS);
         const cloze = questions[7];
         expect(cloze.questionType).toEqual(CardType.Cloze);
-        expect(split(cloze)).toEqual({
+        expect(sides(cloze)).toEqual({
             front: cloze.questionText.actualQuestion,
             back: null,
         });
@@ -137,11 +151,9 @@ describe("composeCardText", () => {
         expect(types.size).toEqual(5);
 
         for (const question of questions) {
-            const { front, back } = split(question);
-            expect(
-                composeCardText(question.questionType, front, back, DEFAULT_SETTINGS),
-                `${CardType[question.questionType]}: ${front}`,
-            ).toEqual(question.questionText.actualQuestion);
+            expect(roundTrip(question), CardType[question.questionType]).toEqual(
+                question.questionText.actualQuestion,
+            );
         }
     });
 
@@ -163,15 +175,44 @@ Single::line
 `;
         const questions = await parseQuestions(text, END_MARKER_SETTINGS);
         expect(questions.length).toEqual(2);
-        expect(split(questions[0], END_MARKER_SETTINGS)).toEqual({
+        expect(sides(questions[0], END_MARKER_SETTINGS)).toEqual({
             front: "First line\nsecond line",
             back: "Answer\n\nwith a gap",
         });
         for (const question of questions) {
-            const { front, back } = split(question, END_MARKER_SETTINGS);
-            expect(
-                composeCardText(question.questionType, front, back, END_MARKER_SETTINGS),
-            ).toEqual(question.questionText.actualQuestion);
+            expect(roundTrip(question, END_MARKER_SETTINGS)).toEqual(
+                question.questionText.actualQuestion,
+            );
+        }
+    });
+
+    test("Round trip keeps a blank line after the separator and whitespace around it", async () => {
+        const text = `#flashcards
+
+Q
+?
+
+A
+
+---
+
+Q2
+  ?
+A2
+---
+`;
+        const questions = await parseQuestions(text, END_MARKER_SETTINGS);
+        expect(questions.length).toEqual(2);
+        expect(split(questions[0], END_MARKER_SETTINGS)).toEqual({
+            front: "Q",
+            back: "\nA",
+            separator: "?",
+        });
+        expect(split(questions[1], END_MARKER_SETTINGS).separator).toEqual("  ?");
+        for (const question of questions) {
+            expect(roundTrip(question, END_MARKER_SETTINGS)).toEqual(
+                question.questionText.actualQuestion,
+            );
         }
     });
 
@@ -185,12 +226,13 @@ Single::line
         expect(composeCardText(CardType.Cloze, "a ==b==", "ignored", s)).toEqual("a ==b==");
     });
 
-    test("Line breaks around the multi-line separator are not doubled", () => {
+    test("Compose is the exact inverse of the line-based split", () => {
         const s = DEFAULT_SETTINGS;
-        expect(composeCardText(CardType.MultiLineBasic, "Q\n", "A", s)).toEqual("Q\n?\nA");
-        expect(composeCardText(CardType.MultiLineBasic, "Q", "\nA", s)).toEqual("Q\n?\nA");
-        expect(composeCardText(CardType.MultiLineBasic, "Q\n", "\nA", s)).toEqual("Q\n?\nA");
+        expect(composeCardText(CardType.MultiLineBasic, "Q\n", "A", s)).toEqual("Q\n\n?\nA");
+        expect(composeCardText(CardType.MultiLineBasic, "Q", "\nA", s)).toEqual("Q\n?\n\nA");
         expect(composeCardText(CardType.MultiLineBasic, "Q", null, s)).toEqual("Q\n?\n");
+        expect(composeCardText(CardType.MultiLineBasic, "Q", "A", s, "? ")).toEqual("Q\n? \nA");
+        expect(composeCardText(CardType.SingleLineBasic, "Q", "A", s, "::")).toEqual("Q::A");
     });
 
     test("A changed ink side composes to a parsable card", async () => {
@@ -204,7 +246,7 @@ Single::line
             DEFAULT_SETTINGS,
         );
         const [reparsed] = await parseQuestions(`#flashcards\n\n${changed}\n`, DEFAULT_SETTINGS);
-        expect(split(reparsed)).toEqual({ front, back: "![[pencards/pencard-x-back.svg]]" });
+        expect(sides(reparsed)).toEqual({ front, back: "![[pencards/pencard-x-back.svg]]" });
     });
 });
 
@@ -344,7 +386,7 @@ describe("cardInsertion", () => {
         expect(doc).toEqual("#flashcards\n\nQ0\n?\nA0\n\nQ1\n?\nA1\n");
 
         const questions = await parseQuestions(doc, DEFAULT_SETTINGS);
-        expect(questions.map((q) => split(q))).toEqual([
+        expect(questions.map((q) => sides(q))).toEqual([
             { front: "Q0", back: "A0" },
             { front: "Q1", back: "A1" },
         ]);
@@ -366,9 +408,62 @@ describe("cardInsertion", () => {
         );
 
         const questions = await parseQuestions(doc, END_MARKER_SETTINGS);
-        expect(questions.map((q) => split(q, END_MARKER_SETTINGS))).toEqual([
+        expect(questions.map((q) => sides(q, END_MARKER_SETTINGS))).toEqual([
             { front: "Q0", back: "A0" },
             { front: "Q1", back: "A1" },
         ]);
+    });
+});
+
+describe("inkEmbedPath", () => {
+    test("Keeps the embed's folder, decoded", () => {
+        expect(inkEmbedPath("![[A/attachments/pencard-x-back.svg|300]]")).toEqual(
+            "A/attachments/pencard-x-back.svg",
+        );
+        expect(inkEmbedPath("![](my%20cards/pencard-x-back.svg)")).toEqual(
+            "my cards/pencard-x-back.svg",
+        );
+        expect(inkEmbedPath("![[pencard-x-back.svg]]")).toEqual("pencard-x-back.svg");
+        expect(inkEmbedPath("![[A/photo.svg]]")).toBeNull();
+    });
+});
+
+describe("isInkFileName", () => {
+    test("Any pencard-….svg, also one not following the naming scheme", () => {
+        expect(isInkFileName("pencard-20261031-1-front.svg")).toBe(true);
+        expect(isInkFileName("pencard-20261031-1-front 1.svg")).toBe(true);
+        expect(isInkFileName("pencard-sketch.SVG")).toBe(true);
+        expect(isInkFileName("pencard-sketch.png")).toBe(false);
+        expect(isInkFileName("photo.svg")).toBe(false);
+    });
+});
+
+describe("protectBlankLines", () => {
+    test("Without an end marker, blank lines become <br> lines, except in code blocks", () => {
+        const s = DEFAULT_SETTINGS;
+        expect(protectBlankLines("line 1\n\nline 2", s)).toEqual("line 1\n<br>\nline 2");
+        expect(protectBlankLines("a\n  \n\nb", s)).toEqual("a\n<br>\n<br>\nb");
+        expect(protectBlankLines("```\ncode\n\nmore\n```\n\nx", s)).toEqual(
+            "```\ncode\n\nmore\n```\n<br>\nx",
+        );
+        expect(protectBlankLines("no gaps", s)).toEqual("no gaps");
+    });
+
+    test("With an end marker, blank lines stay", () => {
+        expect(protectBlankLines("a\n\nb", END_MARKER_SETTINGS)).toEqual("a\n\nb");
+    });
+
+    test("A card with a protected blank line parses as one card", async () => {
+        const back = protectBlankLines("line 1\n\nline 2", DEFAULT_SETTINGS);
+        const card = newCardBody("Q\n\nmore Q", back, DEFAULT_SETTINGS).replace(
+            "Q\n\nmore Q",
+            protectBlankLines("Q\n\nmore Q", DEFAULT_SETTINGS),
+        );
+        const questions = await parseQuestions(`#flashcards\n\n${card}\n`, DEFAULT_SETTINGS);
+        expect(questions.length).toEqual(1);
+        expect(sides(questions[0])).toEqual({
+            front: "Q\n<br>\nmore Q",
+            back: "line 1\n<br>\nline 2",
+        });
     });
 });

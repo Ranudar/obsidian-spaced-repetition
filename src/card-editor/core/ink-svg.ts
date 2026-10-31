@@ -113,14 +113,6 @@ export function parseInkFileName(name: string): { stem: string; side: InkSide } 
     return { stem: m[1], side: m[2] as InkSide };
 }
 
-/** For "pencard-…-front.svg" returns the "-back" name and vice versa; null for other names. */
-export function siblingName(name: string): { side: InkSide; sibling: string } | null {
-    const parsed = parseInkFileName(name);
-    if (!parsed) return null;
-    const other: InkSide = parsed.side === "front" ? "back" : "front";
-    return { side: parsed.side, sibling: inkFileName(parsed.stem, other) };
-}
-
 /** Stem for new ink files, e.g. "20261031-141502123" (local time, to the millisecond). */
 export function timestampName(date: Date): string {
     const p = (n: number, w = 2) => n.toString().padStart(w, "0");

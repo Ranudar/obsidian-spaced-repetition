@@ -35,7 +35,6 @@ interface Setup {
     parent: HTMLElement;
     onChange: jest.Mock;
     onInkCommit: jest.Mock;
-    onSubmit: jest.Mock;
 }
 
 function setup(
@@ -47,7 +46,6 @@ function setup(
     document.body.appendChild(parent);
     const onChange = jest.fn();
     const onInkCommit = jest.fn();
-    const onSubmit = jest.fn();
     const side = new SideEditor(parent, {
         label: "Front",
         initial,
@@ -56,10 +54,9 @@ function setup(
         textDirection: TextDirection.Ltr,
         onChange,
         onInkCommit,
-        onSubmit,
         ...opts,
     });
-    return { side, parent, onChange, onInkCommit, onSubmit };
+    return { side, parent, onChange, onInkCommit };
 }
 
 const textArea = (parent: HTMLElement) =>
@@ -154,6 +151,14 @@ describe("SideEditor modes", () => {
         expect(off.side.mode).toBe("text");
     });
 
+    test("the text area doesn't pan when a pen touch can switch it to ink", () => {
+        expect(textArea(setup(state()).parent).hasClass("sr-pen-switch")).toBe(true);
+        const off = setup(state(), {}, { cardEditorPenSwitchesToInk: false });
+        expect(textArea(off.parent).hasClass("sr-pen-switch")).toBe(false);
+        const cloze = setup(state(), { allowInk: false });
+        expect(textArea(cloze.parent).hasClass("sr-pen-switch")).toBe(false);
+    });
+
     test("typing into an empty ink side switches to text and keeps the key", () => {
         const { side, parent, onChange } = setup(state({ mode: "ink" }));
         const evt = new KeyboardEvent("keydown", { key: "a", cancelable: true });
@@ -210,17 +215,14 @@ describe("SideEditor drafts", () => {
         expect(side.inkChanged).toBe(false);
     });
 
-    test("tab inserts a tab, Ctrl+Enter submits", () => {
-        const { side, parent, onSubmit } = setup(state({ text: "ab" }));
+    test("tab inserts a tab", () => {
+        const { side, parent } = setup(state({ text: "ab" }));
         const ta = textArea(parent);
         ta.setSelectionRange(1, 1);
         const tab = new KeyboardEvent("keydown", { key: "Tab", cancelable: true });
         ta.dispatchEvent(tab);
         expect(tab.defaultPrevented).toBe(true);
         expect(side.state.text).toBe("a\tb");
-
-        ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true }));
-        expect(onSubmit).toHaveBeenCalledTimes(1);
     });
 
     test("right-to-left text direction", () => {

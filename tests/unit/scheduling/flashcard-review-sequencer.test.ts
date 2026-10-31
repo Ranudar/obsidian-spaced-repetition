@@ -1313,6 +1313,23 @@ ${updatedStr}
 
         expect(await c.file.read()).toEqual(expectedText);
     });
+
+    test("Question text changed in the note meanwhile: nothing is written or changed", async () => {
+        const c: TestContext = TestContext.Create(
+            orderDueFirstSequential,
+            FlashcardReviewMode.Review,
+            DEFAULT_SETTINGS,
+            "#flashcards Q2::A2\n",
+        );
+        await c.setSequencerDeckTreeFromOriginalText();
+        const changedText = "#flashcards Q2 edited elsewhere::A2\n";
+        await c.file.write(changedText);
+
+        expect(await c.reviewSequencer.updateCurrentQuestionTextAndCards("New::Text")).toBe(false);
+        expect(await c.file.read()).toEqual(changedText);
+        expect(c.reviewSequencer.currentQuestion.questionText.actualQuestion).toEqual("Q2::A2");
+        expect(c.reviewSequencer.currentCard.front).toEqual("Q2");
+    });
 });
 
 function checkQuestionPostponementListCount(c: TestContext, expectedListLength: number) {

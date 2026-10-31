@@ -95,11 +95,22 @@ describe("adding the buttons", () => {
     test("other images get no button", () => {
         const section = document.body.createDiv();
         const photo = embed("app://vault/photo.png", section);
-        const notInk = embed("app://vault/pencards/pencard-sketch.svg", section);
+        const png = embed("app://vault/pencards/pencard-sketch.png", section);
         postProcess(section);
 
         expect(buttonOf(photo)).toBeNull();
-        expect(buttonOf(notInk)).toBeNull();
+        expect(buttonOf(png)).toBeNull();
+    });
+
+    test("ink images whose name doesn't follow the scheme get a button too", () => {
+        // Renamed by hand or by Obsidian on a name collision; the editor opens them as ink too
+        const section = document.body.createDiv();
+        const renamed = embed("app://vault/pencards/pencard-sketch.svg", section);
+        const collided = embed("app://vault/pencard-x-front%201.svg", section);
+        postProcess(section);
+
+        expect(buttonOf(renamed)).not.toBeNull();
+        expect(buttonOf(collided)).not.toBeNull();
     });
 
     test("images inside the card editor get no button", () => {

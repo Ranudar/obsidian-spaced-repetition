@@ -38,7 +38,8 @@ export interface IFlashcardReviewSequencer {
     skipCurrentCard(): void;
     determineCardSchedule(response: ReviewResponse, card: Card): RepItemScheduleInfo;
     processReview(response: ReviewResponse): Promise<void>;
-    updateCurrentQuestionTextAndCards(text: string): Promise<void>;
+    /** false, with nothing changed, when the question's text is no longer in its note */
+    updateCurrentQuestionTextAndCards(text: string): Promise<boolean>;
     deleteCurrentCardFromNote(): Promise<void>;
 }
 
@@ -425,7 +426,7 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
         return result;
     }
 
-    async updateCurrentQuestionTextAndCards(text: string): Promise<void> {
+    async updateCurrentQuestionTextAndCards(text: string): Promise<boolean> {
         const question = this.currentQuestion;
         const q: QuestionText = question.questionText;
 
@@ -436,20 +437,28 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
             this.settings,
         );
 
+        const previous = q.actualQuestion;
         q.actualQuestion = text;
 
-        await this.currentQuestion.writeQuestion(this.settings);
+        let written = false;
+        try {
+            written = await this.currentQuestion.writeQuestion(this.settings);
+        } finally {
+            if (!written) q.actualQuestion = previous;
+        }
+        if (!written) return false;
 
         if (cardFrontBackList.length !== question.cards.length) {
             console.warn("SR: Cards count does not match question text. Skipping redraw.");
             new Notice("Cards count does not match cards from question text. Skipping redraw.");
-            return;
+            return true;
         }
         question.cards.forEach((card, i) => {
             const { front, back } = cardFrontBackList[i];
             card.front = front;
             card.back = back;
         });
+        return true;
     }
 
     async deleteCurrentCardFromNote(): Promise<void> {

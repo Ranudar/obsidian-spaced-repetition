@@ -95,27 +95,3 @@ function segmentDist2(px: number, py: number, a: Point, b: Point): number {
     const dy = a[1] + t * vy - py;
     return dx * dx + dy * dy;
 }
-
-/**
- * Moves strokes the minimum needed so they fit inside a field of the given size
- * (e.g. a card written on a larger screen). Strokes that already fit stay where they are.
- */
-export function fitStrokes(strokes: Stroke[], width: number, height: number, pad = 12): Stroke[] {
-    const pts = strokes.flatMap((s) => s.points);
-    if (pts.length === 0) return strokes;
-    const xs = pts.map((p) => p[0]);
-    const ys = pts.map((p) => p[1]);
-    const shift = (min: number, max: number, size: number) => {
-        let d = 0;
-        if (max + d > size - pad) d = size - pad - max;
-        if (min + d < pad) d = pad - min;
-        return d;
-    };
-    const dx = shift(Math.min(...xs), Math.max(...xs), width);
-    const dy = shift(Math.min(...ys), Math.max(...ys), height);
-    if (dx === 0 && dy === 0) return strokes;
-    return strokes.map((s) => ({
-        ...s,
-        points: s.points.map(([x, y, p]) => [x + dx, y + dy, p] as Point),
-    }));
-}

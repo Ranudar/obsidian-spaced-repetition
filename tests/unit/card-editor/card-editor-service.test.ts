@@ -1,4 +1,4 @@
-import { Notice, TFile } from "obsidian";
+import { MarkdownView, Notice, TFile, TFolder } from "obsidian";
 
 import {
     CardEditorModal,
@@ -63,6 +63,12 @@ class FakeVault {
         return null;
     }
 
+    /** Like Obsidian: a path finds that file, a bare name a file of that name anywhere */
+    byLink(link: string): TFile | null {
+        if (link.includes("/")) return this.files.get(link)?.file ?? null;
+        return this.byName(link);
+    }
+
     content(path: string): string | undefined {
         return this.files.get(path)?.content;
     }
@@ -79,7 +85,10 @@ class FakeVault {
                 return Promise.resolve();
             }),
             getAbstractFileByPath: jest.fn((path: string) =>
-                this.folders.has(path) ? { path } : null,
+                this.folders.has(path) ? Object.assign(new TFolder(), { path }) : null,
+            ),
+            getAllLoadedFiles: jest.fn(() =>
+                [...this.folders].map((path) => Object.assign(new TFolder(), { path })),
             ),
             createFolder: jest.fn((path: string) => {
                 this.folders.add(path);
@@ -93,7 +102,7 @@ class FakeVault {
             }),
         },
         metadataCache: {
-            getFirstLinkpathDest: jest.fn((link: string) => this.byName(link)),
+            getFirstLinkpathDest: jest.fn((link: string) => this.byLink(link)),
             fileToLinktext: jest.fn((file: TFile) => file.path),
         },
         fileManager: {
@@ -105,9 +114,15 @@ class FakeVault {
                 Promise.resolve(`notes/attachments/${name}`),
             ),
         },
+        workspace: {
+            getLeavesOfType: jest.fn((): { view: unknown }[] => markdownLeaves),
+            iterateAllLeaves: jest.fn(),
+        },
     };
 }
 
+/** Leaves of the markdown editors open in the workspace */
+let markdownLeaves: { view: unknown }[] = [];
 let vault: FakeVault;
 let settings: SRSettings;
 let service: CardEditorService;
@@ -126,6 +141,7 @@ beforeAll(() => {
 beforeEach(() => {
     ModalMock.mockClear();
     vault = new FakeVault();
+    markdownLeaves = [];
     settings = { ...DEFAULT_SETTINGS };
     noteTags = ["#flashcards"];
     sync.mockClear();
@@ -170,9 +186,16 @@ interface Session {
     result: ReturnType<CardEditorService["editQuestion"]>;
 }
 
+/** Writes the note in edit(): records the text, resolves to whether the card was found */
+let writeText: jest.Mock<Promise<boolean>, [string]>;
+
+beforeEach(() => {
+    writeText = jest.fn((_text: string) => Promise.resolve(true));
+});
+
 /** Opens the editor for a question and waits until it is shown */
 async function edit(question: Question): Promise<Session> {
-    const result = service.editQuestion(question);
+    const result = service.editQuestion(question, writeText);
     for (let i = 0; i < 20 && ModalMock.mock.calls.length === 0; i++) await Promise.resolve();
     expect(ModalMock).toHaveBeenCalledTimes(1);
     // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -283,7 +306,7 @@ describe("loading a card", () => {
         expect(opts.initial.back.penSize).toEqual(7);
         expect(opts.initial.back.strokes).toHaveLength(2);
         expect(vault.app.metadataCache.getFirstLinkpathDest).toHaveBeenCalledWith(
-            "pencard-20261031-141502123-back.svg",
+            "pencards/pencard-20261031-141502123-back.svg",
             NOTE_PATH,
         );
     });
@@ -327,6 +350,29 @@ describe("saving a card", () => {
             });
         }
         expect(vault.app.vault.create).not.toHaveBeenCalled();
+        expect(writeText).not.toHaveBeenCalled();
+    });
+
+    test("saving without changes keeps a blank line and whitespace around the separator", async () => {
+        settings.multilineCardEndMarker = "+++";
+        const question = await parseQuestion("#flashcards\n\nQ\n  ?\n\nA\n+++\n");
+        expect(question.questionText.actualQuestion).toEqual("Q\n  ?\n\nA");
+        const session = await edit(question);
+        const { front, back } = session.opts.initial;
+
+        const result = await save(session, { front: unchanged(front), back: unchanged(back) });
+        expect(result.textChanged).toBe(false);
+        expect(writeText).not.toHaveBeenCalled();
+    });
+
+    test("blank lines typed in a side don't end the card without an end marker", async () => {
+        const session = await edit((await parseQuestions(textNote))[0]);
+        const result = await save(session, {
+            front: unchanged(session.opts.initial.front),
+            back: text("line 1\n\nline 2\n"),
+        });
+        expect(result.text.endsWith("\n?\nline 1\n<br>\nline 2")).toBe(true);
+        expect(writeText).toHaveBeenCalledWith(result.text);
     });
 
     test("an edited answer keeps question, tables and formulas intact", async () => {
@@ -342,6 +388,7 @@ describe("saving a card", () => {
         expect(result.text).toEqual(
             question.questionText.actualQuestion.replace("true positive", "TRUE POSITIVE"),
         );
+        expect(writeText).toHaveBeenCalledWith(result.text);
     });
 
     test("cancel resolves to null and writes nothing", async () => {
@@ -464,6 +511,75 @@ describe("saving a card", () => {
         expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
     });
 
+    test("the embed's folder decides which file is edited, not just its name", async () => {
+        const archived = vault.add("archive/pencard-abc-front.svg", svgOf([stroke(0)]));
+        const front = vault.add("pencards/pencard-abc-front.svg", svgOf([stroke(1), stroke(2)]));
+        vault.add("pencards/pencard-abc-back.svg", svgOf([stroke(5)]));
+        const session = await edit(await parseQuestion(inkNote));
+        expect(session.opts.initial.front.strokes).toHaveLength(2);
+
+        const result = await save(session, {
+            front: ink([stroke(9)]),
+            back: unchanged(session.opts.initial.back),
+        });
+        expect(result.changedImages).toEqual([front]);
+        expect(vault.content(archived.path)).toEqual(svgOf([stroke(0)]));
+    });
+
+    test("the note write is the commit point: if it finds no card, everything is undone", async () => {
+        const back = vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const original = vault.content(back.path);
+        writeText.mockResolvedValue(false);
+
+        // ink → text: the SVG stays
+        let session = await edit(await parseQuestion(mixedNote));
+        await expect(
+            session.opts.save({ front: text("Typed"), back: text("Mitochondria") }),
+        ).rejects.toThrow("The card's text in the note has changed");
+        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
+        expect(vault.content(back.path)).toEqual(original);
+
+        // text → ink and ink → ink: the new SVG is removed, the rewritten one restored
+        ModalMock.mockClear();
+        session = await edit(await parseQuestion(mixedNote));
+        await expect(
+            session.opts.save({ front: ink([stroke(3)]), back: ink([stroke(4)]) }),
+        ).rejects.toThrow("The card's text in the note has changed");
+        expect([...vault.files.keys()]).toEqual([back.path]);
+        expect(vault.content(back.path)).toEqual(original);
+
+        session.opts.closed();
+        await expect(session.result).resolves.toBeNull();
+    });
+
+    test("a failed note write is undone the same way", async () => {
+        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        writeText.mockRejectedValue(new Error("disk full"));
+        const session = await edit(await parseQuestion(mixedNote));
+        await expect(
+            session.opts.save({ front: ink([stroke(3)]), back: text("Mitochondria") }),
+        ).rejects.toThrow("disk full");
+        expect([...vault.files.keys()]).toEqual(["pencards/pencard-20261031-141502123-back.svg"]);
+    });
+
+    test("a side failing after another side's file was created removes that file", async () => {
+        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        vault.app.vault.modify.mockRejectedValueOnce(new Error("disk full"));
+        const session = await edit(await parseQuestion(mixedNote));
+
+        await expect(
+            session.opts.save({ front: ink([stroke(3)]), back: ink([stroke(4)]) }),
+        ).rejects.toThrow("disk full");
+        expect([...vault.files.keys()]).toEqual(["pencards/pencard-20261031-141502123-back.svg"]);
+        expect(writeText).not.toHaveBeenCalled();
+
+        // A retry reuses the card's stem, as no file was left behind
+        const result = await save(session, { front: ink([stroke(3)]), back: ink([stroke(4)]) });
+        expect(result.text.startsWith("![[pencards/pencard-20261031-141502123-front.svg]]")).toBe(
+            true,
+        );
+    });
+
     test("a failed write rejects the save and trashes nothing", async () => {
         vault.add("pencards/pencard-abc-front.svg", svgOf([stroke(0)]));
         vault.add("pencards/pencard-abc-back.svg", svgOf([stroke(5)]));
@@ -514,6 +630,12 @@ describe("adding cards", () => {
 
         expect(vault.content(NOTE_PATH)).toEqual("#flashcards\n\nQ1\n?\nA1\n\nQ2\n?\nA2\n");
         expect(vault.app.vault.create).not.toHaveBeenCalled();
+    });
+
+    test("blank lines typed in a side are kept as <br> lines, so the card stays whole", async () => {
+        const opts = openAdd();
+        await opts.save({ front: text("Q"), back: text("line 1\n\nline 2") });
+        expect(vault.content(NOTE_PATH)).toEqual("#flashcards\n\nQ\n?\nline 1\n<br>\nline 2\n");
     });
 
     test("the end marker follows a blank line", async () => {
@@ -687,6 +809,47 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
         expect(svgToStrokes(vault.content("pencards/pencard-xyz-back.svg")).strokes).toEqual([
             stroke(7),
         ]);
+    });
+
+    test("a card changed in the note meanwhile: the save fails, the note and SVGs stay", async () => {
+        const { done, opts } = await tapPencil("pencard-20261031-141502123-back.svg");
+        const changed = pencilNote.replace("powerhouse", "power plant");
+        noteFile.content = changed;
+
+        await expect(
+            opts.save({ front: text("Typed"), back: text("Mitochondria") }),
+        ).rejects.toThrow("The card's text in the note has changed");
+        expect(noteFile.content).toEqual(changed);
+        expect(vault.content("pencards/pencard-20261031-141502123-back.svg")).toBeDefined();
+        expect(loadedNote.questionList[0].questionText.actualQuestion).toContain("powerhouse");
+
+        opts.closed();
+        await done;
+        expect(sync).not.toHaveBeenCalled();
+    });
+
+    test("unsaved typing in an editor showing the note is saved before the card is read", async () => {
+        const save = jest.fn(() => Promise.resolve());
+        const other = jest.fn(() => Promise.resolve());
+        markdownLeaves = [
+            {
+                view: Object.assign(Object.create(MarkdownView.prototype) as MarkdownView, {
+                    file: { path: NOTE_PATH },
+                    save,
+                }),
+            },
+            {
+                view: Object.assign(Object.create(MarkdownView.prototype) as MarkdownView, {
+                    file: { path: "x.md" },
+                    save: other,
+                }),
+            },
+        ];
+        const { done, opts } = await tapPencil("pencard-xyz-back.svg");
+        expect(save).toHaveBeenCalledTimes(1);
+        expect(other).not.toHaveBeenCalled();
+        opts.closed();
+        await done;
     });
 
     test("cancel writes nothing", async () => {

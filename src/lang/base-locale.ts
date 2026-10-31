@@ -406,6 +406,7 @@ export interface IBaseLocale {
     CARD_EDITOR_SAVE_FAILED: string;
     CARD_EDITOR_EDIT_FAILED: string;
     CARD_EDITOR_CARD_NOT_FOUND: string;
-    CARD_EDITOR_IMAGE_NOT_FOUND: string;
+    CARD_EDITOR_TEXT_NOT_FOUND: string;
+    CARD_EDITOR_IMAGE_FOLDER_IS_FILE: string;
     CARD_EDITOR_PEN_CARDS_ENABLED: string;
 }

@@ -18,7 +18,7 @@ strokes, so you can open a handwritten card later and keep writing, erase or und
 | Button       | What it does                                                                                                                          |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Save & next  | Inserts the card, clears both sides and counts the card in the header ("3 card(s) added"), so you can write the next one right away.  |
-| Save & close | Inserts the card and closes the editor. On an empty card it just closes.                                                              |
+| Save & close | Inserts the card and closes the editor.                                                                                               |
 | Discard      | The first tap changes the button to "Tap again to discard". A second tap within 3 seconds throws the card away and closes the editor. |
 
 The save buttons stay disabled until both sides have content. `Ctrl/Cmd + Enter` does the same as
@@ -27,7 +27,9 @@ The save buttons stay disabled until both sides have content. `Ctrl/Cmd + Enter`
 ### Where the Card Goes
 
 - If the note is open in an editor (source mode or live preview), the card is inserted below the
-  line with the cursor. The next cards follow it, one after the other.
+  line with the cursor. When the cursor is inside the note's properties, a card, a code block or a
+  paragraph, the card goes after it, so nothing is split. The next cards follow it, one after the
+  other.
 - Otherwise (reading view, or no editor open), the card is added at the end of the note.
 
 The editor always creates [multi-line basic](q-and-a-cards.md#multi-line-basic) cards, using the
@@ -42,6 +44,8 @@ What is the powerhouse of the cell?
 
 If you have set `Characters denoting the end of clozes and multiline flashcards`, the editor adds it
 after the card, with a blank line before it so the line above does not turn into a heading.
+Without it, a blank line ends a card, so blank lines you type in a side are saved as a `<br>` line,
+which also shows as an empty line.
 
 After the editor closes, Spaced Repetition rescans your notes, so the new cards show up in the deck
 counts and in review.

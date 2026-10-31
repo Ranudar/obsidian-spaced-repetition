@@ -7,6 +7,7 @@ import {
     CardEditorSides,
 } from "src/card-editor/card-editor-modal";
 import { Stroke } from "src/card-editor/core/strokes";
+import { InkField } from "src/card-editor/ink-field";
 import { SideState } from "src/card-editor/side-editor";
 import { CardType } from "src/data/data-structures/card/questions/question";
 import { DEFAULT_SETTINGS, SRSettings } from "src/data/settings";
@@ -50,6 +51,23 @@ interface Callbacks {
     closed: jest.Mock<void, []>;
 }
 
+/** Handlers registered on the workspace, by event name */
+let workspaceEvents: Map<string, () => void>;
+
+/** An app with just the workspace events the editor subscribes to */
+function testApp(): App {
+    workspaceEvents = new Map();
+    return {
+        workspace: {
+            on: (name: string, callback: () => void) => {
+                workspaceEvents.set(name, callback);
+                return { name };
+            },
+            offref: (ref: { name: string }) => workspaceEvents.delete(ref.name),
+        },
+    } as unknown as App;
+}
+
 function callbacks(): Callbacks {
     return {
         save: jest.fn<Promise<void>, [CardEditorResult]>(() => Promise.resolve()),
@@ -64,7 +82,7 @@ function openAdd(
 ): { modal: CardEditorModal; cb: Callbacks } {
     const cb = callbacks();
     const opts: CardEditorOptions = { kind: "add", title: "Biology", draft, ...cb };
-    const modal = new CardEditorModal({} as App, { ...DEFAULT_SETTINGS, ...settings }, opts);
+    const modal = new CardEditorModal(testApp(), { ...DEFAULT_SETTINGS, ...settings }, opts);
     modal.open();
     return { modal, cb };
 }
@@ -82,7 +100,7 @@ function openEdit(
         save: cb.save,
         closed: cb.closed,
     };
-    const modal = new CardEditorModal({} as App, DEFAULT_SETTINGS, opts);
+    const modal = new CardEditorModal(testApp(), DEFAULT_SETTINGS, opts);
     modal.open();
     return { modal, cb };
 }
@@ -159,7 +177,8 @@ describe("CardEditorModal add mode", () => {
     test("save is disabled until both sides have content", () => {
         openAdd();
         expect(saveNext().disabled).toBe(true);
-        expect(saveClose().disabled).toBe(false); // empty card: just closes
+        // An empty card is closed with ✕, Esc or Discard
+        expect(saveClose().disabled).toBe(true);
         type(0, "Q");
         expect(saveNext().disabled).toBe(true);
         expect(saveClose().disabled).toBe(true);
@@ -204,12 +223,12 @@ describe("CardEditorModal add mode", () => {
         expect(cb.closed).toHaveBeenCalledTimes(1);
     });
 
-    test("Save & close on an empty card only closes", async () => {
+    test("Save & close on an empty card does nothing", async () => {
         const { cb } = openAdd();
         saveClose().click();
         await flush();
         expect(cb.save).not.toHaveBeenCalled();
-        expect(cb.closed).toHaveBeenCalledTimes(1);
+        expect(cb.closed).not.toHaveBeenCalled();
     });
 
     test("ink sides are saved with strokes, pen size and the changed flag", async () => {
@@ -335,6 +354,27 @@ describe("CardEditorModal drafts and discard", () => {
         discard.click();
         jest.advanceTimersByTime(3000);
         expect(discard.textContent).toBe("Discard");
+        discard.click();
+        expect(cb.closed).not.toHaveBeenCalled();
+        expect(discard.textContent).toBe("Tap again to discard");
+    });
+
+    test("Save & next disarms Discard for the next card", async () => {
+        jest.useFakeTimers();
+        const { cb } = openAdd();
+        type(0, "Q");
+        type(1, "A");
+        const discard = $<HTMLButtonElement>(".sr-card-editor-discard");
+        discard.click();
+        expect(discard.textContent).toBe("Tap again to discard");
+        saveNext().click();
+        await jest.advanceTimersByTimeAsync(0);
+        expect(cb.save).toHaveBeenCalledTimes(1);
+        expect(discard.textContent).toBe("Discard");
+        expect(discard.hasClass("is-armed")).toBe(false);
+
+        // Within the first tap's 3 s: the first tap on the new card only arms
+        type(0, "Q2");
         discard.click();
         expect(cb.closed).not.toHaveBeenCalled();
         expect(discard.textContent).toBe("Tap again to discard");
@@ -499,4 +539,14 @@ describe("CardEditorModal pen tools", () => {
         expect(evt.defaultPrevented).toBe(false);
         expect(undo().disabled).toBe(false);
     });
+});
+
+test("a theme change redraws the ink with the new color, until the editor closes", () => {
+    const themeChanged = jest.spyOn(InkField.prototype, "themeChanged");
+    const { modal } = openAdd({ front: side({ mode: "ink", strokes: [stroke(0)] }), back: side() });
+    workspaceEvents.get("css-change")();
+    expect(themeChanged).toHaveBeenCalledTimes(1);
+    modal.close();
+    expect(workspaceEvents.has("css-change")).toBe(false);
+    themeChanged.mockRestore();
 });

@@ -96,6 +96,8 @@ class ButtonComponent {
 }
 
 class TFile {}
+class TFolder {}
+class MarkdownView {}
 
 module.exports = {
     moment: {
@@ -118,4 +120,6 @@ module.exports = {
     Modal,
     ButtonComponent,
     TFile,
+    TFolder,
+    MarkdownView,
 };

@@ -28,8 +28,6 @@ export interface SideEditorOptions {
     onChange(): void;
     /** Called after every ink change with the strokes before it (for undo) */
     onInkCommit(prev: Stroke[]): void;
-    /** Ctrl/Cmd+Enter in the text area */
-    onSubmit?(): void;
 }
 
 const MODE_ICONS: Record<InputMode, string> = { text: "⌨", ink: "✎" };
@@ -78,6 +76,12 @@ export class SideEditor {
         this.textArea.addEventListener("input", this.onTextInput);
         this.textArea.addEventListener("keydown", this.onTextKeyDown);
         this.textArea.addEventListener("pointerdown", this.onTextPointerDown);
+        // The browser decides at pointerdown whether a touch pans. A pen touch that switches to ink
+        // must not pan, or the browser cancels the stroke after the first few pixels.
+        this.textArea.toggleClass(
+            "sr-pen-switch",
+            opts.allowInk && opts.settings.cardEditorPenSwitchesToInk,
+        );
 
         this.inkHost = body.createDiv({ cls: "sr-card-editor-ink" });
         this.hintEl = this.el.createDiv({ cls: "sr-card-editor-hint" });
@@ -169,6 +173,11 @@ export class SideEditor {
 
     setEraser(on: boolean): void {
         this.eraser = on;
+    }
+
+    /** Re-reads the theme's colors, e.g. after switching to dark mode */
+    themeChanged(): void {
+        this.ink?.themeChanged();
     }
 
     focus(): void {
@@ -263,9 +272,6 @@ export class SideEditor {
             evt.preventDefault();
             insertText(this.textArea, "\t");
             this.onTextInput();
-        } else if ((evt.ctrlKey || evt.metaKey) && evt.key === "Enter" && this.opts.onSubmit) {
-            evt.preventDefault();
-            this.opts.onSubmit();
         }
     };
 

@@ -63,8 +63,9 @@ Already done on `main` (not part of this work): the edit dialog splits cards wit
 2. If the note has no flashcard tag (SR's `flashcardTags`): a notice says so; the editor still opens.
 3. The editor opens in add mode. Both sides start in the **default input mode** setting (Text).
 4. Fill front and back, typing or writing; switch modes per side as needed.
-5. **Save & next**: the card is inserted below the cursor (or at the end of the note in reading
-   view / when no editor is open), the fields clear, the counter goes up, focus returns to the
+5. **Save & next**: the card is inserted below the cursor, after the block the cursor is in
+   (frontmatter, card with its schedule comment, code block, paragraph), or at the end of the note in
+   reading view / when no editor is open; the fields clear, the counter goes up, focus returns to the
    front side (text mode) or the front ink field. Consecutive cards are inserted one after the other.
    **Save & close**: insert and close. **Discard**: first tap arms it ("Tap again to discard"),
    second tap within 3 s clears the card and closes.
@@ -231,10 +232,12 @@ export class CardEditorModal extends Modal {
 export class CardEditorService {
     constructor(plugin: SRPlugin, settingsManager: SettingsManager);
     openAdd(file: TFile, view: MarkdownView | null): void; // F1
-    /** F2/F3: opens the editor for a question; writes ink files; resolves to the new question text
-     *  (null = cancelled), plus whether the text changed and which images were rewritten. Does not write the note. */
+    /** F2/F3: opens the editor for a question; writes ink files and, if the text changed, the note
+     *  through writeText (false = card text not found). Resolves to the new question text
+     *  (null = cancelled), plus whether the text changed and which images were rewritten. */
     editQuestion(
         question: Question,
+        writeText: (text: string) => Promise<boolean>,
     ): Promise<{ text: string; textChanged: boolean; changedImages: TFile[] } | null>;
     editInNote(noteFile: TFile, imageName: string): Promise<void>; // F3
     editInReview(): Promise<void>; // pencil inside review → same as toolbar Edit
@@ -254,11 +257,15 @@ export class CardEditorService {
     - text → ink: new SVG `pencard-<stem>-<side>.svg`; `<stem>` is the card's other ink side's stem
       if there is one, else a new timestamp.
     - ink → text: the SVG is moved to trash with `app.fileManager.trashFile`.
-    - Text changed → the caller writes the question (`updateCurrentQuestionTextAndCards` in review,
-      `question.writeQuestion()` in the note), which keeps the `<!--SR:…-->` schedule comment.
-      Text unchanged → no note write.
-- **Review edit** (`content-manager.tsx` `_doEditQuestionText`) calls `editQuestion`, then
-  `updateCurrentQuestionTextAndCards` only if the text changed, then always redraws the current side.
+    - Text changed → the caller's `writeText` writes the question (`updateCurrentQuestionTextAndCards`
+      in review, `question.writeQuestion()` in the note), which keeps the `<!--SR:…-->` schedule
+      comment. Text unchanged → no note write.
+    - The note write is the commit point, inside the editor's save: new SVGs are created and changed
+      ones overwritten first, the note is written, and only then are SVGs trashed. If anything fails,
+      including the card's text no longer being found in the note, new SVGs are removed, overwritten
+      ones restored, and the editor stays open with a notice.
+- **Review edit** (`content-manager.tsx` `_doEditQuestionText`) calls `editQuestion` with
+  `updateCurrentQuestionTextAndCards` as `writeText`, then always redraws the current side.
 - **Note edit**: the pencil knows the note (post-processor `ctx.sourcePath`, or the live-preview
   leaf's file). The service loads it with `dataManager.loadNote(file)`, finds the question whose text
   embeds the image, runs `editQuestion`, writes the question if needed, then resyncs.
@@ -339,7 +346,8 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
       refresh, Pen Cards migration notice.
 - [x] 8. **Docs**: user page `docs/docs/en/flashcards/card-editor.md` (+ mkdocs nav, links from
       Reviewing and User Options).
-- [ ] 9. **Device test** on the S22 Ultra, by hand: pen-only, side-button eraser, auto switch to pen,
+- [ ] 9. **Device test** on the S22 Ultra, by hand: pen-only, side-button eraser, auto switch to pen
+      (write a whole word starting on the text area: the stroke must not be cut short),
       live-preview pencil tap (also in tabs that load late), single ✕, dark mode, back gesture keeps
       draft.
 
@@ -351,7 +359,7 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
 - **Ink field**: guides are drawn with CSS (classes `sr-ink-guide-*`, variable
   `--sr-ink-guide-spacing`) instead of on the canvas. The field label is a placeholder inside the
   field; the side label sits in the side header.
-- **Additions to contracts**: `SideEditor.reset(state)` (Save & next), `onSubmit`, getters `strokes`,
+- **Additions to contracts**: `SideEditor.reset(state)` (Save & next), getters `strokes`,
   `text`, `el`; `InkField.beginStroke(e)` so the pen touch that switches a side also draws; an
   optional `textDirection` in the modal options; `cardSeparator`, `inkEmbedFileNames` in
   `card-text.ts`; `inkFileName`, `parseInkFileName`, `timestampName` in `ink-svg.ts`;
@@ -360,6 +368,20 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
   it can be unit tested. The editor is saved before the resync, because `sync()` reads from disk.
 - **No stroke refit on edit**: strokes are loaded as stored (Pen Cards' `fitStrokes` on edit was not
   ported).
+- **Save & close** is disabled like Save & next while a side is empty; an empty card is closed with
+  ✕, Esc or Discard.
+- **Blank lines in text sides**: without an end marker a blank line would end the card, so blank
+  lines typed in a side (outside code blocks) are saved as a `<br>` line.
+- **Separator line**: an edit keeps the separator line as written (e.g. with extra spaces) and the
+  lines around it, so saving without changes never rewrites the note.
+- **Ink files** are resolved by the embed's link path, not by file name alone. Any `pencard-*.svg`
+  embed counts as ink, also for the pencil; only names following the scheme give a stem to reuse.
+- **Pen on the text area**: with "switch to pen" on, the text area has `touch-action: pinch-zoom`,
+  so the browser doesn't turn the pen stroke into a pan. Long text then doesn't scroll by finger drag.
+- **Image folder**: an existing folder with another letter case is used as it is.
+- **Note edit**: editors showing the note are saved before the card is read, so unsaved typing is
+  not mistaken for a changed card. Images are refreshed in every window, incl. popouts.
+- **Theme change** while the editor is open redraws the ink in the new color (`css-change`).
 - **Shortcuts**: Ctrl/Cmd+Z undoes ink only outside a text area; undo switches the affected side back
   to ink. Clear side acts on the side last touched or focused.
 - **Embeds**: always the wiki form `![[…]]`, regardless of Obsidian's link-format setting. If a

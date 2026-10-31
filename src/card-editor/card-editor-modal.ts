@@ -1,4 +1,4 @@
-import { App, Modal, Notice, setIcon } from "obsidian";
+import { App, EventRef, Modal, Notice, setIcon } from "obsidian";
 
 import { Stroke } from "src/card-editor/core/strokes";
 import { SideEditor, SideState } from "src/card-editor/side-editor";
@@ -69,6 +69,7 @@ export class CardEditorModal extends Modal {
     private dropDraft = false;
     private discardArmedAt = 0;
     private discardTimer: number | null = null;
+    private cssChangeRef: EventRef | null = null;
 
     private counterEl: HTMLElement | null = null;
     private eraserButton!: HTMLButtonElement;
@@ -128,6 +129,11 @@ export class CardEditorModal extends Modal {
         this.buildFooter(root);
         root.addEventListener("keydown", this.onKeyDown);
 
+        // A theme change (e.g. to dark mode at night) changes the ink color
+        this.cssChangeRef = this.app.workspace.on("css-change", () =>
+            this.sides.forEach((side) => side.themeChanged()),
+        );
+
         this.updateButtons();
         this.front.focus();
     }
@@ -135,7 +141,8 @@ export class CardEditorModal extends Modal {
     onClose(): void {
         this.isClosed = true;
         this.contentEl.removeEventListener("keydown", this.onKeyDown);
-        if (this.discardTimer !== null) activeWindow.clearTimeout(this.discardTimer);
+        if (this.cssChangeRef !== null) this.app.workspace.offref(this.cssChangeRef);
+        this.disarmDiscard();
 
         const opts = this.opts;
         const draft =
@@ -285,24 +292,24 @@ export class CardEditorModal extends Modal {
             this.close();
             return;
         }
+        this.disarmDiscard();
         this.discardArmedAt = Date.now();
         this.discardButton.setText(t("CARD_EDITOR_DISCARD_CONFIRM"));
         this.discardButton.addClass("is-armed");
+        this.discardTimer = activeWindow.setTimeout(() => this.disarmDiscard(), DISCARD_ARM_MS);
+    }
+
+    /** Back to an unarmed Discard button: after the timeout and for every new card */
+    private disarmDiscard() {
         if (this.discardTimer !== null) activeWindow.clearTimeout(this.discardTimer);
-        this.discardTimer = activeWindow.setTimeout(() => {
-            this.discardTimer = null;
-            this.discardArmedAt = 0;
-            this.discardButton?.setText(t("CARD_EDITOR_DISCARD"));
-            this.discardButton?.removeClass("is-armed");
-        }, DISCARD_ARM_MS);
+        this.discardTimer = null;
+        this.discardArmedAt = 0;
+        this.discardButton?.setText(t("CARD_EDITOR_DISCARD"));
+        this.discardButton?.removeClass("is-armed");
     }
 
     private async saveAdd(close: boolean) {
         if (this.busy) return;
-        if (close && this.allEmpty) {
-            this.close();
-            return;
-        }
         const saved = await this.runSave();
         if (!saved || this.isClosed) return;
         this.added++;
@@ -313,6 +320,7 @@ export class CardEditorModal extends Modal {
         }
         // Next card: same input mode per side, so pen users keep writing
         this.undoStack = [];
+        this.disarmDiscard();
         this.sides.forEach((side) => side.reset(this.blankSide(side.mode)));
         this.activeSide = this.front;
         this.updateButtons();
@@ -391,9 +399,8 @@ export class CardEditorModal extends Modal {
         // Callbacks from the sides can arrive while the footer is still being built
         if (!this.saveButton) return;
         this.saveButton.disabled = this.busy || !this.ready;
-        if (this.saveCloseButton) {
-            this.saveCloseButton.disabled = this.busy || (!this.ready && !this.allEmpty);
-        }
+        // An empty card is closed with ✕, Esc or Discard, not with a button that looks like saving
+        if (this.saveCloseButton) this.saveCloseButton.disabled = this.busy || !this.ready;
         if (this.discardButton) this.discardButton.disabled = this.busy;
         if (this.counterEl) {
             this.counterEl.setText(

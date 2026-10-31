@@ -238,6 +238,12 @@ img[src*="pencard-"] {
     font-size: var(--font-text-size);
 }
 
+/* A pen touch on the text area switches to ink and draws: no panning (pinch zoom stays).
+   Long text then scrolls with the mouse wheel, keyboard or scrollbar, not by dragging a finger. */
+.sr-card-editor-text.sr-pen-switch {
+    touch-action: pinch-zoom;
+}
+
 .sr-card-editor-ink {
     display: flex;
 }

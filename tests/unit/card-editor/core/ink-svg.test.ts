@@ -1,13 +1,11 @@
 import {
     inkFileName,
     parseInkFileName,
-    siblingName,
     strokesToSvg,
     svgToStrokes,
     timestampName,
 } from "src/card-editor/core/ink-svg";
 import {
-    fitStrokes,
     outlineBounds,
     outlineToPath,
     Point,
@@ -39,27 +37,6 @@ describe("strokes", () => {
             [10, 10, 0.5],
         ]);
         expect(strokeHit(repeated, 12, 12, 5)).toBe(true);
-    });
-
-    test("Fit strokes: unchanged when inside, shifted when too far right/down", () => {
-        const s = [
-            line([
-                [50, 50, 0.5],
-                [100, 80, 0.5],
-            ]),
-        ];
-        expect(fitStrokes(s, 400, 300)).toBe(s);
-        const moved = fitStrokes(s, 90, 60, 10);
-        expect(moved[0].points).toEqual([
-            [30, 20, 0.5],
-            [80, 50, 0.5],
-        ]);
-        expect(fitStrokes([], 10, 10)).toEqual([]);
-    });
-
-    test("Fit strokes: shifted when too far left/up", () => {
-        const s = [line([[2, 3, 0.5]])];
-        expect(fitStrokes(s, 400, 300, 12)[0].points).toEqual([[12, 12, 0.5]]);
     });
 
     test("Outline to path and bounds", () => {
@@ -159,18 +136,6 @@ describe("ink SVG", () => {
 });
 
 describe("ink file names", () => {
-    test("Sibling names", () => {
-        expect(siblingName("pencard-20261031-1-front.svg")).toEqual({
-            side: "front",
-            sibling: "pencard-20261031-1-back.svg",
-        });
-        expect(siblingName("pencard-x-back.svg")).toEqual({
-            side: "back",
-            sibling: "pencard-x-front.svg",
-        });
-        expect(siblingName("photo.svg")).toBeNull();
-    });
-
     test("File name and stem", () => {
         expect(inkFileName("20261031-141502123", "back")).toEqual(
             "pencard-20261031-141502123-back.svg",

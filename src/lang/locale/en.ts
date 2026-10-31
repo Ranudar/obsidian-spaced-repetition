@@ -478,7 +478,9 @@ const en: IBaseLocale = {
     CARD_EDITOR_SAVE_FAILED: "Could not save the card: ${error}",
     CARD_EDITOR_EDIT_FAILED: "This card can't be edited: ${error}",
     CARD_EDITOR_CARD_NOT_FOUND: "This image is not part of any card in this note.",
-    CARD_EDITOR_IMAGE_NOT_FOUND: "The image file for this card was not found.",
+    CARD_EDITOR_TEXT_NOT_FOUND:
+        "The card's text in the note has changed since the editor opened. Close the editor and try again.",
+    CARD_EDITOR_IMAGE_FOLDER_IS_FILE: "The image folder ${path} is a file.",
     CARD_EDITOR_PEN_CARDS_ENABLED:
         "The Pen Cards plugin is still enabled. Spaced Repetition now includes its card editor, so please disable Pen Cards to avoid duplicate edit buttons.",
 };

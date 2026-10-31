@@ -1,7 +1,6 @@
 import { App, MarkdownPostProcessorContext, MarkdownView, setIcon, TFile } from "obsidian";
 
-import { INK_FILE_PREFIX } from "src/card-editor/core/card-text";
-import { parseInkFileName } from "src/card-editor/core/ink-svg";
+import { INK_FILE_PREFIX, isInkFileName } from "src/card-editor/core/card-text";
 import { imageFileName, InkFiles } from "src/card-editor/ink-files";
 import { t } from "src/lang/helpers";
 
@@ -134,7 +133,8 @@ export class PencilButtons {
 
     private consider(img: HTMLImageElement, noteOf: NoteOf): void {
         const name = imageFileName(img);
-        if (name === null || parseInkFileName(name) === null) return;
+        // Same rule as for opening a side as ink, so renamed ink files get a pencil too
+        if (name === null || !isInkFileName(name)) return;
         if (img.closest(".sr-card-editor-modal")) return;
 
         // An image rendered from before an edit: load the new version
