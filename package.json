@@ -58,6 +58,7 @@
         "gridjs": "^6.2.0",
         "minimatch": "^10.2.6",
         "pagerank.js": "^1.0.2",
+        "perfect-freehand": "^1.2.3",
         "short-uuid": "^6.0.3",
         "ts-fsrs": "5.4.1"
     },
