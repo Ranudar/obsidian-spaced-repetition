@@ -1,4 +1,4 @@
-import { App, MarkdownPostProcessorContext, MarkdownView, setIcon, TFile } from "obsidian";
+import { App, MarkdownPostProcessorContext, MarkdownView, Notice, setIcon, TFile } from "obsidian";
 
 import { INK_FILE_PREFIX, isInkFileName } from "src/card-editor/core/card-text";
 import { imageFileName, InkFiles } from "src/card-editor/ink-files";
@@ -13,7 +13,7 @@ const TAP_SLOP_PX = 10;
 /** What a pencil button does when tapped */
 export interface PencilButtonActions {
     readonly inkFiles: InkFiles;
-    editInNote(noteFile: TFile, imageName: string): Promise<void>;
+    editInNote(noteFile: TFile, image: TFile): Promise<void>;
     editInReview(): Promise<void>;
 }
 
@@ -32,6 +32,13 @@ export class PencilButtons {
     private observers = new Map<HTMLElement, MutationObserver>();
     /** Rendered embeds waiting for their <img> → their observer */
     private embedObservers = new Map<HTMLElement, MutationObserver>();
+    /**
+     * The buttons added, so destroy also finds those in sections detached meanwhile (reading view
+     * puts sections scrolled out of view back later). Weak, so closed views can be freed.
+     */
+    private buttons = new Set<WeakRef<HTMLElement>>();
+    /** The same buttons, to tell them from one left by an earlier instance (plugin reloaded) */
+    private ownButtons = new WeakSet<Element>();
     private destroyed = false;
 
     constructor(app: App, actions: PencilButtonActions) {
@@ -85,6 +92,9 @@ export class PencilButtons {
         for (const embed of this.embedObservers.keys()) {
             if (!embed.isConnected) this.stopWatchingEmbed(embed);
         }
+        for (const ref of this.buttons) {
+            if (ref.deref() === undefined) this.buttons.delete(ref);
+        }
 
         for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
             const view = leaf.view as MarkdownView;
@@ -111,9 +121,8 @@ export class PencilButtons {
     }
 
     /**
-     * Removes all buttons in every window and stops watching. The buttons are looked up instead of
-     * kept, so views closed meanwhile can be freed. A button left in a detached section (reading
-     * view puts sections scrolled out of view back later) opens nothing once destroyed.
+     * Removes all buttons, also those in detached sections, and stops watching. A button that
+     * survives anyway opens nothing once destroyed, and is replaced when its image is shown again.
      */
     destroy(): void {
         this.destroyed = true;
@@ -121,11 +130,17 @@ export class PencilButtons {
         this.observers.clear();
         this.embedObservers.forEach((observer) => observer.disconnect());
         this.embedObservers.clear();
+        const remove = (button: Element) => {
+            button.parentElement?.removeClass(HOST_CLASS);
+            button.remove();
+        };
+        this.buttons.forEach((ref) => {
+            const button = ref.deref();
+            if (button) remove(button);
+        });
+        this.buttons.clear();
         for (const doc of this.openDocuments()) {
-            doc.querySelectorAll(`.${BUTTON_CLASS}`).forEach((button) => {
-                button.parentElement?.removeClass(HOST_CLASS);
-                button.remove();
-            });
+            doc.querySelectorAll(`.${BUTTON_CLASS}`).forEach(remove);
         }
     }
 
@@ -168,8 +183,13 @@ export class PencilButtons {
         this.actions.inkFiles.applyVersion(img);
 
         const host = img.parentElement;
-        if (!host || Array.from(host.children).some((c) => c.classList.contains(BUTTON_CLASS)))
-            return;
+        if (!host) return;
+        const existing = Array.from(host.children).filter((c) =>
+            c.classList.contains(BUTTON_CLASS),
+        );
+        if (existing.some((button) => this.ownButtons.has(button))) return;
+        // Left by an earlier instance of the plugin, whose button opens nothing any more
+        existing.forEach((button) => button.remove());
         host.addClass(HOST_CLASS);
         this.addButton(host, img, noteOf);
     }
@@ -178,6 +198,8 @@ export class PencilButtons {
         const button = host.createEl("button", { cls: `${BUTTON_CLASS} clickable-icon` });
         button.setAttr("aria-label", t("CARD_EDITOR_EDIT_HANDWRITTEN"));
         setIcon(button, "pencil");
+        this.buttons.add(new WeakRef(button));
+        this.ownButtons.add(button);
 
         // In live preview the editor (CodeMirror) handles touches on the line itself and moves the
         // cursor, which re-renders the embed and swallows the tap. Keep every part of the tap here.
@@ -214,13 +236,16 @@ export class PencilButtons {
     private open(img: HTMLImageElement, noteOf: NoteOf): void {
         // A button left behind in an element that was detached when the plugin was unloaded
         if (this.destroyed) return;
-        const name = imageFileName(img);
-        if (name === null) return;
+        if (imageFileName(img) === null) return;
         if (img.closest(".sr-view")) {
             void this.actions.editInReview();
             return;
         }
         const note = noteOf();
-        if (note !== null) void this.actions.editInNote(note, name);
+        if (note === null) return;
+        // The file itself, not just its name: another folder may have an image of that name
+        const image = this.actions.inkFiles.imageFile(img, note.path);
+        if (image === null) new Notice(t("CARD_EDITOR_CARD_NOT_FOUND"));
+        else void this.actions.editInNote(note, image);
     }
 }

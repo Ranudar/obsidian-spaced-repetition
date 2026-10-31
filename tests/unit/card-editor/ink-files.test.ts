@@ -150,3 +150,114 @@ describe("InkFiles.create", () => {
         expect(vault.create).not.toHaveBeenCalled();
     });
 });
+
+describe("InkFiles.imageFile", () => {
+    const ink = file("sr-ink/sr-ink-a-front.svg");
+    const archived = file("archive/sr-ink-a-front.svg");
+    const notePage = file("notes/page.md");
+
+    function withFiles(files: TFile[]): InkFiles {
+        const app = {
+            vault: {
+                getFiles: () => files,
+                getResourcePath: (f: TFile) => `app://vault/${encodeURI(f.path)}?100`,
+            },
+            metadataCache: {
+                getFirstLinkpathDest: (link: string) =>
+                    files.find((f) => f.path === link || f.name === link) ?? null,
+            },
+        } as unknown as App;
+        return new InkFiles(app, () => "sr-ink");
+    }
+
+    test("resolves the embed's link path, so a file of the same name elsewhere isn't it", () => {
+        const span = document.body.createSpan({ cls: "internal-embed image-embed" });
+        span.setAttribute("src", "archive/sr-ink-a-front.svg|200");
+        const img = span.createEl("img");
+        img.setAttribute("src", "app://vault/archive/sr-ink-a-front.svg?100");
+        expect(withFiles([ink, archived]).imageFile(img, "notes/bio.md")).toBe(archived);
+    });
+
+    test("without an embed of the image, the file is found by the image's src", () => {
+        // In a transclusion: the embed around the image is the note's
+        const span = document.body.createSpan({ cls: "internal-embed markdown-embed" });
+        span.setAttribute("src", "page");
+        const img = span.createEl("img");
+        img.setAttribute("src", "app://vault/sr-ink/sr-ink-a-front.svg?123");
+        const files = withFiles([archived, ink, notePage]);
+        expect(files.imageFile(img, "notes/bio.md")).toBe(ink);
+
+        // Not found by src: only a single file of that name is certain
+        img.setAttribute("src", "app://other/sr-ink-a-front.svg");
+        expect(files.imageFile(img, "notes/bio.md")).toBeNull();
+        expect(withFiles([ink]).imageFile(img, "notes/bio.md")).toBe(ink);
+        expect(withFiles([ink]).imageFile(image("app://vault/photo.png"), "x.md")).toBeNull();
+    });
+});
+
+describe("InkFiles.isReferenced", () => {
+    const ink = file("sr-ink/sr-ink-a-front.svg");
+    const archived = file("archive/sr-ink-a-front.svg");
+    let texts: Record<string, string>;
+    let read: jest.Mock;
+
+    function inkFilesOf(): InkFiles {
+        const all = () =>
+            [ink, archived, ...Object.keys(texts).map(file)].map((f) =>
+                Object.assign(f, { extension: f.name.substring(f.name.lastIndexOf(".") + 1) }),
+            );
+        read = jest.fn((f: TFile) => Promise.resolve(texts[f.path]));
+        const app = {
+            vault: {
+                getFiles: all,
+                read,
+                cachedRead: (f: TFile) => Promise.resolve(texts[f.path]),
+            },
+            metadataCache: {
+                getFirstLinkpathDest: (link: string) =>
+                    [ink, archived].find((f) => f.path === link) ??
+                    (link === ink.name ? ink : null),
+            },
+        } as unknown as App;
+        return new InkFiles(app, () => "sr-ink");
+    }
+
+    test("links and embeds resolving to the file, or its name anywhere else, refer to it", async () => {
+        for (const text of [
+            "![[sr-ink/sr-ink-a-front.svg]]",
+            "a link: [[sr-ink-a-front.svg|drawing]]",
+            "[x](sr-ink/sr-ink-a-front.svg)",
+            '<img src="sr-ink/sr-ink-a-front.svg">',
+        ]) {
+            texts = { "notes/a.md": text };
+            await expect(inkFilesOf().isReferenced(ink, "notes/bio.md")).resolves.toBe(true);
+        }
+        texts = {
+            "board.canvas": '{"nodes":[{"type":"file","file":"sr-ink/sr-ink-a-front.svg"}]}',
+        };
+        await expect(inkFilesOf().isReferenced(ink, "notes/bio.md")).resolves.toBe(true);
+    });
+
+    test("links to a file of the same name in another folder, and other files, don't", async () => {
+        texts = {
+            "notes/a.md": "![[archive/sr-ink-a-front.svg]] and ![[photo.png]]",
+            "notes/b.md": "nothing",
+            "data.json": "sr-ink/sr-ink-a-front.svg",
+        };
+        const files = inkFilesOf();
+        await expect(files.isReferenced(ink, "notes/a.md")).resolves.toBe(false);
+        // The note just written is read from disk
+        expect(read).toHaveBeenCalledTimes(1);
+        expect(files.linksTo(archived, texts["notes/a.md"], "notes/a.md")).toEqual(1);
+        expect(files.linksTo(ink, texts["notes/a.md"], "notes/a.md")).toEqual(0);
+    });
+
+    test("unsure when a file can't be read", async () => {
+        texts = { "notes/a.md": "x" };
+        const files = inkFilesOf();
+        read.mockRejectedValue(new Error("locked"));
+        const error = jest.spyOn(console, "error").mockImplementation(() => {});
+        await expect(files.isReferenced(ink, "notes/a.md")).resolves.toBe(true);
+        error.mockRestore();
+    });
+});

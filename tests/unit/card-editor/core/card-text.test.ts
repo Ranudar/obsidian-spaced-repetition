@@ -7,7 +7,10 @@ import {
     inkEmbedFileName,
     inkEmbedFileNames,
     inkEmbedPath,
+    inkEmbedPaths,
     isInkFileName,
+    linksIn,
+    misreadSide,
     newCardBody,
     protectBlankLines,
     splitCardText,
@@ -333,6 +336,74 @@ describe("inkEmbedFileNames", () => {
 
     test("no ink embeds", () => {
         expect(inkEmbedFileNames("Q::A ![[photo.svg]]")).toEqual([]);
+    });
+});
+
+describe("inkEmbedPaths", () => {
+    test("finds the link paths of ink embeds, folder included", () => {
+        const text =
+            "![[sr-ink/sr-ink-a-front.svg|200]]\n?\n![](archive/sr-ink-a-front.svg) ![[x.png]]";
+        expect(inkEmbedPaths(text)).toEqual([
+            "sr-ink/sr-ink-a-front.svg",
+            "archive/sr-ink-a-front.svg",
+        ]);
+    });
+});
+
+describe("linksIn", () => {
+    test("finds links and embeds of any file, in both forms", () => {
+        const text = [
+            "![[sr-ink/a.svg|200]] [[Note#Heading|alias]]",
+            '![drawn](<my%20folder/b.svg>) [x](c.svg "title") [y](d%20e.md#h)',
+        ].join("\n");
+        expect(linksIn(text).map((link) => link.path)).toEqual([
+            "sr-ink/a.svg",
+            "Note",
+            "my folder/b.svg",
+            "c.svg",
+            "d e.md",
+        ]);
+        expect(linksIn(text)[0].match).toEqual("![[sr-ink/a.svg|200]]");
+    });
+});
+
+describe("misreadSide", () => {
+    beforeAll(() => unitTestSetupStandardDataStoreAlgorithm(DEFAULT_SETTINGS));
+
+    const added = (front: string, back: string, settings = DEFAULT_SETTINGS) =>
+        misreadSide(CardType.MultiLineBasic, front, back, settings, (f, b) =>
+            newCardBody(f, b, settings),
+        );
+    const edited = (cardType: CardType, front: string, back: string | null) =>
+        misreadSide(cardType, front, back, DEFAULT_SETTINGS, (f, b) =>
+            composeCardText(cardType, f, b, DEFAULT_SETTINGS),
+        );
+
+    test("a card that parses as typed", () => {
+        expect(added("What is a vector?", "A dynamic array\n<br>\n- with `a::b`")).toBeNull();
+        expect(added("Q", "A", END_MARKER_SETTINGS)).toBeNull();
+        expect(added("Q  \nmore", "line with a break  \nnext")).toBeNull();
+        expect(added("```\na::b\n```", "A")).toBeNull();
+        expect(edited(CardType.SingleLineBasic, "    - Q", "A")).toBeNull();
+        expect(edited(CardType.SingleLineReversed, "Q", "A")).toBeNull();
+        expect(edited(CardType.Cloze, "The ==mitochondria== powers the cell", null)).toBeNull();
+    });
+
+    test("an inline separator in a multi-line card makes it a single-line card", () => {
+        expect(added("What does std::vector do?", "A dynamic array")).toEqual("front");
+        expect(added("What is a vector?", "Like std::vector")).toEqual("back");
+        expect(edited(CardType.MultiLineReversed, "Q", "a:::b")).toEqual("back");
+    });
+
+    test("other text the parser would misread", () => {
+        // A deck tag, a block id, a reversed separator in a single-line basic card
+        expect(added("#biology Cells", "A")).toEqual("front");
+        expect(added("Q", "A ^block-1")).toEqual("back");
+        expect(edited(CardType.SingleLineBasic, "Q", "A:::B")).toEqual("back");
+        expect(edited(CardType.SingleLineBasic, "Line 1\nLine 2", "A")).toEqual("front");
+        // A blank line ends the card without an end marker
+        expect(added("Q", "A\n\nB")).toEqual("back");
+        expect(edited(CardType.Cloze, "No cloze here", null)).toEqual("front");
     });
 });
 

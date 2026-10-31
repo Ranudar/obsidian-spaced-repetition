@@ -375,8 +375,10 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
   lines around it, so saving without changes never rewrites the note.
 - **Ink files** are resolved by the embed's link path, not by file name alone. Any `sr-ink-*.svg`
   embed counts as ink, also for the pencil; only names following the scheme give a stem to reuse.
-- **Pen on the text area**: with "switch to pen" on, the text area has `touch-action: pinch-zoom`,
-  so the browser doesn't turn the pen stroke into a pan. Long text then doesn't scroll by finger drag.
+- **Pen on the text area**: with "switch to pen" on, the text area has
+  `touch-action: pan-y pinch-zoom`, so fingers still scroll long text. A pen stroke that starts
+  vertically may be taken over by the browser for scrolling (`pointercancel`); the ink field then
+  drops that unfinished stroke (no undo entry), so only the start of the first stroke can be lost.
 - **Image folder**: an existing folder with another letter case is used as it is.
 - **Note edit**: editors showing the note are saved before the card is read, so unsaved typing is
   not mistaken for a changed card. Images are refreshed in every window, incl. popouts.
@@ -390,7 +392,27 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
   `layout-change` and `active-leaf-change`.
 - **Discard** arms first on an empty card too, as in F1; nothing is lost either way.
 - **Ink → text** trashes the SVG only when no other note or card links to it (Obsidian's
-  `resolvedLinks`) and the new text doesn't embed it.
+  `resolvedLinks`, with this card's links counted by the file they resolve to, not by name), the
+  new text has no link resolving to it, and no `.md` or `.canvas` file refers to it when read
+  (`InkFiles.isReferenced`: a resolving link, or its name in other text such as `<img>`). A read
+  error keeps the file.
+- **Card syntax in a side**: before writing, the composed card is run through SR's parser; unless it
+  reads back as one card of the intended type with exactly these sides (e.g. `std::vector` in a
+  multi-line card's front would make it single-line), the save is refused with a notice naming the
+  side, and the editor stays open.
+- **Pencil** identifies the clicked image's file (`InkFiles.imageFile`: embed link path, else
+  resource path, else the only file of that name) and finds the card by resolved embed path.
+  Buttons left by an earlier plugin instance are replaced; `destroy` also removes buttons in
+  detached sections.
+- **Insertion**: if the text before the insertion point ends inside a card that only the end
+  marker would close, the end marker is inserted first. The card inserted last is only found again
+  where it is a whole block (blank lines around it); otherwise the next card goes to the note's end.
+- **Editing indentation**: an edited text side of an existing card keeps its leading indentation;
+  only leading blank lines and trailing whitespace are removed (new cards are fully trimmed).
+- **While saving** the sides are locked (read-only, ink and mode switches ignored, Undo / Clear
+  disabled) so the saved content is what Save & next clears or Save & close closes over.
+- **Unload**: the service closes open editors on plugin unload; later saves are refused with a
+  notice and nothing more is written. Unreadable or malformed ink metadata opens the side as text.
 - **Pen only** also guards the editor's buttons: a finger press while the pen is down or within
   500 ms of pen use is taken for the palm and ignored.
 - **Mobile focus**: on mobile a text side is not focused on open (no soft keyboard for pen users);

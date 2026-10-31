@@ -240,10 +240,11 @@ img[src*="sr-ink-"] {
     font-size: var(--font-text-size);
 }
 
-/* A pen touch on the text area switches to ink and draws: no panning (pinch zoom stays).
-   Long text then scrolls with the mouse wheel, keyboard or scrollbar, not by dragging a finger. */
+/* A pen touch on the text area switches to ink and draws. Fingers still scroll long text
+   vertically; a pen stroke that starts vertically may then be taken over by the browser for
+   scrolling (pointercancel), which loses only the start of that first stroke. */
 .sr-card-editor-text.sr-pen-switch {
-    touch-action: pinch-zoom;
+    touch-action: pan-y pinch-zoom;
 }
 
 .sr-card-editor-ink {

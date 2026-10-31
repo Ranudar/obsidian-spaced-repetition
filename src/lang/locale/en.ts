@@ -476,6 +476,9 @@ const en: IBaseLocale = {
     CARD_EDITOR_SIDES_EMPTY: "Fill in both sides of the card first.",
     CARD_EDITOR_SIDE_HAS_MARKER:
         'A side can\'t have a line that is only "${line}": that line separates or ends cards. Change it, e.g. add a word to it.',
+    CARD_EDITOR_SIDE_HAS_CARD_SYNTAX:
+        'Spaced Repetition would read text on the side "${side}" as card syntax (e.g. "::"), so the card would not be read back as typed. Change that text, e.g. put it in `code`.',
+    CARD_EDITOR_PLUGIN_UNLOADED: "Spaced Repetition was turned off, so the card was not saved.",
     CARD_EDITOR_SAVE_FAILED: "Could not save the card: ${error}",
     CARD_EDITOR_EDIT_FAILED: "This card can't be edited: ${error}",
     CARD_EDITOR_CARD_NOT_FOUND: "This image is not part of any card in this note.",

@@ -690,3 +690,89 @@ test("on mobile a text side isn't focused on open, so the soft keyboard stays cl
         isMobile.mockRestore();
     }
 });
+
+describe("CardEditorModal while saving", () => {
+    /** Makes the next save wait until the returned function is called */
+    function deferSave(cb: Callbacks): (ok?: boolean) => void {
+        let settle: (ok: boolean) => void = () => {};
+        cb.save.mockImplementationOnce(
+            () =>
+                new Promise<void>((resolve, reject) => {
+                    settle = (ok) => (ok ? resolve() : reject(new Error("x")));
+                }),
+        );
+        return (ok = true) => settle(ok);
+    }
+
+    test("Save & next: the sides can't be changed until the card is saved", async () => {
+        const { cb } = openAdd({
+            front: side({ text: "Q" }),
+            back: side({ mode: "ink", strokes: [stroke(0)] }),
+        });
+        const finish = deferSave(cb);
+        saveNext().click();
+
+        expect(textAreas()[0].readOnly).toBe(true);
+        const draw = pointer("pointerdown", $(".sr-ink-field canvas") ?? $(".sr-ink-field"), "pen");
+        expect(draw.defaultPrevented).toBe(true);
+        $$<HTMLButtonElement>(".sr-card-editor-mode-button")[2].click(); // back → text
+        expect($$(".sr-card-editor-side")[1].hasClass("is-ink")).toBe(true);
+        expect(keyDown(textAreas()[0], "Tab").defaultPrevented).toBe(false);
+        expect(textAreas()[0].value).toBe("Q");
+        expect(clearSide().disabled).toBe(true);
+        clearSide().click();
+        keyDown($(".sr-card-editor-sides"), "z", { ctrlKey: true });
+        expect($(".sr-ink-field").hasClass("is-empty")).toBe(false);
+
+        finish();
+        await flush();
+        expect(cb.save).toHaveBeenCalledTimes(1);
+        expect(textAreas()[0].readOnly).toBe(false);
+        expect(textAreas()[0].value).toBe("");
+        type(0, "Q2");
+        expect(textAreas()[0].value).toBe("Q2");
+    });
+
+    test("Save & close: a failed save unlocks the sides", async () => {
+        jest.spyOn(console, "error").mockImplementation(() => {});
+        const { cb } = openAdd();
+        type(0, "Q");
+        type(1, "A");
+        const finish = deferSave(cb);
+        saveClose().click();
+        expect(textAreas().every((ta) => ta.readOnly)).toBe(true);
+        const touch = pointer("pointerdown", textAreas()[1], "mouse");
+        expect(touch.defaultPrevented).toBe(true);
+
+        finish(false);
+        await flush();
+        expect(cb.closed).not.toHaveBeenCalled();
+        expect(textAreas().some((ta) => ta.readOnly)).toBe(false);
+        expect(pointer("pointerdown", textAreas()[1], "mouse").defaultPrevented).toBe(false);
+        expect(textAreas().map((ta) => ta.value)).toEqual(["Q", "A"]);
+    });
+
+    test("Save & close: the sides stay locked until the editor closes", async () => {
+        const { cb } = openAdd();
+        type(0, "Q");
+        type(1, "A");
+        const finish = deferSave(cb);
+        saveClose().click();
+        expect(textAreas().every((ta) => ta.readOnly)).toBe(true);
+        finish();
+        await flush();
+        expect(cb.keepDraft).toHaveBeenCalledWith(null);
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("edit: Save locks the sides", async () => {
+        jest.spyOn(console, "error").mockImplementation(() => {});
+        const { cb } = openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
+        const finish = deferSave(cb);
+        button("Save").click();
+        expect(textAreas().every((ta) => ta.readOnly)).toBe(true);
+        finish(false);
+        await flush();
+        expect(textAreas().some((ta) => ta.readOnly)).toBe(false);
+    });
+});

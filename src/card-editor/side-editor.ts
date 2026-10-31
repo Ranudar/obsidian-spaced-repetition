@@ -78,8 +78,8 @@ export class SideEditor {
         this.textArea.addEventListener("input", this.onTextInput);
         this.textArea.addEventListener("keydown", this.onTextKeyDown);
         this.textArea.addEventListener("pointerdown", this.onTextPointerDown);
-        // The browser decides at pointerdown whether a touch pans. A pen touch that switches to ink
-        // must not pan, or the browser cancels the stroke after the first few pixels.
+        // The browser decides at pointerdown whether a touch pans. Only horizontal panning is
+        // turned off, so fingers still scroll the text and most pen strokes keep going in ink.
         this.textArea.toggleClass(
             "sr-pen-switch",
             opts.allowInk && opts.settings.cardEditorPenSwitchesToInk,

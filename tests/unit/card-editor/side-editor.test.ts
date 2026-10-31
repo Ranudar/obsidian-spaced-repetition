@@ -1,3 +1,6 @@
+import { readFileSync } from "fs";
+import { join } from "path";
+
 import { Stroke } from "src/card-editor/core/strokes";
 import { SideEditor, SideEditorOptions, SideState } from "src/card-editor/side-editor";
 import { DEFAULT_SETTINGS, SRSettings } from "src/data/settings";
@@ -143,6 +146,22 @@ describe("SideEditor modes", () => {
         expect(onInkCommit).toHaveBeenCalledWith([]);
     });
 
+    test("a pen touch the browser cancels (e.g. to scroll) leaves no stroke and no stuck pen", () => {
+        const { side, parent, onInkCommit } = setup(state());
+        pointerDown(textArea(parent), "pen");
+        expect(side.mode).toBe("ink");
+        const canvas = parent.querySelector("canvas");
+        expect(() => pointer("pointercancel", canvas, "pen")).not.toThrow();
+        expect(side.state.strokes).toHaveLength(0);
+        expect(onInkCommit).not.toHaveBeenCalled();
+        expect(inkField(parent).hasClass("is-empty")).toBe(true);
+
+        // The next pen touch draws normally
+        pointerDown(canvas, "pen");
+        pointer("pointerup", canvas, "pen");
+        expect(side.state.strokes).toHaveLength(1);
+    });
+
     test("mouse, finger, or the setting off keep the text mode", () => {
         const on = setup(state());
         pointerDown(textArea(on.parent), "mouse");
@@ -154,7 +173,17 @@ describe("SideEditor modes", () => {
         expect(off.side.mode).toBe("text");
     });
 
-    test("the text area doesn't pan when a pen touch can switch it to ink", () => {
+    test("fingers still scroll the text area when a pen touch can switch it to ink", () => {
+        const css = readFileSync(
+            join(__dirname, "../../../src/card-editor/card-editor.css"),
+            "utf8",
+        );
+        const rule = css.match(/\.sr-card-editor-text\.sr-pen-switch\s*\{([^}]*)\}/);
+        expect(rule).not.toBeNull();
+        expect(rule[1]).toMatch(/touch-action:\s*pan-y pinch-zoom;/);
+    });
+
+    test("the pen switch class is only set when a pen touch can switch to ink", () => {
         expect(textArea(setup(state()).parent).hasClass("sr-pen-switch")).toBe(true);
         const off = setup(state(), {}, { cardEditorPenSwitchesToInk: false });
         expect(textArea(off.parent).hasClass("sr-pen-switch")).toBe(false);

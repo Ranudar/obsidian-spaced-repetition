@@ -57,7 +57,7 @@ export class InkField {
         this.canvas.addEventListener("pointerdown", this.onDown);
         this.canvas.addEventListener("pointermove", this.onMove);
         this.canvas.addEventListener("pointerup", this.onUp);
-        this.canvas.addEventListener("pointercancel", this.onUp);
+        this.canvas.addEventListener("pointercancel", this.onCancel);
         // Long-press with the pen must not open a context menu
         this.canvas.addEventListener("contextmenu", this.onContextMenu);
 
@@ -108,7 +108,7 @@ export class InkField {
         this.canvas.removeEventListener("pointerdown", this.onDown);
         this.canvas.removeEventListener("pointermove", this.onMove);
         this.canvas.removeEventListener("pointerup", this.onUp);
-        this.canvas.removeEventListener("pointercancel", this.onUp);
+        this.canvas.removeEventListener("pointercancel", this.onCancel);
         this.canvas.removeEventListener("contextmenu", this.onContextMenu);
         // WebKit frees a canvas' memory only on garbage collection and caps the total of all
         // canvases; once over the cap, no new canvas gets a context. Free it right away.
@@ -185,6 +185,17 @@ export class InkField {
             this.current = null;
             this.opts.onChange(this, prev);
         }
+        this.updateEmpty();
+        this.schedule();
+    };
+
+    /** The browser took the pointer over (e.g. to scroll): the unfinished stroke is dropped */
+    private onCancel = (e: PointerEvent) => {
+        if (e.pointerId !== this.activePointer) return;
+        // What was erased so far was already shown gone, so it stays erased
+        if (this.erasing) return this.onUp(e);
+        this.activePointer = null;
+        this.current = null;
         this.updateEmpty();
         this.schedule();
     };

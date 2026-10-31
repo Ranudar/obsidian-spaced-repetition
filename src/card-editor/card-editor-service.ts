@@ -11,8 +11,9 @@ import {
     cardMarkerLine,
     composeCardText,
     inkEmbed,
-    inkEmbedFileNames,
     inkEmbedPath,
+    inkEmbedPaths,
+    misreadSide,
     newCardBody,
     protectBlankLines,
     splitCardText,
@@ -83,6 +84,10 @@ export class CardEditorService {
     private draft: CardEditorSides | null = null;
     /** A card from a note is being edited; ignores a second tap on a pencil meanwhile */
     private editingInNote = false;
+    /** The editors open now, closed when the plugin is unloaded */
+    private modals = new Set<CardEditorModal>();
+    /** The plugin was unloaded: no editor opens, nothing is written any more */
+    private destroyed = false;
 
     constructor(plugin: SRPlugin, settingsManager: SettingsManager) {
         this.plugin = plugin;
@@ -100,6 +105,7 @@ export class CardEditorService {
      * once the editor has closed.
      */
     openAdd(file: TFile, view: MarkdownView | null): void {
+        if (this.destroyed) return;
         if (!this.hasFlashcardTag(file)) {
             new Notice(
                 t("CARD_EDITOR_NO_FLASHCARD_TAG", {
@@ -110,20 +116,43 @@ export class CardEditorService {
 
         const inserter = new CardInserter(this.plugin.app, file, view, this.settings);
         let added = 0;
-        new CardEditorModal(this.plugin.app, this.settings, {
+        const modal = new CardEditorModal(this.plugin.app, this.settings, {
             kind: "add",
             title: file.basename,
             textDirection: this.plugin.getObsidianRtlSetting(),
             draft: this.draft,
             save: async (r: CardEditorResult) => {
+                this.assertActive();
                 await this.addCard(r, file.path, inserter);
                 added++;
             },
             keepDraft: (draft) => (this.draft = draft),
             closed: () => {
-                if (added > 0) void this.rescan(inserter);
+                this.modals.delete(modal);
+                if (added > 0 && !this.destroyed) void this.rescan(inserter);
             },
-        }).open();
+        });
+        this.open(modal);
+    }
+
+    private open(modal: CardEditorModal): void {
+        this.modals.add(modal);
+        modal.open();
+    }
+
+    /**
+     * Closes the open editors and stops writing, when the plugin is unloaded.
+     * A save already writing finishes; any later one is refused.
+     */
+    destroy(): void {
+        this.destroyed = true;
+        for (const modal of [...this.modals]) modal.close();
+        this.modals.clear();
+    }
+
+    /** Throws once the plugin was unloaded, so an editor still open writes nothing */
+    private assertActive(): void {
+        if (this.destroyed) throw new Error(t("CARD_EDITOR_PLUGIN_UNLOADED"));
     }
 
     /**
@@ -136,6 +165,7 @@ export class CardEditorService {
         question: Question,
         writeText: WriteQuestionText,
     ): Promise<EditQuestionResult | null> {
+        if (this.destroyed) return null;
         const cardType = question.questionType;
         const original = question.questionText.actualQuestion;
         const sourcePath = question.note.file.path;
@@ -152,20 +182,27 @@ export class CardEditorService {
             sourcePath,
         };
         const initial: CardEditorSides = { front: front.state, back: back?.state ?? null };
+        // Unloaded while the card was read
+        if (this.destroyed) return null;
 
         return new Promise((resolve) => {
             let result: EditQuestionResult | null = null;
-            new CardEditorModal(this.plugin.app, this.settings, {
+            const modal = new CardEditorModal(this.plugin.app, this.settings, {
                 kind: "edit",
                 title: question.note.file.basename,
                 textDirection: question.questionText.textDirection,
                 initial,
                 cardType,
                 save: async (r: CardEditorResult) => {
+                    this.assertActive();
                     result = await this.saveCard(r, card, writeText);
                 },
-                closed: () => resolve(result),
-            }).open();
+                closed: () => {
+                    this.modals.delete(modal);
+                    resolve(result);
+                },
+            });
+            this.open(modal);
         });
     }
 
@@ -173,8 +210,8 @@ export class CardEditorService {
      * Opens the editor for the card in the note that shows the ink image (pencil button in a note).
      * Writes the card's text back to the note if it changed, then rescans the vault.
      */
-    async editInNote(noteFile: TFile, imageName: string): Promise<void> {
-        if (this.editingInNote) return;
+    async editInNote(noteFile: TFile, image: TFile): Promise<void> {
+        if (this.editingInNote || this.destroyed) return;
         // E.g. a Canvas text node: its file is JSON, not a note with cards
         if (noteFile.extension !== "md") {
             new Notice(t("CARD_EDITOR_CARD_NOT_FOUND"));
@@ -184,7 +221,11 @@ export class CardEditorService {
         try {
             await this.saveOpenEditors(noteFile);
             const note = await this.plugin.dataManager.loadNote(noteFile);
-            const question = note ? findQuestionWithInk(note.questionList, imageName) : null;
+            const question = note
+                ? findQuestionWithInk(note.questionList, image, (link) =>
+                      this.inkFiles.resolve(link, noteFile.path),
+                  )
+                : null;
             if (question === null) {
                 new Notice(t("CARD_EDITOR_CARD_NOT_FOUND"));
                 return;
@@ -206,7 +247,7 @@ export class CardEditorService {
             });
             if (result === null) return;
             this.refreshImages(result.changedImages);
-            if (result.textChanged && this.plugin.isInitialized)
+            if (result.textChanged && this.plugin.isInitialized && !this.destroyed)
                 await this.plugin.dataManager.sync();
         } catch (err) {
             console.error("SR: editing the card failed", err);
@@ -245,7 +286,7 @@ export class CardEditorService {
             const sideText = async (r: SideResult | null, side: InkSide): Promise<string> => {
                 if (r === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
                 if (r.mode === "text")
-                    return protectBlankLines(this.typedText(r.text), this.settings);
+                    return protectBlankLines(this.typedText(r.text, false), this.settings);
                 const svg = strokesToSvg(r.strokes, { size: r.penSize });
                 if (svg === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
                 const file = await this.inkFiles.create(
@@ -261,6 +302,10 @@ export class CardEditorService {
             const back = await sideText(result.back, "back");
             if (front.length === 0 || back.length === 0)
                 throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
+            this.assertReadAsCard(CardType.MultiLineBasic, front, back, (f, b) =>
+                newCardBody(f, b ?? "", this.settings),
+            );
+            this.assertActive();
             await inserter.insert(newCardBody(front, back, this.settings));
         } catch (err) {
             // The card stays in the editor; don't leave images behind that no card shows
@@ -349,7 +394,7 @@ export class CardEditorService {
         const created: TFile[] = [];
         const overwritten: LoadedSide[] = [];
         const toTrash: TFile[] = [];
-        /** For each file in toTrash: links to it from other cards and notes */
+        /** For each file in toTrash: links to it from other cards and notes, per the link index */
         const linksOutside = new Map<TFile, number>();
         // Without an end marker, a blank line would end a multi-line or cloze card
         const protect =
@@ -384,7 +429,7 @@ export class CardEditorService {
         ): Promise<string> => {
             if (r.mode === "text") {
                 if (r.text === loaded.text) return r.text;
-                const text = this.typedText(r.text);
+                const text = this.typedText(r.text, true);
                 if (loaded.file) toTrash.push(loaded.file);
                 return protect ? protectBlankLines(text, this.settings) : text;
             }
@@ -420,11 +465,17 @@ export class CardEditorService {
                 this.settings,
                 card.separator,
             );
+            if (text !== card.original) {
+                this.assertReadAsCard(card.cardType, frontText, backText, (f, b) =>
+                    composeCardText(card.cardType, f, b, this.settings, card.separator),
+                );
+            }
             // Counted before the note is written: once Obsidian's link index has caught up with
             // the write, it no longer includes this card's old embeds
             for (const file of toTrash) {
-                linksOutside.set(file, this.linksOutsideCard(file, card.original));
+                linksOutside.set(file, this.linksOutsideCard(file, card.original, sourcePath));
             }
+            this.assertActive();
             if (text !== card.original && !(await writeText(text)))
                 throw new Error(t("CARD_EDITOR_TEXT_NOT_FOUND"));
         } catch (err) {
@@ -432,9 +483,12 @@ export class CardEditorService {
             throw err;
         }
 
-        // The card no longer shows these images; keep those other cards or notes still embed
+        // The card no longer shows these images; keep those other cards or notes still refer to.
+        // Both the link index and the files are asked, so a lagging index can't lose an image.
         for (const file of toTrash) {
-            if (linksOutside.get(file) > 0 || embedsOf(file, text) > 0) continue;
+            if (linksOutside.get(file) > 0 || this.inkFiles.linksTo(file, text, sourcePath) > 0)
+                continue;
+            if (await this.inkFiles.isReferenced(file, sourcePath)) continue;
             await this.inkFiles
                 .trash(file)
                 .catch((e) => console.error("SR: removing the ink image failed", e));
@@ -450,18 +504,41 @@ export class CardEditorService {
      * Links to the ink file in other notes and other cards of this note, while Obsidian's link
      * index still describes the note with the card's text `cardText`
      */
-    private linksOutsideCard(file: TFile, cardText: string): number {
-        return this.inkFiles.linkCount(file) - embedsOf(file, cardText);
+    private linksOutsideCard(file: TFile, cardText: string, sourcePath: string): number {
+        return this.inkFiles.linkCount(file) - this.inkFiles.linksTo(file, cardText, sourcePath);
     }
 
     /**
-     * A typed side's text, trimmed. Throws if a line in it would split or end the card,
-     * so the editor stays open with a notice.
+     * A typed side's text, trimmed; for an existing card (keepIndent) only blank lines at the start
+     * and whitespace at the end are removed, so e.g. a card in an indented list stays indented.
+     * Throws if a line in it would split or end the card, so the editor stays open with a notice.
      */
-    private typedText(text: string): string {
+    private typedText(text: string, keepIndent: boolean): string {
         const marker = cardMarkerLine(text, this.settings);
         if (marker !== null) throw new Error(t("CARD_EDITOR_SIDE_HAS_MARKER", { line: marker }));
-        return text.trim();
+        return keepIndent ? text.replace(/^\s*\n/, "").trimEnd() : text.trim();
+    }
+
+    /**
+     * Throws, so the editor stays open with a notice, unless SR's parser reads the card back as
+     * one card of the type with exactly these sides, e.g. not a "::" in a multi-line card's side,
+     * which would make it a single-line card. compose: the card text as it goes into the note.
+     */
+    private assertReadAsCard(
+        cardType: CardType,
+        front: string,
+        back: string | null,
+        compose: (front: string, back: string | null) => string,
+    ): void {
+        const side = misreadSide(cardType, front, back, this.settings, compose);
+        if (side === null) return;
+        const name =
+            back === null
+                ? t("CARD_EDITOR_CLOZE")
+                : side === "front"
+                  ? t("CARD_EDITOR_FRONT")
+                  : t("CARD_EDITOR_BACK");
+        throw new Error(t("CARD_EDITOR_SIDE_HAS_CARD_SYNTAX", { side: name }));
     }
 
     /** Leaves the ink files of a card as they were before a failed save */
@@ -479,16 +556,20 @@ export class CardEditorService {
     }
 }
 
-/** How many times the text embeds the ink file */
-function embedsOf(file: TFile, text: string): number {
-    return inkEmbedFileNames(text).filter((name) => name === file.name).length;
-}
-
-/** The first question whose text embeds the ink image with that file name, or null */
-export function findQuestionWithInk(questions: Question[], imageName: string): Question | null {
+/**
+ * The first question whose text embeds the ink image, or null.
+ * resolve: the file a link path in the note links to, so a file of the same name elsewhere isn't it.
+ */
+export function findQuestionWithInk(
+    questions: Question[],
+    image: TFile,
+    resolve: (linkPath: string) => TFile | null,
+): Question | null {
     return (
         questions.find((question) =>
-            inkEmbedFileNames(question.questionText.actualQuestion).includes(imageName),
+            inkEmbedPaths(question.questionText.actualQuestion).some(
+                (path) => resolve(path)?.path === image.path,
+            ),
         ) ?? null
     );
 }

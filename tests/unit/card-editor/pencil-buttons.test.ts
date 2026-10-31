@@ -1,4 +1,4 @@
-import { App, MarkdownPostProcessorContext, TFile } from "obsidian";
+import { App, MarkdownPostProcessorContext, Notice, TFile } from "obsidian";
 
 import { InkFiles } from "src/card-editor/ink-files";
 import { PencilButtonActions, PencilButtons } from "src/card-editor/pencil-buttons";
@@ -11,17 +11,22 @@ function tFile(path: string): TFile {
 }
 
 const note = tFile("notes/bio.md");
+const inkFile = tFile(`sr-ink/${INK_NAME}`);
 const otherNote = tFile("notes/chem.md");
 
 let leaves: { view: { containerEl: HTMLElement; file: TFile | null } }[];
 let editInNote: jest.Mock;
 let editInReview: jest.Mock;
 let applyVersion: jest.Mock;
+/** The file an image shows, as InkFiles finds it */
+let imageFile: jest.Mock;
 let buttons: PencilButtons;
+let app: App;
+let actions: PencilButtonActions;
 
 beforeEach(() => {
     leaves = [];
-    const app = {
+    app = {
         vault: {
             getAbstractFileByPath: (path: string) => (path === note.path ? note : null),
         },
@@ -33,11 +38,13 @@ beforeEach(() => {
     editInNote = jest.fn(() => Promise.resolve());
     editInReview = jest.fn(() => Promise.resolve());
     applyVersion = jest.fn();
-    const actions = {
+    imageFile = jest.fn(() => inkFile);
+    jest.mocked(Notice).mockClear();
+    actions = {
         editInNote,
         editInReview,
-        inkFiles: { applyVersion } as unknown as InkFiles,
-    } as PencilButtonActions;
+        inkFiles: { applyVersion, imageFile } as unknown as InkFiles,
+    };
     buttons = new PencilButtons(app, actions);
 });
 
@@ -172,6 +179,42 @@ describe("adding the buttons", () => {
         observe.mockRestore();
     });
 
+    test("destroy removes the buttons in detached sections too", () => {
+        const section = document.body.createDiv();
+        const img = embed(INK_SRC, section);
+        postProcess(section);
+        // Out of view, then put back by reading view after the plugin was reloaded
+        section.remove();
+        buttons.destroy();
+        expect(buttonOf(img)).toBeNull();
+        expect(img.parentElement.classList.contains("sr-pencil-host")).toBe(false);
+    });
+
+    test("a button left by an earlier instance is replaced by a working one", () => {
+        const section = document.body.createDiv();
+        const img = embed(INK_SRC, section);
+        img.parentElement.createEl("button", { cls: "sr-pencil-button" });
+        postProcess(section);
+
+        const all = img.parentElement.querySelectorAll(".sr-pencil-button");
+        expect(all).toHaveLength(1);
+        tap(all[0] as HTMLElement);
+        expect(editInNote).toHaveBeenCalledWith(note, inkFile);
+
+        // The old instance survives in a detached section; the new one takes the image over
+        const reloaded = new PencilButtons(app, actions);
+        section.remove();
+        buttons.destroy();
+        img.parentElement.createEl("button", { cls: "sr-pencil-button" });
+        document.body.appendChild(section);
+        reloaded.postProcess(section, { sourcePath: note.path } as MarkdownPostProcessorContext);
+        expect(img.parentElement.querySelectorAll(".sr-pencil-button")).toHaveLength(1);
+        editInNote.mockClear();
+        tap(buttonOf(img));
+        expect(editInNote).toHaveBeenCalledTimes(1);
+        reloaded.destroy();
+    });
+
     test("destroy removes the buttons and the boxes", () => {
         const section = document.body.createDiv();
         const img = embed(INK_SRC, section);
@@ -201,7 +244,7 @@ describe("tapping the pencil", () => {
         const events = tap(buttonOf(img));
 
         expect(editInNote).toHaveBeenCalledTimes(1);
-        expect(editInNote).toHaveBeenCalledWith(note, INK_NAME);
+        expect(editInNote).toHaveBeenCalledWith(note, inkFile);
         expect(editInReview).not.toHaveBeenCalled();
         expect(events.every((e) => e.defaultPrevented)).toBe(true);
         expect(parentListener).not.toHaveBeenCalled();
@@ -245,7 +288,19 @@ describe("tapping the pencil", () => {
 
     test("Enter or Space (a click without pointer events) opens the card", () => {
         fire(buttonOf(img), "click", { detail: 0 });
-        expect(editInNote).toHaveBeenCalledWith(note, INK_NAME);
+        expect(editInNote).toHaveBeenCalledWith(note, inkFile);
+    });
+
+    test("the card is looked up by the file the image shows, in the note's folder", () => {
+        tap(buttonOf(img));
+        expect(imageFile).toHaveBeenCalledWith(img, note.path);
+    });
+
+    test("an image whose file can't be told gets a notice", () => {
+        imageFile.mockReturnValue(null);
+        tap(buttonOf(img));
+        expect(editInNote).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith("This image is not part of any card in this note.");
     });
 
     test("nothing opens when the note can't be found", () => {
@@ -313,7 +368,7 @@ describe("live preview", () => {
 
         file = otherNote;
         tap(buttonOf(img));
-        expect(editInNote).toHaveBeenCalledWith(otherNote, INK_NAME);
+        expect(editInNote).toHaveBeenCalledWith(otherNote, inkFile);
     });
 
     test("only the live preview is watched; embedded notes are left to the post-processor", async () => {

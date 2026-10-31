@@ -46,6 +46,8 @@ export type CardEditorOptions =
       });
 
 const DISCARD_ARM_MS = 3000;
+/** Input on the sides that is swallowed while a card is being saved */
+const LOCKED_EVENTS = ["pointerdown", "mousedown", "touchstart", "click", "keydown"];
 /** With pen-only on, finger presses this soon after the pen was used count as the palm */
 const PALM_GUARD_MS = 500;
 
@@ -77,6 +79,7 @@ export class CardEditorModal extends Modal {
     /** When the pen was last used */
     private lastPenAt = 0;
 
+    private sidesEl!: HTMLElement;
     private counterEl: HTMLElement | null = null;
     private eraserButton!: HTMLButtonElement;
     private undoButton!: HTMLButtonElement;
@@ -118,7 +121,9 @@ export class CardEditorModal extends Modal {
 
         this.buildHeader(root);
 
-        const sidesEl = root.createDiv({ cls: "sr-card-editor-sides" });
+        const sidesEl = (this.sidesEl = root.createDiv({ cls: "sr-card-editor-sides" }));
+        // Capturing, so this runs before the sides' own listeners
+        for (const type of LOCKED_EVENTS) sidesEl.addEventListener(type, this.onLockedInput, true);
         const initial = this.initialSides();
         const cloze = initial.back === null;
         this.front = this.createSide(
@@ -156,6 +161,9 @@ export class CardEditorModal extends Modal {
         this.modalEl.removeEventListener("pointermove", this.onPenActivity, true);
         this.modalEl.removeEventListener("pointerup", this.onPenActivity, true);
         this.modalEl.removeEventListener("pointercancel", this.onPenActivity, true);
+        for (const type of LOCKED_EVENTS) {
+            this.sidesEl.removeEventListener(type, this.onLockedInput, true);
+        }
         if (this.cssChangeRef !== null) this.app.workspace.offref(this.cssChangeRef);
         this.disarmDiscard();
 
@@ -319,6 +327,7 @@ export class CardEditorModal extends Modal {
 
     /** Undoes the last ink change, on whichever side it was */
     private undo() {
+        if (this.busy) return;
         const step = this.undoStack.pop();
         if (!step) return;
         step.side.setMode("ink");
@@ -328,6 +337,7 @@ export class CardEditorModal extends Modal {
 
     /** Clears the active ink side, or the first ink side if the active one is text */
     private clearSide() {
+        if (this.busy) return;
         const side =
             this.activeSide?.mode === "ink"
                 ? this.activeSide
@@ -400,6 +410,7 @@ export class CardEditorModal extends Modal {
             return false;
         }
         this.busy = true;
+        this.lockSides(true);
         this.updateButtons();
         const result = this.result();
         this.inFlight = this.opts.save(result).then(
@@ -413,9 +424,37 @@ export class CardEditorModal extends Modal {
         const ok = await this.inFlight;
         this.inFlight = null;
         this.busy = false;
-        if (!this.isClosed) this.updateButtons();
+        if (!this.isClosed) {
+            this.lockSides(false);
+            this.updateButtons();
+        }
         return ok;
     }
+
+    /**
+     * While a card is being saved its sides can't be changed: the saved content is what Save &
+     * next clears afterwards, and what Save & close closes the editor over.
+     */
+    private lockSides(locked: boolean) {
+        this.sidesEl.toggleClass("is-locked", locked);
+        this.sidesEl.setAttr("aria-busy", locked);
+        this.sidesEl.querySelectorAll("textarea").forEach((ta) => (ta.readOnly = locked));
+    }
+
+    /** Swallows input on the sides while they are locked (see lockSides()) */
+    private onLockedInput = (evt: Event) => {
+        if (!this.busy) return;
+        if (evt.type === "keydown") {
+            // Esc still closes the editor, and shortcuts reach onKeyDown, which ignores them
+            // while saving; a read-only text area takes no typing
+            const { key, ctrlKey, metaKey } = evt as KeyboardEvent;
+            if (key === "Escape" || ctrlKey || metaKey) return;
+            evt.stopPropagation();
+            return;
+        }
+        evt.preventDefault();
+        evt.stopPropagation();
+    };
 
     private onKeyDown = (evt: KeyboardEvent) => {
         const mod = evt.ctrlKey || evt.metaKey;
@@ -452,10 +491,9 @@ export class CardEditorModal extends Modal {
         this.eraserButton.disabled = !anyInk;
         this.eraserButton.toggleClass("is-active", this.eraser);
         this.eraserButton.setAttr("aria-pressed", this.eraser);
-        this.undoButton.disabled = !anyInk || this.undoStack.length === 0;
-        this.clearButton.disabled = !this.sides.some(
-            (side) => side.mode === "ink" && !side.isEmpty,
-        );
+        this.undoButton.disabled = this.busy || !anyInk || this.undoStack.length === 0;
+        this.clearButton.disabled =
+            this.busy || !this.sides.some((side) => side.mode === "ink" && !side.isEmpty);
 
         // Callbacks from the sides can arrive while the footer is still being built
         if (!this.saveButton) return;

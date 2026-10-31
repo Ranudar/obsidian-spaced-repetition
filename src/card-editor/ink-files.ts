@@ -1,6 +1,6 @@
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 
-import { INK_FILE_PREFIX } from "src/card-editor/core/card-text";
+import { INK_FILE_PREFIX, linksIn } from "src/card-editor/core/card-text";
 import { t } from "src/lang/helpers";
 
 /** Query parameter added to the src of images rewritten in this session */
@@ -86,6 +86,81 @@ export class InkFiles {
         let count = 0;
         for (const targets of Object.values(links)) count += targets[file.path] ?? 0;
         return count;
+    }
+
+    /** How many links and embeds in the text of the note at sourcePath resolve to the file */
+    linksTo(file: TFile, text: string, sourcePath: string): number {
+        return linksIn(text).filter(
+            (link) => this.resolve(link.path, sourcePath)?.path === file.path,
+        ).length;
+    }
+
+    /**
+     * Whether a note or canvas in the vault still refers to the file: a link or embed resolving to
+     * it, or its name anywhere else (e.g. in an HTML <img> or a canvas file node). Reads the files
+     * themselves, as Obsidian's link index may lag behind. The note at sourcePath was just written,
+     * so it is read from disk. Resolves to true when unsure, e.g. when a file can't be read.
+     */
+    async isReferenced(file: TFile, sourcePath: string): Promise<boolean> {
+        const vault = this.app.vault;
+        try {
+            for (const other of vault.getFiles()) {
+                if (other.extension !== "md" && other.extension !== "canvas") continue;
+                const text =
+                    other.path === sourcePath
+                        ? await vault.read(other)
+                        : await vault.cachedRead(other);
+                if (this.refersTo(text, other.path, file)) return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("SR: looking for links to the ink image failed", err);
+            return true;
+        }
+    }
+
+    /** Whether the text of the file at sourcePath refers to the file (see isReferenced) */
+    private refersTo(text: string, sourcePath: string, file: TFile): boolean {
+        const names = [file.name, encodeURI(file.name), encodeURIComponent(file.name)].map((n) =>
+            n.toLowerCase(),
+        );
+        const mentions = (s: string) => {
+            const lower = s.toLowerCase();
+            return names.some((name) => lower.includes(name));
+        };
+        if (!mentions(text)) return false;
+
+        // Links to files of the same name in other folders don't count
+        let rest = text;
+        for (const link of linksIn(text)) {
+            if (!mentions(link.match)) continue;
+            if (this.resolve(link.path, sourcePath)?.path === file.path) return true;
+            rest = rest.replace(link.match, "");
+        }
+        return mentions(rest);
+    }
+
+    /**
+     * The ink file an <img> shows, or null. The link path of its embed is resolved against the note
+     * at sourcePath; without one, the file is found by the image's src.
+     */
+    imageFile(img: HTMLImageElement, sourcePath: string): TFile | null {
+        const name = imageFileName(img);
+        if (name === null) return null;
+        const link = img.closest(".internal-embed")?.getAttribute("src");
+        if (link) {
+            const file = this.resolve(link.split(/[|#]/)[0], sourcePath);
+            // Not the embed of a note around the image (a transclusion)
+            if (file?.name === name) return file;
+        }
+
+        const src = withoutQuery(img.getAttribute("src") ?? "");
+        const vault = this.app.vault;
+        const sameName = vault.getFiles().filter((file) => file.name === name);
+        return (
+            sameName.find((file) => withoutQuery(vault.getResourcePath(file)) === src) ??
+            (sameName.length === 1 ? sameName[0] : null)
+        );
     }
 
     /** Link text for an embed of the file in the note at sourcePath */

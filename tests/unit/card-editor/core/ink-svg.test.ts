@@ -128,6 +128,33 @@ describe("ink SVG", () => {
         ).toBeNull();
     });
 
+    test("Malformed stroke metadata is not ink", () => {
+        const meta = (json: string) => `<svg><metadata id="sr-ink">${json}</metadata></svg>`;
+        const ok = '{"p":1,"pts":[[1,2,0.5]]}';
+        for (const json of [
+            '{"v":1,"size":5,"strokes":[{}]}',
+            '{"v":1,"size":5,"strokes":[{"p":1,"pts":null}]}',
+            '{"v":1,"size":5,"strokes":[{"p":1,"pts":[]}]}',
+            '{"v":1,"size":5,"strokes":[{"p":1,"pts":[[1,2]]}]}',
+            '{"v":1,"size":5,"strokes":[{"p":1,"pts":[[1,"2",0.5]]}]}',
+            '{"v":1,"size":5,"strokes":[{"p":1,"pts":[[1,2,null]]}]}',
+            '{"v":1,"size":5,"strokes":[{"p":"yes","pts":[[1,2,0.5]]}]}',
+            `{"v":1,"size":5,"strokes":[${ok},null]}`,
+            `{"v":1,"strokes":[${ok}]}`,
+            `{"v":1,"size":0,"strokes":[${ok}]}`,
+            `{"v":1,"size":-3,"strokes":[${ok}]}`,
+            `{"v":1,"size":"5","strokes":[${ok}]}`,
+            "null",
+            "[1]",
+        ]) {
+            expect(svgToStrokes(meta(json))).toBeNull();
+        }
+        expect(svgToStrokes(meta(`{"v":1,"size":5,"strokes":[${ok}]}`))).toEqual({
+            size: 5,
+            strokes: [{ pressure: true, points: [[1, 2, 0.5]] }],
+        });
+    });
+
     test("Metadata is escaped and unescaped", () => {
         const svg =
             '<svg><metadata id="sr-ink">{"v":1,"size":4,"x":"&lt;&amp;&gt;","strokes":[]}</metadata></svg>';

@@ -158,6 +158,8 @@ export default class SRPlugin extends Plugin {
 
     onunload(): void {
         this._pencilButtons?.destroy();
+        // Open card editors close and write nothing more
+        this._cardEditorService?.destroy();
         this.reminderManager.stopReviewReminders();
         this.app.workspace.getLeavesOfType(REVIEW_QUEUE_VIEW_TYPE).forEach((leaf) => leaf.detach());
         this.uiManager.destroy();

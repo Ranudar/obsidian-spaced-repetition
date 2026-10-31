@@ -1,6 +1,7 @@
-import { CardType } from "src/data/data-structures/card/questions/question";
+import { CardType, QuestionText } from "src/data/data-structures/card/questions/question";
 import { CardFrontBackUtil } from "src/data/data-structures/card/questions/question-type";
 import { SRSettings } from "src/data/settings";
+import { parse } from "src/parser";
 import { findLineIndexOfSearchStringIgnoringWs } from "src/utils/strings";
 
 /** Every handwritten side is stored as "sr-ink-<stem>-<front|back>.svg". */
@@ -53,14 +54,49 @@ function fileNameOf(path: string): string {
 // The embed regexes above, unanchored, to find embeds anywhere in a text
 const ANY_EMBED_REGEX = /!\[\[[^\]]+\]\]|!\[[^\]]*\]\((?:<[^>]+>|[^)\s]+)(?:\s+"[^"]*")?\)/g;
 
+/** Link paths of all ink SVGs embedded anywhere in the text (see inkEmbedPath). */
+export function inkEmbedPaths(text: string): string[] {
+    const paths: string[] = [];
+    for (const match of text.matchAll(ANY_EMBED_REGEX)) {
+        const path = inkEmbedPath(match[0]);
+        if (path !== null) paths.push(path);
+    }
+    return paths;
+}
+
 /** File names of all ink SVGs embedded anywhere in the text. */
 export function inkEmbedFileNames(text: string): string[] {
-    const names: string[] = [];
-    for (const match of text.matchAll(ANY_EMBED_REGEX)) {
-        const name = inkEmbedFileName(match[0]);
-        if (name !== null) names.push(name);
+    return inkEmbedPaths(text).map(fileNameOf);
+}
+
+// Links and embeds of any file: [[…]], ![[…]], [text](…), ![alt](…)
+const ANY_LINK_REGEX = /!?\[\[([^\]]+)\]\]|!?\[[^\]]*\]\((?:<([^>]+)>|([^)\s]+))(?:\s+"[^"]*")?\)/g;
+
+export interface LinkInText {
+    /** The link as written, e.g. "![[x.svg|200]]" */
+    match: string;
+    /** Its link path, without alias, heading or block; markdown links url-decoded */
+    path: string;
+}
+
+/** All links and embeds in the text, of any file */
+export function linksIn(text: string): LinkInText[] {
+    const links: LinkInText[] = [];
+    for (const match of text.matchAll(ANY_LINK_REGEX)) {
+        let path: string;
+        if (match[1] !== undefined) {
+            path = match[1].split(/[|#]/)[0];
+        } else {
+            path = (match[2] ?? match[3]).split("#")[0];
+            try {
+                path = decodeURIComponent(path);
+            } catch {
+                // Not url-encoded after all (e.g. a literal "%"), use as is
+            }
+        }
+        links.push({ match: match[0], path: path.trim() });
     }
-    return names;
+    return links;
 }
 
 /** The embed stored in the note for a handwritten side, e.g. "![[sr-ink/x.svg]]". */
@@ -179,6 +215,71 @@ export function cardMarkerLine(text: string, settings: SRSettings): string | nul
         else if (markers.includes(line.trim())) return line.trim();
     }
     return null;
+}
+
+/** Lines without trailing whitespace, which the parser drops from most lines */
+function withoutTrailingWs(text: string): string {
+    return text
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .join("\n")
+        .trimEnd();
+}
+
+/**
+ * Whether SR's parser reads the card text as exactly one card of the type, with exactly that front
+ * and back (ignoring trailing whitespace, which the parser drops). cardText is the card as written
+ * to the note, without topic path and schedule.
+ */
+export function parsesAsCard(
+    cardText: string,
+    cardType: CardType,
+    front: string,
+    back: string | null,
+    settings: SRSettings,
+): boolean {
+    const parsed = parse(cardText, {
+        singleLineCardSeparator: settings.singleLineCardSeparator,
+        singleLineReversedCardSeparator: settings.singleLineReversedCardSeparator,
+        multilineCardSeparator: settings.multilineCardSeparator,
+        multilineReversedCardSeparator: settings.multilineReversedCardSeparator,
+        multilineCardEndMarker: settings.multilineCardEndMarker,
+        clozePatterns: settings.clozePatterns,
+    });
+    if (parsed.length !== 1 || parsed[0].cardType !== cardType) return false;
+    // E.g. a tag at the start would be read as the card's deck, "^id" at the end as a block id
+    const [topicPath, actualQuestion] = QuestionText.splitText(parsed[0].text, settings);
+    if (topicPath !== null) return false;
+    const split = splitCardText(cardType, actualQuestion, settings);
+    return (
+        withoutTrailingWs(split.front) === withoutTrailingWs(front) &&
+        (back === null
+            ? split.back === null
+            : split.back !== null && withoutTrailingWs(split.back) === withoutTrailingWs(back))
+    );
+}
+
+/** A side text the parser reads as nothing but text */
+const PLAIN_SIDE = "x";
+
+/**
+ * The side whose text SR's parser would read as card syntax (e.g. "::" in a multi-line card, which
+ * makes it a single-line card), so the card would not be read back with these sides; null if the
+ * card parses as intended. compose: writes the card text from the sides, as it goes into the note.
+ */
+export function misreadSide(
+    cardType: CardType,
+    front: string,
+    back: string | null,
+    settings: SRSettings,
+    compose: (front: string, back: string | null) => string,
+): "front" | "back" | null {
+    const parses = (f: string, b: string | null) =>
+        parsesAsCard(compose(f, b), cardType, f, b, settings);
+    if (parses(front, back)) return null;
+    if (back === null) return "front";
+    // The front alone, with a back that can't be misread
+    return parses(front, PLAIN_SIDE) ? "back" : "front";
 }
 
 /** New multi-line basic card body, without surrounding blank lines. */

@@ -1,7 +1,17 @@
 import { App, EditorPosition, MarkdownView, TFile } from "obsidian";
 
-import { CardInserter, insertionLine } from "src/card-editor/card-inserter";
+import { CardInserter, endOfCard, insertionLine } from "src/card-editor/card-inserter";
 import { DEFAULT_SETTINGS, SRSettings } from "src/data/settings";
+import { parse, ParserOptions } from "src/parser";
+
+const parserOptions = (settings: SRSettings): ParserOptions => ({
+    singleLineCardSeparator: settings.singleLineCardSeparator,
+    singleLineReversedCardSeparator: settings.singleLineReversedCardSeparator,
+    multilineCardSeparator: settings.multilineCardSeparator,
+    multilineReversedCardSeparator: settings.multilineReversedCardSeparator,
+    multilineCardEndMarker: settings.multilineCardEndMarker,
+    clozePatterns: settings.clozePatterns,
+});
 
 /** A text editor over a string, with the part of Obsidian's Editor API the inserter uses */
 class FakeEditor {
@@ -203,5 +213,62 @@ describe("appending to the note", () => {
 
         await inserter.flush();
         if (view) expect(view.save).not.toHaveBeenCalled();
+    });
+});
+
+describe("closing a card left open at the insertion point", () => {
+    const settings = { ...DEFAULT_SETTINGS, multilineCardEndMarker: "+++" };
+    const inserter = (view: FakeView | null) =>
+        new CardInserter(app, file, view as unknown as MarkdownView | null, settings);
+    const body = "Q2\n?\nA2\n\n+++";
+
+    test("appending after a last card without its end marker adds the marker first", async () => {
+        disk = "#flashcards\n\nQ1\n?\nA1\n";
+        await inserter(null).insert(body);
+
+        expect(disk).toEqual("#flashcards\n\nQ1\n?\nA1\n\n+++\n\nQ2\n?\nA2\n\n+++\n");
+        const questions = parse(disk, parserOptions(settings));
+        expect(questions.map((q) => q.text)).toEqual(["Q1\n?\nA1", "Q2\n?\nA2"]);
+    });
+
+    test("inserting in the editor after a last card without its end marker", async () => {
+        const editor = new FakeEditor("#flashcards\n\nQ1\n?\nA1", { line: 2, ch: 0 });
+        await inserter(viewOf(editor)).insert(body);
+        await inserter(viewOf(editor)).insert(body.replaceAll("2", "3"));
+
+        expect(editor.value).toEqual(
+            "#flashcards\n\nQ1\n?\nA1\n\n+++\n\nQ2\n?\nA2\n\n+++\n\nQ3\n?\nA3\n\n+++\n",
+        );
+    });
+
+    test("no marker after a closed card, a single-line card or text", async () => {
+        for (const note of ["Q1\n?\nA1\n+++\n", "Q1::A1\n", "Some text\n"]) {
+            disk = note;
+            await inserter(null).insert(body);
+            expect(disk).toEqual(note + "\n" + body + "\n");
+        }
+    });
+});
+
+describe("finding the card inserted last", () => {
+    test("a partial match isn't the card: after a changed answer the next card goes to the end", async () => {
+        const editor = new FakeEditor("#flashcards", { line: 0, ch: 0 });
+        const inserter = inserterFor(viewOf(editor));
+        await inserter.insert("Q\n?\nA");
+
+        editor.value = editor.value.replace("\nA\n", "\nAnswer\n");
+        await inserter.insert("Q2\n?\nA2");
+
+        expect(editor.value).toEqual("#flashcards\n\nQ\n?\nAnswer\n\nQ2\n?\nA2\n");
+    });
+
+    test("the card's text inside a longer card isn't the card", () => {
+        const card = { body: "Q\n?\nA", suffix: "\n", end: 19 };
+        for (const doc of [
+            "#flashcards\n\nQ\n?\nA\nmore answer\n\nEnd",
+            "#flashcards\n\nXQ\n?\nA\n\nEnd",
+        ])
+            expect(endOfCard(doc, card)).toEqual(doc.length);
+        expect(endOfCard("#flashcards\n\nQ\n?\nA\n\nEnd", card)).toEqual(19);
     });
 });
