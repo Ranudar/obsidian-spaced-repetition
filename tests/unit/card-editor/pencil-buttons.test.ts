@@ -25,7 +25,10 @@ beforeEach(() => {
         vault: {
             getAbstractFileByPath: (path: string) => (path === note.path ? note : null),
         },
-        workspace: { getLeavesOfType: () => leaves },
+        workspace: {
+            getLeavesOfType: () => leaves,
+            iterateAllLeaves: (fn: (leaf: unknown) => void) => leaves.forEach(fn),
+        },
     } as unknown as App;
     editInNote = jest.fn(() => Promise.resolve());
     editInReview = jest.fn(() => Promise.resolve());
@@ -130,6 +133,43 @@ describe("adding the buttons", () => {
         img.setAttribute("src", INK_SRC);
         await mutations();
         expect(buttonOf(img)).not.toBeNull();
+    });
+
+    test("an embed waiting for its image stops being watched on destroy or once detached", async () => {
+        const disconnect = jest.spyOn(MutationObserver.prototype, "disconnect");
+        const pending = () => {
+            const section = document.body.createDiv();
+            const span = section.createSpan({ cls: "internal-embed image-embed" });
+            span.setAttribute("src", "pencards/pencard-20261031-141502123-back.svg");
+            postProcess(section);
+            return { section, span };
+        };
+
+        const { section } = pending();
+        section.remove();
+        disconnect.mockClear();
+        buttons.watchLivePreview();
+        expect(disconnect).toHaveBeenCalledTimes(1);
+
+        const { span } = pending();
+        disconnect.mockClear();
+        buttons.destroy();
+        expect(disconnect).toHaveBeenCalledTimes(1);
+        const img = span.createEl("img");
+        img.setAttribute("src", INK_SRC);
+        await mutations();
+        expect(buttonOf(img)).toBeNull();
+        disconnect.mockRestore();
+    });
+
+    test("an unresolved embed (missing file) is not watched", () => {
+        const observe = jest.spyOn(MutationObserver.prototype, "observe");
+        const section = document.body.createDiv();
+        const span = section.createSpan({ cls: "internal-embed is-unresolved" });
+        span.setAttribute("src", "pencards/pencard-20261031-141502123-back.svg");
+        postProcess(section);
+        expect(observe).not.toHaveBeenCalled();
+        observe.mockRestore();
     });
 
     test("destroy removes the buttons and the boxes", () => {

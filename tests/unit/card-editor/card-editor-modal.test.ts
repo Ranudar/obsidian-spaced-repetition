@@ -560,8 +560,8 @@ test("a theme change redraws the ink with the new color, until the editor closes
 });
 
 // jsdom has no PointerEvent, a MouseEvent with the pointer fields added does the job
-function pointer(type: string, target: HTMLElement, pointerType: string) {
-    const evt = new MouseEvent(type, { bubbles: true, cancelable: true, buttons: 1 });
+function pointer(type: string, target: HTMLElement, pointerType: string, buttons = 1) {
+    const evt = new MouseEvent(type, { bubbles: true, cancelable: true, buttons });
     Object.assign(evt, { pointerType, pointerId: 1, pressure: 0.5 });
     target.dispatchEvent(evt);
     return evt;
@@ -600,6 +600,72 @@ describe("CardEditorModal pen only", () => {
         jest.advanceTimersByTime(300);
         fingerTap(saveNext());
         expect(cb.save).toHaveBeenCalledTimes(1);
+    });
+
+    test("the palm doesn't switch a side's mode or focus its text area", () => {
+        openAdd(
+            { front: side({ mode: "ink", strokes: [stroke(0)] }), back: side() },
+            { cardEditorPenOnly: true },
+        );
+        const [frontSide, backSide] = $$(".sr-card-editor-side");
+        pointer("pointerdown", frontSide.querySelector(".sr-ink-field"), "pen");
+
+        fingerTap(frontSide.querySelector<HTMLElement>(".sr-card-editor-mode-button"));
+        expect(frontSide.hasClass("is-ink")).toBe(true);
+        const touch = pointer("pointerdown", textAreas()[1], "touch");
+        expect(touch.defaultPrevented).toBe(true);
+        expect(backSide.hasClass("is-text")).toBe(true);
+    });
+
+    test("the palm resting on the other side doesn't change the side Clear acts on", () => {
+        jest.useFakeTimers({ now: 10_000 });
+        openAdd(
+            {
+                front: side({ mode: "ink", strokes: [stroke(0)] }),
+                back: side({ mode: "ink", strokes: [stroke(50)] }),
+            },
+            { cardEditorPenOnly: true },
+        );
+        const [frontSide, backSide] = $$(".sr-card-editor-side");
+        pointer("pointerdown", frontSide, "pen");
+        pointer("pointerup", frontSide, "pen");
+        pointer("pointerdown", backSide, "touch");
+        jest.advanceTimersByTime(1000);
+        clearSide().click();
+        expect(frontSide.querySelector(".sr-ink-field").hasClass("is-empty")).toBe(true);
+        expect(backSide.querySelector(".sr-ink-field").hasClass("is-empty")).toBe(false);
+    });
+
+    test("a pen hovering over the screen doesn't block finger taps", () => {
+        jest.useFakeTimers({ now: 10_000 });
+        const { cb } = openAdd(null, { cardEditorPenOnly: true });
+        type(0, "Q");
+        type(1, "A");
+        pointer("pointermove", $$(".sr-card-editor-side")[1], "pen", 0);
+        fingerTap(saveNext());
+        expect(cb.save).toHaveBeenCalledTimes(1);
+    });
+
+    test("with pen only, a tap on the background doesn't close the editor", () => {
+        const background = () => document.body.querySelector<HTMLElement>(".modal-bg");
+        const tapBackground = () => {
+            pointer("pointerdown", background(), "touch");
+            background().click();
+        };
+        // Like Obsidian: a click on the background closes the modal
+        const closeOnBackground = (modal: CardEditorModal) =>
+            background().addEventListener("click", () => modal.close());
+
+        const penOnly = openAdd(null, { cardEditorPenOnly: true });
+        closeOnBackground(penOnly.modal);
+        tapBackground();
+        expect(penOnly.cb.closed).not.toHaveBeenCalled();
+        penOnly.modal.close();
+
+        const normal = openAdd(null, { cardEditorPenOnly: false });
+        closeOnBackground(normal.modal);
+        tapBackground();
+        expect(normal.cb.closed).toHaveBeenCalled();
     });
 
     test("without pen only, a finger tap during a stroke counts", () => {

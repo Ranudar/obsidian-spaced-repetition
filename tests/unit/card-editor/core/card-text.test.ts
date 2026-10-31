@@ -1,5 +1,6 @@
 import {
     cardInsertion,
+    cardMarkerLine,
     cardSeparator,
     composeCardText,
     inkEmbed,
@@ -340,6 +341,22 @@ describe("inkEmbedFileNames", () => {
 
     test("no ink embeds", () => {
         expect(inkEmbedFileNames("Q::A ![[photo.svg]]")).toEqual([]);
+    });
+});
+
+describe("cardMarkerLine", () => {
+    const settings = { ...DEFAULT_SETTINGS, multilineCardEndMarker: "---" };
+
+    test("finds a line the parser would read as a separator or the end marker", () => {
+        expect(cardMarkerLine("Answer\n---\nMore detail", settings)).toEqual("---");
+        expect(cardMarkerLine("Line\n  ?  ", settings)).toEqual("?");
+        expect(cardMarkerLine("Line\n??", settings)).toEqual("??");
+    });
+
+    test("ignores markers inside a line or a code block, and an unset end marker", () => {
+        expect(cardMarkerLine("Is it? Yes\n--- not a rule", settings)).toBeNull();
+        expect(cardMarkerLine("```\n?\n---\n```", settings)).toBeNull();
+        expect(cardMarkerLine("a\n\nb", DEFAULT_SETTINGS)).toBeNull();
     });
 });
 

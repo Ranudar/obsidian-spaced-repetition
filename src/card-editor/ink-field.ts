@@ -110,6 +110,10 @@ export class InkField {
         this.canvas.removeEventListener("pointerup", this.onUp);
         this.canvas.removeEventListener("pointercancel", this.onUp);
         this.canvas.removeEventListener("contextmenu", this.onContextMenu);
+        // WebKit frees a canvas' memory only on garbage collection and caps the total of all
+        // canvases; once over the cap, no new canvas gets a context. Free it right away.
+        this.canvas.width = 0;
+        this.canvas.height = 0;
     }
 
     // MARK: input

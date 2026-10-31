@@ -402,6 +402,7 @@ export interface IBaseLocale {
     // Card editor > notices
     CARD_EDITOR_NO_FLASHCARD_TAG: string;
     CARD_EDITOR_SIDES_EMPTY: string;
+    CARD_EDITOR_SIDE_HAS_MARKER: string;
     CARD_EDITOR_SAVE_FAILED: string;
     CARD_EDITOR_EDIT_FAILED: string;
     CARD_EDITOR_CARD_NOT_FOUND: string;

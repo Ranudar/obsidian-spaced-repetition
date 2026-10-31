@@ -96,6 +96,31 @@ describe("inserting into the editor", () => {
         expect(editor.value).toEqual("#flashcards\n\nQ1\n?\nA1\n\nQ2\n?\nA2\n");
     });
 
+    test("the next card follows the last one, even if the note changed above it meanwhile", async () => {
+        const editor = new FakeEditor("#flashcards\nIntro\n\nMore text", { line: 1, ch: 0 });
+        const inserter = inserterFor(viewOf(editor));
+        await inserter.insert("Q1\n?\nA1");
+
+        // E.g. sync pulls in a change near the top of the open note
+        editor.value = editor.value.replace("Intro", "Intro, now with forty more characters in it");
+        await inserter.insert("Q2\n?\nA2");
+
+        expect(editor.value).toEqual(
+            "#flashcards\nIntro, now with forty more characters in it\n\nQ1\n?\nA1\n\nQ2\n?\nA2\n\nMore text",
+        );
+    });
+
+    test("if the last card is gone, the next one goes to the end of the note", async () => {
+        const editor = new FakeEditor("#flashcards\nIntro\n\nMore text", { line: 1, ch: 0 });
+        const inserter = inserterFor(viewOf(editor));
+        await inserter.insert("Q1\n?\nA1");
+
+        editor.value = "#flashcards\nIntro\n\nMore text";
+        await inserter.insert("Q2\n?\nA2");
+
+        expect(editor.value).toEqual("#flashcards\nIntro\n\nMore text\n\nQ2\n?\nA2\n");
+    });
+
     test("flush saves the editor once a card went into it", async () => {
         const view = viewOf(new FakeEditor("#flashcards", { line: 0, ch: 0 }));
         const inserter = inserterFor(view);

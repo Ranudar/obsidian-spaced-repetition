@@ -14,8 +14,11 @@ export class CardInserter {
     private file: TFile;
     private view: MarkdownView | null;
     private settings: SRSettings;
-    /** Document offset where the next card goes, once the first card went into the editor */
-    private offset: number | null = null;
+    /**
+     * The last card inserted through the editor: its body, the line breaks inserted after it, and
+     * the document offset after those. The next card goes there.
+     */
+    private last: { body: string; suffix: string; end: number } | null = null;
     /** Set when a card was inserted through the editor, whose changes may not be on disk yet */
     private editorUsed = false;
 
@@ -36,16 +39,19 @@ export class CardInserter {
 
         const editor = view.editor;
         const doc = editor.getValue();
-        if (this.offset === null) {
+        let offset: number;
+        if (this.last === null) {
             // First card: below the cursor, after the block the cursor is in
             const line = insertionLine(doc, editor.getCursor().line, this.settings);
-            this.offset = editor.posToOffset({ line, ch: editor.getLine(line).length });
+            offset = editor.posToOffset({ line, ch: editor.getLine(line).length });
+        } else {
+            offset = endOfCard(doc, this.last);
         }
-        const offset = Math.min(this.offset, doc.length);
         const text = cardInsertion(doc.slice(0, offset), body, doc.slice(offset));
         editor.replaceRange(text, editor.offsetToPos(offset));
-        this.offset = offset + text.length;
-        editor.setCursor(editor.offsetToPos(this.offset));
+        const end = offset + text.length;
+        this.last = { body, suffix: text.slice(text.indexOf(body) + body.length), end };
+        editor.setCursor(editor.offsetToPos(end));
         this.editorUsed = true;
     }
 
@@ -64,6 +70,27 @@ export class CardInserter {
             return null;
         return view;
     }
+}
+
+/**
+ * Where the card inserted last ends, with the line breaks inserted after it; `end` was that offset
+ * right after inserting it. The note may have changed since (e.g. by sync or another plugin), so
+ * the card is looked up by its text: the occurrence nearest to `end`. If it is gone, the end of
+ * the note.
+ */
+export function endOfCard(
+    doc: string,
+    card: { body: string; suffix: string; end: number },
+): number {
+    const { body, suffix, end } = card;
+    if (doc.slice(end - suffix.length - body.length, end) === body + suffix) return end;
+    let best = -1;
+    for (let i = doc.indexOf(body); i !== -1; i = doc.indexOf(body, i + 1)) {
+        if (best === -1 || Math.abs(i + body.length - end) < Math.abs(best - end))
+            best = i + body.length;
+    }
+    if (best === -1) return doc.length;
+    return doc.startsWith(suffix, best) ? best + suffix.length : best;
 }
 
 /**

@@ -8,6 +8,7 @@ import {
 } from "src/card-editor/card-editor-modal";
 import { CardInserter } from "src/card-editor/card-inserter";
 import {
+    cardMarkerLine,
     composeCardText,
     inkEmbed,
     inkEmbedFileNames,
@@ -243,7 +244,8 @@ export class CardEditorService {
         try {
             const sideText = async (r: SideResult | null, side: InkSide): Promise<string> => {
                 if (r === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
-                if (r.mode === "text") return protectBlankLines(r.text.trim(), this.settings);
+                if (r.mode === "text")
+                    return protectBlankLines(this.typedText(r.text), this.settings);
                 const svg = strokesToSvg(r.strokes, { size: r.penSize });
                 if (svg === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
                 const file = await this.inkFiles.create(
@@ -347,6 +349,8 @@ export class CardEditorService {
         const created: TFile[] = [];
         const overwritten: LoadedSide[] = [];
         const toTrash: TFile[] = [];
+        /** For each file in toTrash: links to it from other cards and notes */
+        const linksOutside = new Map<TFile, number>();
         // Without an end marker, a blank line would end a multi-line or cloze card
         const protect =
             card.cardType !== CardType.SingleLineBasic &&
@@ -380,8 +384,8 @@ export class CardEditorService {
         ): Promise<string> => {
             if (r.mode === "text") {
                 if (r.text === loaded.text) return r.text;
+                const text = this.typedText(r.text);
                 if (loaded.file) toTrash.push(loaded.file);
-                const text = r.text.trim();
                 return protect ? protectBlankLines(text, this.settings) : text;
             }
 
@@ -416,6 +420,11 @@ export class CardEditorService {
                 this.settings,
                 card.separator,
             );
+            // Counted before the note is written: once Obsidian's link index has caught up with
+            // the write, it no longer includes this card's old embeds
+            for (const file of toTrash) {
+                linksOutside.set(file, this.linksOutsideCard(file, card.original));
+            }
             if (text !== card.original && !(await writeText(text)))
                 throw new Error(t("CARD_EDITOR_TEXT_NOT_FOUND"));
         } catch (err) {
@@ -425,7 +434,7 @@ export class CardEditorService {
 
         // The card no longer shows these images; keep those other cards or notes still embed
         for (const file of toTrash) {
-            if (this.isEmbeddedElsewhere(file, card.original, text)) continue;
+            if (linksOutside.get(file) > 0 || embedsOf(file, text) > 0) continue;
             await this.inkFiles
                 .trash(file)
                 .catch((e) => console.error("SR: removing the ink image failed", e));
@@ -438,14 +447,21 @@ export class CardEditorService {
     }
 
     /**
-     * Whether the ink file is still embedded after the card's text changed from `before` to
-     * `after`: in another note, in another card of this note or in the card itself.
+     * Links to the ink file in other notes and other cards of this note, while Obsidian's link
+     * index still describes the note with the card's text `cardText`
      */
-    private isEmbeddedElsewhere(file: TFile, before: string, after: string): boolean {
-        const embedsIn = (text: string) =>
-            inkEmbedFileNames(text).filter((name) => name === file.name).length;
-        if (embedsIn(after) > 0) return true;
-        return this.inkFiles.linkCount(file) - embedsIn(before) > 0;
+    private linksOutsideCard(file: TFile, cardText: string): number {
+        return this.inkFiles.linkCount(file) - embedsOf(file, cardText);
+    }
+
+    /**
+     * A typed side's text, trimmed. Throws if a line in it would split or end the card,
+     * so the editor stays open with a notice.
+     */
+    private typedText(text: string): string {
+        const marker = cardMarkerLine(text, this.settings);
+        if (marker !== null) throw new Error(t("CARD_EDITOR_SIDE_HAS_MARKER", { line: marker }));
+        return text.trim();
     }
 
     /** Leaves the ink files of a card as they were before a failed save */
@@ -461,6 +477,11 @@ export class CardEditorService {
                 .catch((e) => console.error("SR: restoring the ink image failed", e));
         }
     }
+}
+
+/** How many times the text embeds the ink file */
+function embedsOf(file: TFile, text: string): number {
+    return inkEmbedFileNames(text).filter((name) => name === file.name).length;
 }
 
 /** The first question whose text embeds the ink image with that file name, or null */

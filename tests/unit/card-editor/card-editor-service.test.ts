@@ -543,6 +543,65 @@ describe("saving a card", () => {
         expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
     });
 
+    test("ink → text decides what to keep before the link index catches up with the write", async () => {
+        const front = vault.add("pencards/pencard-abc-front.svg", svgOf([stroke(0)]));
+        const back = vault.add("pencards/pencard-abc-back.svg", svgOf([stroke(5)]));
+        const links = vault.app.metadataCache.resolvedLinks;
+        // The back is also embedded in another note
+        links[NOTE_PATH] = { [front.path]: 1, [back.path]: 1 };
+        links["notes/summary.md"] = { [back.path]: 1 };
+        // Obsidian re-indexes the note right after it is written
+        writeText.mockImplementation(() => {
+            links[NOTE_PATH] = {};
+            return Promise.resolve(true);
+        });
+
+        const session = await edit(await parseQuestion(inkNote));
+        await save(session, { front: text("Q"), back: text("A") });
+
+        expect(vault.app.fileManager.trashFile).toHaveBeenCalledTimes(1);
+        expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(front);
+        expect(vault.content(back.path)).toBeDefined();
+    });
+
+    test("ink → text keeps an SVG another card in the note embeds, with the index already updated", async () => {
+        const back = vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const links = vault.app.metadataCache.resolvedLinks;
+        links[NOTE_PATH] = { [back.path]: 2 };
+        writeText.mockImplementation(() => {
+            links[NOTE_PATH] = { [back.path]: 1 };
+            return Promise.resolve(true);
+        });
+
+        const session = await edit(await parseQuestion(mixedNote));
+        await save(session, {
+            front: unchanged(session.opts.initial.front),
+            back: text("Mitochondria"),
+        });
+        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
+    });
+
+    test("a typed line that would split or end the card is rejected, nothing is written", async () => {
+        settings.multilineCardEndMarker = "---";
+        const back = vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const session = await edit(await parseQuestion(mixedNote + "---\n"));
+
+        await expect(
+            session.opts.save({
+                front: unchanged(session.opts.initial.front),
+                back: text("Answer\n---\nMore detail"),
+            }),
+        ).rejects.toThrow('only "---"');
+        await expect(
+            session.opts.save({
+                front: text("Question\n?\nmore"),
+                back: unchanged(session.opts.initial.back),
+            }),
+        ).rejects.toThrow('only "?"');
+        expect(writeText).not.toHaveBeenCalled();
+        expect(vault.content(back.path)).toBeDefined();
+    });
+
     test("ink → text keeps an SVG the new text still embeds", async () => {
         vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(mixedNote));
@@ -678,6 +737,16 @@ describe("adding cards", () => {
         const opts = openAdd();
         await opts.save({ front: text("Q"), back: text("line 1\n\nline 2") });
         expect(vault.content(NOTE_PATH)).toEqual("#flashcards\n\nQ\n?\nline 1\n<br>\nline 2\n");
+    });
+
+    test("a typed line that would end the card is rejected, the SVGs made for it are removed", async () => {
+        settings.multilineCardEndMarker = "---";
+        const opts = openAdd();
+        await expect(
+            opts.save({ front: ink([stroke(0)]), back: text("Answer\n---\nMore detail") }),
+        ).rejects.toThrow('only "---"');
+        expect(vault.content(NOTE_PATH)).toEqual(NOTE);
+        expect(vault.app.fileManager.trashFile).toHaveBeenCalledTimes(1);
     });
 
     test("the end marker follows a blank line", async () => {

@@ -157,6 +157,30 @@ export function protectBlankLines(text: string, settings: SRSettings): string {
         .join("\n");
 }
 
+/**
+ * The first line of a typed side that the parser would read as a card separator or as the end
+ * marker (compared ignoring whitespace, like the parser), else null. Such a line would split or end
+ * the card there. Lines inside code blocks are skipped, the parser reads code blocks as a whole.
+ */
+export function cardMarkerLine(text: string, settings: SRSettings): string | null {
+    const markers = [
+        settings.multilineCardSeparator,
+        settings.multilineReversedCardSeparator,
+        settings.multilineCardEndMarker,
+    ].filter((marker) => marker);
+    let fence: string | null = null;
+    for (const line of text.split("\n")) {
+        if (fence !== null) {
+            if (line.startsWith(fence)) fence = null;
+            continue;
+        }
+        const open = line.match(/^(`{3,}|~{3,})/);
+        if (open) fence = open[1];
+        else if (markers.includes(line.trim())) return line.trim();
+    }
+    return null;
+}
+
 /** New multi-line basic card body, without surrounding blank lines. */
 export function newCardBody(front: string, back: string, settings: SRSettings): string {
     const lines = [front, settings.multilineCardSeparator, back];

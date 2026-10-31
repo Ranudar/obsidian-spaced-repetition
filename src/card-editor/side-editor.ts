@@ -28,6 +28,8 @@ export interface SideEditorOptions {
     onChange(): void;
     /** Called after every ink change with the strokes before it (for undo) */
     onInkCommit(prev: Stroke[]): void;
+    /** Whether a press is the palm resting on the screen (pen-only on); it is then ignored */
+    isPalm?(evt: PointerEvent): boolean;
 }
 
 const MODE_ICONS: Record<InputMode, string> = { text: "⌨", ink: "✎" };
@@ -205,7 +207,13 @@ export class SideEditor {
         });
         button.setAttr("aria-label", label);
         button.setAttr("type", "button");
+        let palm = false;
+        button.addEventListener("pointerdown", (evt) => (palm = this.isPalm(evt)));
         button.addEventListener("click", () => {
+            // A click from the keyboard has no pointerdown before it
+            const ignore = palm;
+            palm = false;
+            if (ignore) return;
             this.setMode(mode);
             this.focus();
         });
@@ -275,8 +283,17 @@ export class SideEditor {
         }
     };
 
+    private isPalm(evt: PointerEvent): boolean {
+        return this.opts.isPalm?.(evt) ?? false;
+    }
+
     /** A pen touching the text area turns the side into ink and starts drawing right away */
     private onTextPointerDown = (evt: PointerEvent) => {
+        // The palm must not focus the text area: the soft keyboard would open under the pen
+        if (this.isPalm(evt)) {
+            evt.preventDefault();
+            return;
+        }
         if (evt.pointerType !== "pen" || !this.opts.allowInk) return;
         if (!this.opts.settings.cardEditorPenSwitchesToInk) return;
         evt.preventDefault();

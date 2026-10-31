@@ -64,7 +64,8 @@ img[src*="pencard-"] {
     flex-direction: column;
 }
 
-.is-phone .sr-card-editor-modal {
+/* Fullscreen on phones and tablets: more room to write, no background to tap by accident */
+.is-mobile .sr-card-editor-modal {
     width: 100vw;
     height: 100%;
     border-radius: 0;

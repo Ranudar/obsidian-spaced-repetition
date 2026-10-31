@@ -46,7 +46,7 @@ export type CardEditorOptions =
       });
 
 const DISCARD_ARM_MS = 3000;
-/** With pen-only on, finger taps on buttons this soon after the pen was used count as the palm */
+/** With pen-only on, finger presses this soon after the pen was used count as the palm */
 const PALM_GUARD_MS = 500;
 
 /**
@@ -138,6 +138,7 @@ export class CardEditorModal extends Modal {
         this.modalEl.addEventListener("pointermove", this.onPenActivity, true);
         this.modalEl.addEventListener("pointerup", this.onPenActivity, true);
         this.modalEl.addEventListener("pointercancel", this.onPenActivity, true);
+        this.guardBackground();
 
         // A theme change (e.g. to dark mode at night) changes the ink color
         this.cssChangeRef = this.app.workspace.on("css-change", () =>
@@ -250,11 +251,20 @@ export class CardEditorModal extends Modal {
                 this.undoStack.push({ side, prev });
                 this.activeSide = side;
             },
+            isPalm: (evt) => this.isPalm(evt),
         });
         side.setEraser(this.eraser);
-        const activate = () => (this.activeSide = side);
-        side.el.addEventListener("pointerdown", activate);
-        side.el.addEventListener("focusin", activate);
+        side.el.addEventListener("pointerdown", (evt) => {
+            // With pen-only on, a finger can't draw on an ink side: such a touch is the hand
+            // resting on the screen, not a choice of side
+            const ignored =
+                this.isPalm(evt) ||
+                (this.settings.cardEditorPenOnly &&
+                    evt.pointerType === "touch" &&
+                    side.mode === "ink");
+            if (!ignored) this.activeSide = side;
+        });
+        side.el.addEventListener("focusin", () => (this.activeSide = side));
         return side;
     }
 
@@ -271,6 +281,32 @@ export class CardEditorModal extends Modal {
         Array.from(this.containerEl.children).forEach((el) => {
             if (el !== this.modalEl && !el.hasClass("modal-bg")) hide(el);
         });
+    }
+
+    /**
+     * Obsidian closes a modal when its background is clicked. With pen-only on, or right after
+     * the pen was used, that click is the palm or a stray tap next to the editor, which would
+     * close it halfway through a card; the editor is closed with ✕, Esc or its buttons then.
+     */
+    private guardBackground() {
+        const bg = this.containerEl.querySelector(".modal-bg");
+        if (bg === null) return;
+        let blocked = false;
+        const block = (evt: Event) => {
+            if (evt.type === "pointerdown") {
+                blocked =
+                    this.settings.cardEditorPenOnly ||
+                    this.penDown ||
+                    Date.now() - this.lastPenAt < PALM_GUARD_MS;
+            }
+            if (!blocked) return;
+            evt.preventDefault();
+            evt.stopImmediatePropagation();
+        };
+        // Capturing, so this runs before Obsidian's own listeners
+        for (const type of ["pointerdown", "mousedown", "click"]) {
+            bg.addEventListener(type, block, true);
+        }
     }
 
     // MARK: actions
@@ -464,26 +500,33 @@ export class CardEditorModal extends Modal {
         return button;
     }
 
-    /** Records pen use anywhere in the editor, for palmGuard() */
+    /**
+     * Records pen use anywhere in the editor, for isPalm(). Only contact counts: a pen hovering
+     * over the screen also sends pointermove events, and would block finger taps all along.
+     */
     private onPenActivity = (evt: PointerEvent) => {
         if (evt.pointerType !== "pen") return;
+        if (evt.type === "pointermove" && !this.penDown && evt.buttons === 0) return;
         this.penDown = evt.type === "pointerdown" || (this.penDown && evt.type === "pointermove");
         this.lastPenAt = Date.now();
     };
 
     /**
-     * With pen-only on, a button pressed by a finger while the pen is down or was just used is
-     * the palm resting on the screen, not a tap. Returns whether the button's current click is
-     * such a touch.
+     * With pen-only on, a finger press while the pen is down or was just used is the palm resting
+     * on the screen, not a tap.
      */
+    private isPalm(evt: PointerEvent): boolean {
+        return (
+            this.settings.cardEditorPenOnly &&
+            evt.pointerType === "touch" &&
+            (this.penDown || Date.now() - this.lastPenAt < PALM_GUARD_MS)
+        );
+    }
+
+    /** Returns whether the button's current click comes from a palm press (see isPalm()) */
     private palmGuard(button: HTMLButtonElement): () => boolean {
         let palm = false;
-        button.addEventListener("pointerdown", (evt) => {
-            palm =
-                this.settings.cardEditorPenOnly &&
-                evt.pointerType === "touch" &&
-                (this.penDown || Date.now() - this.lastPenAt < PALM_GUARD_MS);
-        });
+        button.addEventListener("pointerdown", (evt) => (palm = this.isPalm(evt)));
         return () => {
             const result = palm;
             // A click from the keyboard has no pointerdown before it
