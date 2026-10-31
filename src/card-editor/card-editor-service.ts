@@ -232,7 +232,7 @@ export class CardEditorService {
 
     /**
      * Writes the ink files of a new card and inserts the card.
-     * Both handwritten sides share the stem of their file names (Pen Cards' scheme).
+     * Both handwritten sides share the stem of their file names.
      */
     private async addCard(
         result: CardEditorResult,
@@ -356,7 +356,7 @@ export class CardEditorService {
             card.cardType !== CardType.SingleLineBasic &&
             card.cardType !== CardType.SingleLineReversed;
 
-        // Both sides of a card share the stem of their file names (Pen Cards' scheme)
+        // Both sides of a card share the stem of their file names
         let stem: string | null = null;
         for (const side of [front, back]) {
             const parsed = side?.file ? parseInkFileName(side.file.name) : null;

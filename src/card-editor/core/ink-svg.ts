@@ -20,7 +20,6 @@ export interface SvgResult {
  * Renders strokes to a standalone SVG, cropped to the ink plus padding.
  * The SVG keeps the on-screen pixel size (no scaling), so small writing stays small on the card.
  * The raw strokes are stored in <metadata> so a card can be re-edited later.
- * The format is the one of the former Pen Cards plugin, so its files stay editable.
  */
 export function strokesToSvg(
     strokes: Stroke[],
@@ -57,7 +56,7 @@ export function strokesToSvg(
 
     const svg =
         `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${f(ox)} ${f(oy)} ${width} ${height}">` +
-        `<metadata id="pen-cards">${meta}</metadata>` +
+        `<metadata id="sr-ink">${meta}</metadata>` +
         `<g fill="${INK_COLOR}" stroke="none">${paths}</g>` +
         "</svg>\n";
 
@@ -78,7 +77,7 @@ export interface ParsedInk {
 
 /** Reads the pen strokes stored in an ink SVG; null for any other image. */
 export function svgToStrokes(svg: string): ParsedInk | null {
-    const m = svg.match(/<metadata id="pen-cards">([\s\S]*?)<\/metadata>/);
+    const m = svg.match(/<metadata id="sr-ink">([\s\S]*?)<\/metadata>/);
     if (!m) return null;
     try {
         const raw = m[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -101,7 +100,7 @@ export type InkSide = "front" | "back";
 
 const INK_FILE_NAME_REGEX = new RegExp(`^${INK_FILE_PREFIX}(.+)-(front|back)\\.svg$`);
 
-/** File name of the ink image of one side, e.g. "pencard-20261031-141502123-back.svg". */
+/** File name of the ink image of one side, e.g. "sr-ink-20261031-141502123-back.svg". */
 export function inkFileName(stem: string, side: InkSide): string {
     return `${INK_FILE_PREFIX}${stem}-${side}.svg`;
 }

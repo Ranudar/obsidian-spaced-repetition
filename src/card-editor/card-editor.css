@@ -1,11 +1,11 @@
 /* MARK: Handwritten card images */
 
 /* Ink is stored dark on a transparent background; show it light in dark themes */
-.theme-dark img[src*="pencard-"] {
+.theme-dark img[src*="sr-ink-"] {
     filter: invert(1) hue-rotate(180deg);
 }
 
-img[src*="pencard-"] {
+img[src*="sr-ink-"] {
     max-width: 100%;
     height: auto;
 }

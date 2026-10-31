@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Plugin } from "obsidian";
 
 import { CardEditorService } from "src/card-editor/card-editor-service";
 import { PencilButtons } from "src/card-editor/pencil-buttons";
@@ -8,7 +8,6 @@ import { DebugLoggerInstance } from "src/data/debug-logger";
 import { PluginDataError, PluginDataManager } from "src/data/plugin-data-manager";
 import { SRSettings } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
-import { t } from "src/lang/helpers";
 import { LocaleManagerInstance } from "src/lang/locale-manager";
 import { NextNoteReviewHandler } from "src/note/next-note-review-handler";
 import { NoteReviewQueue } from "src/note/note-review-queue";
@@ -90,7 +89,6 @@ export default class SRPlugin extends Plugin {
                         pencilButtons.watchLivePreview(),
                     ),
                 );
-                this.warnIfPenCardsEnabled();
             });
         } catch (error) {
             if (error instanceof PluginDataError || error instanceof Error) {
@@ -172,18 +170,6 @@ export default class SRPlugin extends Plugin {
 
     public removeCustomHotkeys() {
         this.commandManager.removeCustomHotkeys();
-    }
-
-    /**
-     * The card editor replaces the Pen Cards plugin; with both enabled, handwritten cards get two pencils.
-     */
-    private warnIfPenCardsEnabled(): void {
-        // Obsidian doesn't expose the list of enabled plugins in its API
-        const plugins = (this.app as unknown as { plugins?: { enabledPlugins?: Set<string> } })
-            .plugins;
-        if (plugins?.enabledPlugins?.has("pen-cards")) {
-            new Notice(t("CARD_EDITOR_PEN_CARDS_ENABLED"), 0);
-        }
     }
 
     /**

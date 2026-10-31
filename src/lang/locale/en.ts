@@ -482,8 +482,6 @@ const en: IBaseLocale = {
     CARD_EDITOR_TEXT_NOT_FOUND:
         "The card's text in the note has changed since the editor opened. Close the editor and try again.",
     CARD_EDITOR_IMAGE_FOLDER_IS_FILE: "The image folder ${path} is a file.",
-    CARD_EDITOR_PEN_CARDS_ENABLED:
-        "The Pen Cards plugin is still enabled. Spaced Repetition now includes its card editor, so please disable Pen Cards to avoid duplicate edit buttons.",
 };
 
 export default en;

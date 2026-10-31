@@ -3,8 +3,8 @@ import { App, MarkdownPostProcessorContext, TFile } from "obsidian";
 import { InkFiles } from "src/card-editor/ink-files";
 import { PencilButtonActions, PencilButtons } from "src/card-editor/pencil-buttons";
 
-const INK_SRC = "app://vault/pencards/pencard-20261031-141502123-back.svg?1730380000";
-const INK_NAME = "pencard-20261031-141502123-back.svg";
+const INK_SRC = "app://vault/sr-ink/sr-ink-20261031-141502123-back.svg?1730380000";
+const INK_NAME = "sr-ink-20261031-141502123-back.svg";
 
 function tFile(path: string): TFile {
     return Object.assign(new TFile(), { path, name: path.substring(path.lastIndexOf("/") + 1) });
@@ -98,7 +98,7 @@ describe("adding the buttons", () => {
     test("other images get no button", () => {
         const section = document.body.createDiv();
         const photo = embed("app://vault/photo.png", section);
-        const png = embed("app://vault/pencards/pencard-sketch.png", section);
+        const png = embed("app://vault/sr-ink/sr-ink-sketch.png", section);
         postProcess(section);
 
         expect(buttonOf(photo)).toBeNull();
@@ -108,8 +108,8 @@ describe("adding the buttons", () => {
     test("ink images whose name doesn't follow the scheme get a button too", () => {
         // Renamed by hand or by Obsidian on a name collision; the editor opens them as ink too
         const section = document.body.createDiv();
-        const renamed = embed("app://vault/pencards/pencard-sketch.svg", section);
-        const collided = embed("app://vault/pencard-x-front%201.svg", section);
+        const renamed = embed("app://vault/sr-ink/sr-ink-sketch.svg", section);
+        const collided = embed("app://vault/sr-ink-x-front%201.svg", section);
         postProcess(section);
 
         expect(buttonOf(renamed)).not.toBeNull();
@@ -126,7 +126,7 @@ describe("adding the buttons", () => {
     test("an embed whose image is loaded after rendering gets its button then", async () => {
         const section = document.body.createDiv();
         const span = section.createSpan({ cls: "internal-embed image-embed" });
-        span.setAttribute("src", "pencards/pencard-20261031-141502123-back.svg");
+        span.setAttribute("src", "sr-ink/sr-ink-20261031-141502123-back.svg");
         postProcess(section);
 
         const img = span.createEl("img");
@@ -140,7 +140,7 @@ describe("adding the buttons", () => {
         const pending = () => {
             const section = document.body.createDiv();
             const span = section.createSpan({ cls: "internal-embed image-embed" });
-            span.setAttribute("src", "pencards/pencard-20261031-141502123-back.svg");
+            span.setAttribute("src", "sr-ink/sr-ink-20261031-141502123-back.svg");
             postProcess(section);
             return { section, span };
         };
@@ -166,7 +166,7 @@ describe("adding the buttons", () => {
         const observe = jest.spyOn(MutationObserver.prototype, "observe");
         const section = document.body.createDiv();
         const span = section.createSpan({ cls: "internal-embed is-unresolved" });
-        span.setAttribute("src", "pencards/pencard-20261031-141502123-back.svg");
+        span.setAttribute("src", "sr-ink/sr-ink-20261031-141502123-back.svg");
         postProcess(section);
         expect(observe).not.toHaveBeenCalled();
         observe.mockRestore();

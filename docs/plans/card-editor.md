@@ -78,7 +78,7 @@ Inserted text (multi-line basic card; separator and end marker from SR settings)
 ```
 What is the powerhouse of the cell?
 ?
-![[pencards/pencard-20261031-141502123-back.svg]]
+![[sr-ink/sr-ink-20261031-141502123-back.svg]]
 
 ---
 ```
@@ -138,8 +138,8 @@ Names may be refined while implementing, but the responsibilities stay put.
 
 ```ts
 // core/card-text.ts
-export const INK_FILE_PREFIX = "pencard-";
-/** File name if the side is exactly one embed of a pencard SVG ("![[…/pencard-…svg]]" or "![](…)"), else null */
+export const INK_FILE_PREFIX = "sr-ink-";
+/** File name if the side is exactly one embed of an sr-ink SVG ("![[…/sr-ink-…svg]]" or "![](…)"), else null */
 export function inkEmbedFileName(sideText: string): string | null;
 /** Front/back of a question via CardFrontBackUtil.expand; back is null for cloze */
 export function splitCardText(
@@ -158,7 +158,7 @@ export function composeCardText(
 export function newCardBody(front: string, back: string, settings: SRSettings): string;
 /** Text to insert so the card is separated by blank lines from its surroundings */
 export function cardInsertion(before: string, body: string, after: string): string;
-export function inkEmbed(linkPath: string): string; // "![[pencards/x.svg]]"
+export function inkEmbed(linkPath: string): string; // "![[sr-ink/x.svg]]"
 
 // side-editor.ts
 export type InputMode = "text" | "ink";
@@ -249,12 +249,12 @@ export class CardEditorService {
 - **One modal, two modes.** The modal collects side states; the service does all writes.
 - **Splitting** uses `CardFrontBackUtil.expand` (already used by the current edit dialog on main).
   `composeCardText` takes over the newline rules from `FlashcardEditModal.save()`.
-- **A side is ink if, and only if,** its trimmed text is exactly one embed of a `pencard-*.svg`
+- **A side is ink if, and only if,** its trimmed text is exactly one embed of a `sr-ink-*.svg`
   file. Everything else is text. No new syntax. Ink without stored strokes (unreadable SVG) opens as
   text showing the embed, so nothing is lost.
 - **Saving in edit mode**
     - ink → ink, strokes changed: overwrite the same SVG (note text unchanged). Unchanged: no write.
-    - text → ink: new SVG `pencard-<stem>-<side>.svg`; `<stem>` is the card's other ink side's stem
+    - text → ink: new SVG `sr-ink-<stem>-<side>.svg`; `<stem>` is the card's other ink side's stem
       if there is one, else a new timestamp.
     - ink → text: the SVG is moved to trash with `app.fileManager.trashFile`.
     - Text changed → the caller's `writeText` writes the question (`updateCurrentQuestionTextAndCards`
@@ -277,9 +277,8 @@ export class CardEditorService {
   (Pen Cards' `markEdited`), and remember the version for images rendered later in the session.
 - **Dark mode**: SVGs keep dark ink (`#1f1f1f`) on a transparent background; CSS inverts ink images
   in `.theme-dark`, also inside the editor.
-- **Files**: SVGs go to the "Image folder" setting (default `pencards`; empty = Obsidian's
-  attachment folder via `fileManager.getAvailablePathForAttachment`). Existing Pen Cards file names
-  and SVG format stay valid.
+- **Files**: SVGs go to the "Image folder" setting (default `sr-ink`; empty = Obsidian's
+  attachment folder via `fileManager.getAvailablePathForAttachment`).
 
 ### Changes to existing SR code (kept small)
 
@@ -297,15 +296,15 @@ Nothing changes in the parser, scheduling or data store.
 
 ### Settings ("Card editor" section)
 
-| Key                          | Setting                                      | Default      |
-| ---------------------------- | -------------------------------------------- | ------------ |
-| `cardEditorDefaultMode`      | Default input mode (text / pen)              | `"text"`     |
-| `cardEditorPenSwitchesToInk` | Switch a side to pen when the pen touches it | `true`       |
-| `cardEditorPenOnly`          | Ignore fingers in pen mode                   | `true`       |
-| `cardEditorImageFolder`      | Image folder                                 | `"pencards"` |
-| `cardEditorGuide`            | Guide lines (lined / dotted / grid / none)   | `"lined"`    |
-| `cardEditorGuideSpacing`     | Line spacing (px, 24–80)                     | `44`         |
-| `cardEditorPenSize`          | Pen thickness (2–12)                         | `5`          |
+| Key                          | Setting                                      | Default    |
+| ---------------------------- | -------------------------------------------- | ---------- |
+| `cardEditorDefaultMode`      | Default input mode (text / pen)              | `"text"`   |
+| `cardEditorPenSwitchesToInk` | Switch a side to pen when the pen touches it | `true`     |
+| `cardEditorPenOnly`          | Ignore fingers in pen mode                   | `true`     |
+| `cardEditorImageFolder`      | Image folder                                 | `"sr-ink"` |
+| `cardEditorGuide`            | Guide lines (lined / dotted / grid / none)   | `"lined"`  |
+| `cardEditorGuideSpacing`     | Line spacing (px, 24–80)                     | `44`       |
+| `cardEditorPenSize`          | Pen thickness (2–12)                         | `5`        |
 
 Separator and end marker are SR's own settings.
 
@@ -318,11 +317,11 @@ Separator and end marker are SR's own settings.
 4. Review window showing stale ink after an edit (always redraw + image refresh).
 5. Pen Cards and SR fighting over the edit dialog (DOM interception goes away).
 
-## Migration from the Pen Cards plugin
+## No migration from Pen Cards
 
-- Existing cards keep working: same file names (`pencard-…-front|back.svg`), same SVG format.
-- If the Pen Cards plugin (`pen-cards`) is still enabled, SR shows a one-time notice asking to
-  disable it (two pencils would appear otherwise). It is shown at startup, once per plugin load.
+Pen Cards was an experiment, so there is no backwards compatibility: images are named
+`sr-ink-<stem>-<front|back>.svg`, strokes are stored in `<metadata id="sr-ink">`, and no notice is
+shown for the old plugin. Old Pen Cards images stay plain images.
 
 ## Steps
 
@@ -343,7 +342,7 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
 - [x] 6. **Add card** (3907feb): command, `openAdd`, flashcard tag notice, insertion at cursor / end
       of note, draft, note resync.
 - [x] 7. **Pencil buttons** (9a502be): `pencil-buttons.ts`, `editInNote`, `editInReview`, image
-      refresh, Pen Cards migration notice.
+      refresh (the Pen Cards migration notice was removed again, see below).
 - [x] 8. **Docs**: user page `docs/docs/en/flashcards/card-editor.md` (+ mkdocs nav, links from
       Reviewing and User Options).
 - [ ] 9. **Device test** on the S22 Ultra, by hand: pen-only, side-button eraser, auto switch to pen
@@ -374,7 +373,7 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
   lines typed in a side (outside code blocks) are saved as a `<br>` line.
 - **Separator line**: an edit keeps the separator line as written (e.g. with extra spaces) and the
   lines around it, so saving without changes never rewrites the note.
-- **Ink files** are resolved by the embed's link path, not by file name alone. Any `pencard-*.svg`
+- **Ink files** are resolved by the embed's link path, not by file name alone. Any `sr-ink-*.svg`
   embed counts as ink, also for the pencil; only names following the scheme give a stem to reuse.
 - **Pen on the text area**: with "switch to pen" on, the text area has `touch-action: pinch-zoom`,
   so the browser doesn't turn the pen stroke into a pan. Long text then doesn't scroll by finger drag.
@@ -402,8 +401,8 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
   `hasFlashcardTag` was not ported); the notice is skipped when folders are converted to decks.
   Text sides are trimmed before insertion.
 - **Review edit**: after a cancel the previous UI state is restored too (the old code did not).
-- **Pen Cards notice**: shown once per plugin load while Pen Cards is enabled, not once ever
-  (remembering it would need a new stored flag).
+- **No Pen Cards compatibility**: notice removed; files renamed to `sr-ink-…`, SVG metadata id
+  `sr-ink`, default image folder `sr-ink`.
 - **Leftovers**: the locale key `NO_INPUT` is unused but kept; `UIState.EditModal` is still used.
 
 ## Decisions taken

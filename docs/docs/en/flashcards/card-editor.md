@@ -39,7 +39,7 @@ as a single image embed:
 ```markdown
 What is the powerhouse of the cell?
 ?
-![[pencards/pencard-20261031-141502123-back.svg]]
+![[sr-ink/sr-ink-20261031-141502123-back.svg]]
 ```
 
 If you have set `Characters denoting the end of clozes and multiline flashcards`, the editor adds it
@@ -139,35 +139,22 @@ edited from there.
 | Typed side switched to handwriting | A new SVG file is created, named like the card's other image if it has one.    |
 | Handwritten side switched to text  | The old SVG file is moved to the trash, unless another note or card embeds it. |
 
-A side only counts as handwritten if its text is exactly one embed of a `pencard-….svg` image.
+A side only counts as handwritten if its text is exactly one embed of a `sr-ink-….svg` image.
 Anything else, including an image whose strokes can't be read, opens as text, so nothing gets lost.
 
 ## Settings
 
 The settings are in the **Card editor** section of the flashcard settings.
 
-| Setting                                   | Default    | Description                                                                                           |
-| ----------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------- |
-| Default input mode                        | Text       | How the front and back of a new card start: text or pen.                                              |
-| Switch to pen when the pen touches a side | On         | Touching a typed side with a stylus switches it to handwriting.                                       |
-| Pen only                                  | On         | Ignore finger touches on the writing fields. Turn off to write with a finger or mouse.                |
-| Image folder                              | `pencards` | Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.           |
-| Guide lines                               | Lined      | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image. |
-| Line spacing                              | 44         | Distance between guide lines, in pixels (24–80).                                                      |
-| Pen thickness                             | 5          | Stroke width for new handwriting (2–12). Existing images keep the thickness they were written with.   |
+| Setting                                   | Default  | Description                                                                                           |
+| ----------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| Default input mode                        | Text     | How the front and back of a new card start: text or pen.                                              |
+| Switch to pen when the pen touches a side | On       | Touching a typed side with a stylus switches it to handwriting.                                       |
+| Pen only                                  | On       | Ignore finger touches on the writing fields. Turn off to write with a finger or mouse.                |
+| Image folder                              | `sr-ink` | Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.           |
+| Guide lines                               | Lined    | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image. |
+| Line spacing                              | 44       | Distance between guide lines, in pixels (24–80).                                                      |
+| Pen thickness                             | 5        | Stroke width for new handwriting (2–12). Existing images keep the thickness they were written with.   |
 
 The card separator and the end marker are Spaced Repetition's own
 [flashcard separator settings](../user-options.md#flashcard-separators).
-
-## Migrating from Pen Cards
-
-The card editor replaces the separate Pen Cards plugin.
-
-- Your existing handwritten cards keep working: the editor uses the same file names
-  (`pencard-…-front.svg`, `pencard-…-back.svg`) and the same SVG format, and can edit them.
-- The default image folder is `pencards`, like in Pen Cards. If you used another folder, set it
-  under **Image folder**. Existing images stay where they are; only new images go to that folder.
-- **Disable the Pen Cards plugin.** While it is still enabled, Spaced Repetition shows a notice at
-  startup, because both plugins would add a pencil button to every handwritten image.
-- The Pen Cards command **Create cards** is replaced by **Spaced Repetition: Add card**. If you had it on the mobile
-  toolbar or bound to a hotkey, add the new command instead.

@@ -271,7 +271,7 @@ describe("SettingsUtil", () => {
             cardEditorDefaultMode: "text",
             cardEditorPenSwitchesToInk: true,
             cardEditorPenOnly: true,
-            cardEditorImageFolder: "pencards",
+            cardEditorImageFolder: "sr-ink",
             cardEditorGuide: "lined",
             cardEditorGuideSpacing: 44,
             cardEditorPenSize: 5,

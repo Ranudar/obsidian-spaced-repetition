@@ -54,9 +54,9 @@ Capital of France
 ??
 Paris
 
-![[pencards/pencard-20261031-141502123-front.svg]]
+![[sr-ink/sr-ink-20261031-141502123-front.svg]]
 ?
-![[pencards/pencard-20261031-141502123-back.svg]]
+![[sr-ink/sr-ink-20261031-141502123-back.svg]]
 
 The odds form of Bayes' rule has these parts:
 * ==prior odds==
@@ -139,8 +139,8 @@ describe("splitCardText", () => {
     test("Ink sides are found in split sides", async () => {
         const questions = await parseQuestions(noteText, DEFAULT_SETTINGS);
         const { front, back } = split(questions[6]);
-        expect(inkEmbedFileName(front)).toEqual("pencard-20261031-141502123-front.svg");
-        expect(inkEmbedFileName(back)).toEqual("pencard-20261031-141502123-back.svg");
+        expect(inkEmbedFileName(front)).toEqual("sr-ink-20261031-141502123-front.svg");
+        expect(inkEmbedFileName(back)).toEqual("sr-ink-20261031-141502123-back.svg");
     });
 });
 
@@ -243,11 +243,11 @@ A2
         const changed = composeCardText(
             question.questionType,
             front,
-            inkEmbed("pencards/pencard-x-back.svg"),
+            inkEmbed("sr-ink/sr-ink-x-back.svg"),
             DEFAULT_SETTINGS,
         );
         const [reparsed] = await parseQuestions(`#flashcards\n\n${changed}\n`, DEFAULT_SETTINGS);
-        expect(sides(reparsed)).toEqual({ front, back: "![[pencards/pencard-x-back.svg]]" });
+        expect(sides(reparsed)).toEqual({ front, back: "![[sr-ink/sr-ink-x-back.svg]]" });
     });
 });
 
@@ -270,56 +270,48 @@ describe("cardSeparator", () => {
 
 describe("inkEmbedFileName", () => {
     test("Wiki embeds", () => {
-        expect(inkEmbedFileName("![[pencard-a-front.svg]]")).toEqual("pencard-a-front.svg");
-        expect(inkEmbedFileName("![[pencards/pencard-a-back.svg]]")).toEqual("pencard-a-back.svg");
-        expect(inkEmbedFileName("  ![[deep/folder name/pencard-a-back.svg]]\n")).toEqual(
-            "pencard-a-back.svg",
+        expect(inkEmbedFileName("![[sr-ink-a-front.svg]]")).toEqual("sr-ink-a-front.svg");
+        expect(inkEmbedFileName("![[sr-ink/sr-ink-a-back.svg]]")).toEqual("sr-ink-a-back.svg");
+        expect(inkEmbedFileName("  ![[deep/folder name/sr-ink-a-back.svg]]\n")).toEqual(
+            "sr-ink-a-back.svg",
         );
-        expect(inkEmbedFileName("![[pencards/pencard-a-back.svg|300]]")).toEqual(
-            "pencard-a-back.svg",
-        );
-        expect(inkEmbedFileName("![[pencard-a-back.SVG]]")).toEqual("pencard-a-back.SVG");
+        expect(inkEmbedFileName("![[sr-ink/sr-ink-a-back.svg|300]]")).toEqual("sr-ink-a-back.svg");
+        expect(inkEmbedFileName("![[sr-ink-a-back.SVG]]")).toEqual("sr-ink-a-back.SVG");
     });
 
     test("Markdown embeds incl. url-encoded and bracketed paths", () => {
-        expect(inkEmbedFileName("![](pencards/pencard-a-front.svg)")).toEqual(
-            "pencard-a-front.svg",
+        expect(inkEmbedFileName("![](sr-ink/sr-ink-a-front.svg)")).toEqual("sr-ink-a-front.svg");
+        expect(inkEmbedFileName("![ink](my%20cards/sr-ink-a%20b-front.svg)")).toEqual(
+            "sr-ink-a b-front.svg",
         );
-        expect(inkEmbedFileName("![ink](my%20cards/pencard-a%20b-front.svg)")).toEqual(
-            "pencard-a b-front.svg",
-        );
-        expect(inkEmbedFileName("![](<my cards/pencard-a-back.svg>)")).toEqual(
-            "pencard-a-back.svg",
-        );
-        expect(inkEmbedFileName('![](pencards/pencard-a-back.svg "title")')).toEqual(
-            "pencard-a-back.svg",
+        expect(inkEmbedFileName("![](<my cards/sr-ink-a-back.svg>)")).toEqual("sr-ink-a-back.svg");
+        expect(inkEmbedFileName('![](sr-ink/sr-ink-a-back.svg "title")')).toEqual(
+            "sr-ink-a-back.svg",
         );
         // Not valid url-encoding: used as is
-        expect(inkEmbedFileName("![](pencard-100%-back.svg)")).toEqual("pencard-100%-back.svg");
+        expect(inkEmbedFileName("![](sr-ink-100%-back.svg)")).toEqual("sr-ink-100%-back.svg");
     });
 
     test("Anything but exactly one ink embed is text", () => {
         expect(inkEmbedFileName("")).toBeNull();
-        expect(inkEmbedFileName("pencard-a-front.svg")).toBeNull();
-        expect(inkEmbedFileName("[[pencard-a-front.svg]]")).toBeNull();
-        expect(inkEmbedFileName("[x](pencard-a-front.svg)")).toBeNull();
+        expect(inkEmbedFileName("sr-ink-a-front.svg")).toBeNull();
+        expect(inkEmbedFileName("[[sr-ink-a-front.svg]]")).toBeNull();
+        expect(inkEmbedFileName("[x](sr-ink-a-front.svg)")).toBeNull();
         expect(inkEmbedFileName("![[photo.svg]]")).toBeNull();
-        expect(inkEmbedFileName("![[pencard-a-front.png]]")).toBeNull();
-        expect(inkEmbedFileName("![[pencards/pencard-a-front.svg/other.svg]]")).toBeNull();
-        expect(inkEmbedFileName("Look: ![[pencard-a-front.svg]]")).toBeNull();
-        expect(inkEmbedFileName("![[pencard-a-front.svg]] and text")).toBeNull();
-        expect(inkEmbedFileName("![[pencard-a-front.svg]]\n![[pencard-b-front.svg]]")).toBeNull();
-        expect(inkEmbedFileName("![[pencard-a-front.svg]]![[pencard-b-front.svg]]")).toBeNull();
-        expect(inkEmbedFileName("![](pencard-a-front.svg) ![](pencard-b-front.svg)")).toBeNull();
+        expect(inkEmbedFileName("![[sr-ink-a-front.png]]")).toBeNull();
+        expect(inkEmbedFileName("![[sr-ink/sr-ink-a-front.svg/other.svg]]")).toBeNull();
+        expect(inkEmbedFileName("Look: ![[sr-ink-a-front.svg]]")).toBeNull();
+        expect(inkEmbedFileName("![[sr-ink-a-front.svg]] and text")).toBeNull();
+        expect(inkEmbedFileName("![[sr-ink-a-front.svg]]\n![[sr-ink-b-front.svg]]")).toBeNull();
+        expect(inkEmbedFileName("![[sr-ink-a-front.svg]]![[sr-ink-b-front.svg]]")).toBeNull();
+        expect(inkEmbedFileName("![](sr-ink-a-front.svg) ![](sr-ink-b-front.svg)")).toBeNull();
         expect(inkEmbedFileName("![](https://example.com/photo.svg)")).toBeNull();
     });
 
     test("inkEmbed creates a detectable wiki embed", () => {
-        expect(inkEmbed("pencards/pencard-x-front.svg")).toEqual(
-            "![[pencards/pencard-x-front.svg]]",
-        );
-        expect(inkEmbedFileName(inkEmbed("pencards/pencard-x-front.svg"))).toEqual(
-            "pencard-x-front.svg",
+        expect(inkEmbed("sr-ink/sr-ink-x-front.svg")).toEqual("![[sr-ink/sr-ink-x-front.svg]]");
+        expect(inkEmbedFileName(inkEmbed("sr-ink/sr-ink-x-front.svg"))).toEqual(
+            "sr-ink-x-front.svg",
         );
     });
 });
@@ -327,15 +319,15 @@ describe("inkEmbedFileName", () => {
 describe("inkEmbedFileNames", () => {
     test("finds ink embeds anywhere in the text, in both embed forms", () => {
         const text = [
-            "Label this: ![[pencards/pencard-a-front.svg|200]] and ![[diagram.png]]",
+            "Label this: ![[sr-ink/sr-ink-a-front.svg|200]] and ![[diagram.png]]",
             "?",
-            '![drawn](<my%20folder/pencard-b-back.svg>) or ![](pencard-c-back.svg "title")',
-            "[[pencard-not-embedded-front.svg]]",
+            '![drawn](<my%20folder/sr-ink-b-back.svg>) or ![](sr-ink-c-back.svg "title")',
+            "[[sr-ink-not-embedded-front.svg]]",
         ].join("\n");
         expect(inkEmbedFileNames(text)).toEqual([
-            "pencard-a-front.svg",
-            "pencard-b-back.svg",
-            "pencard-c-back.svg",
+            "sr-ink-a-front.svg",
+            "sr-ink-b-back.svg",
+            "sr-ink-c-back.svg",
         ]);
     });
 
@@ -434,23 +426,23 @@ describe("cardInsertion", () => {
 
 describe("inkEmbedPath", () => {
     test("Keeps the embed's folder, decoded", () => {
-        expect(inkEmbedPath("![[A/attachments/pencard-x-back.svg|300]]")).toEqual(
-            "A/attachments/pencard-x-back.svg",
+        expect(inkEmbedPath("![[A/attachments/sr-ink-x-back.svg|300]]")).toEqual(
+            "A/attachments/sr-ink-x-back.svg",
         );
-        expect(inkEmbedPath("![](my%20cards/pencard-x-back.svg)")).toEqual(
-            "my cards/pencard-x-back.svg",
+        expect(inkEmbedPath("![](my%20cards/sr-ink-x-back.svg)")).toEqual(
+            "my cards/sr-ink-x-back.svg",
         );
-        expect(inkEmbedPath("![[pencard-x-back.svg]]")).toEqual("pencard-x-back.svg");
+        expect(inkEmbedPath("![[sr-ink-x-back.svg]]")).toEqual("sr-ink-x-back.svg");
         expect(inkEmbedPath("![[A/photo.svg]]")).toBeNull();
     });
 });
 
 describe("isInkFileName", () => {
-    test("Any pencard-….svg, also one not following the naming scheme", () => {
-        expect(isInkFileName("pencard-20261031-1-front.svg")).toBe(true);
-        expect(isInkFileName("pencard-20261031-1-front 1.svg")).toBe(true);
-        expect(isInkFileName("pencard-sketch.SVG")).toBe(true);
-        expect(isInkFileName("pencard-sketch.png")).toBe(false);
+    test("Any sr-ink-….svg, also one not following the naming scheme", () => {
+        expect(isInkFileName("sr-ink-20261031-1-front.svg")).toBe(true);
+        expect(isInkFileName("sr-ink-20261031-1-front 1.svg")).toBe(true);
+        expect(isInkFileName("sr-ink-sketch.SVG")).toBe(true);
+        expect(isInkFileName("sr-ink-sketch.png")).toBe(false);
         expect(isInkFileName("photo.svg")).toBe(false);
     });
 });

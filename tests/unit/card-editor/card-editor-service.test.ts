@@ -271,14 +271,14 @@ const mixedNote = `#flashcards
 
 What is the powerhouse of the cell?
 ?
-![[pencards/pencard-20261031-141502123-back.svg]]
+![[sr-ink/sr-ink-20261031-141502123-back.svg]]
 `;
 
 const inkNote = `#flashcards
 
-![[pencards/pencard-abc-front.svg]]
+![[sr-ink/sr-ink-abc-front.svg]]
 ?
-![[pencards/pencard-abc-back.svg]]
+![[sr-ink/sr-ink-abc-back.svg]]
 `;
 
 describe("loading a card", () => {
@@ -299,7 +299,7 @@ describe("loading a card", () => {
     });
 
     test("opens a handwritten side as ink with the strokes and pen size of its SVG", async () => {
-        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0), stroke(40)]));
+        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0), stroke(40)]));
         const { opts } = await edit(await parseQuestion(mixedNote));
 
         expect(opts.initial.front.mode).toEqual("text");
@@ -308,18 +308,18 @@ describe("loading a card", () => {
         expect(opts.initial.back.penSize).toEqual(7);
         expect(opts.initial.back.strokes).toHaveLength(2);
         expect(vault.app.metadataCache.getFirstLinkpathDest).toHaveBeenCalledWith(
-            "pencards/pencard-20261031-141502123-back.svg",
+            "sr-ink/sr-ink-20261031-141502123-back.svg",
             NOTE_PATH,
         );
     });
 
     test("opens a side as text showing the embed when its SVG is missing or has no strokes", async () => {
-        const embed = "![[pencards/pencard-20261031-141502123-back.svg]]";
+        const embed = "![[sr-ink/sr-ink-20261031-141502123-back.svg]]";
         let { opts } = await edit(await parseQuestion(mixedNote));
         expect(opts.initial.back).toMatchObject({ mode: "text", text: embed });
 
         ModalMock.mockClear();
-        vault.add("pencards/pencard-20261031-141502123-back.svg", "<svg></svg>");
+        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", "<svg></svg>");
         ({ opts } = await edit(await parseQuestion(mixedNote)));
         expect(opts.initial.back).toMatchObject({ mode: "text", text: embed });
     });
@@ -394,7 +394,7 @@ describe("saving a card", () => {
     });
 
     test("cancel resolves to null and writes nothing", async () => {
-        vault.add("pencards/pencard-abc-front.svg", svgOf([stroke(0)]));
+        vault.add("sr-ink/sr-ink-abc-front.svg", svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(inkNote));
         session.opts.closed();
 
@@ -404,7 +404,7 @@ describe("saving a card", () => {
     });
 
     test("changed ink overwrites its SVG and keeps the note text", async () => {
-        const back = vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const question = await parseQuestion(mixedNote);
         const session = await edit(question);
 
@@ -422,8 +422,8 @@ describe("saving a card", () => {
     });
 
     test("unchanged ink is not rewritten", async () => {
-        vault.add("pencards/pencard-abc-front.svg", svgOf([stroke(0)]));
-        vault.add("pencards/pencard-abc-back.svg", svgOf([stroke(5)]));
+        vault.add("sr-ink/sr-ink-abc-front.svg", svgOf([stroke(0)]));
+        vault.add("sr-ink/sr-ink-abc-back.svg", svgOf([stroke(5)]));
         const session = await edit(await parseQuestion(inkNote));
         const { front, back } = session.opts.initial;
 
@@ -434,20 +434,20 @@ describe("saving a card", () => {
     });
 
     test("text → ink creates an SVG named after the card's other ink side", async () => {
-        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(mixedNote));
 
         const result = await save(session, {
             front: ink([stroke(3)]),
             back: unchanged(session.opts.initial.back),
         });
-        const path = "pencards/pencard-20261031-141502123-front.svg";
+        const path = "sr-ink/sr-ink-20261031-141502123-front.svg";
         expect(vault.content(path)).toBeDefined();
         expect(svgToStrokes(vault.content(path)).size).toEqual(5);
         expect(result.textChanged).toBe(true);
         expect(result.changedImages).toEqual([]);
         expect(result.text).toEqual(
-            `![[${path}]]\n?\n![[pencards/pencard-20261031-141502123-back.svg]]`,
+            `![[${path}]]\n?\n![[sr-ink/sr-ink-20261031-141502123-back.svg]]`,
         );
     });
 
@@ -463,7 +463,7 @@ describe("saving a card", () => {
         const back = parseInkFileName(inkEmbedFileName(backText));
         expect(front).toEqual({ stem: back.stem, side: "front" });
         expect(back.side).toEqual("back");
-        expect(frontText).toEqual(`![[ink/cards/pencard-${front.stem}-front.svg]]`);
+        expect(frontText).toEqual(`![[ink/cards/sr-ink-${front.stem}-front.svg]]`);
     });
 
     test("an empty image folder uses Obsidian's attachment folder", async () => {
@@ -475,16 +475,16 @@ describe("saving a card", () => {
             back: ink([stroke(2)]),
         });
         expect(vault.app.fileManager.getAvailablePathForAttachment).toHaveBeenCalledWith(
-            expect.stringMatching(/^pencard-.+-back\.svg$/),
+            expect.stringMatching(/^sr-ink-.+-back\.svg$/),
             NOTE_PATH,
         );
-        expect(result.text).toMatch(/\n!\[\[notes\/attachments\/pencard-.+-back\.svg\]\]$/);
+        expect(result.text).toMatch(/\n!\[\[notes\/attachments\/sr-ink-.+-back\.svg\]\]$/);
         expect(vault.app.vault.createFolder).not.toHaveBeenCalled();
     });
 
     test("text → ink doesn't reuse a stem whose file name is taken", async () => {
-        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
-        vault.add("old/pencard-20261031-141502123-front.svg", svgOf([stroke(0)]));
+        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        vault.add("old/sr-ink-20261031-141502123-front.svg", svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(mixedNote));
 
         const result = await save(session, {
@@ -492,13 +492,13 @@ describe("saving a card", () => {
             back: unchanged(session.opts.initial.back),
         });
         const name = inkEmbedFileName(result.text.split("\n?\n")[0]);
-        expect(name).toMatch(/^pencard-.+-front\.svg$/);
-        expect(name).not.toEqual("pencard-20261031-141502123-front.svg");
-        expect(vault.content("old/pencard-20261031-141502123-front.svg")).toBeDefined();
+        expect(name).toMatch(/^sr-ink-.+-front\.svg$/);
+        expect(name).not.toEqual("sr-ink-20261031-141502123-front.svg");
+        expect(vault.content("old/sr-ink-20261031-141502123-front.svg")).toBeDefined();
     });
 
     test("ink → text moves the SVG to the trash", async () => {
-        const back = vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(mixedNote));
 
         const result = await save(session, {
@@ -514,7 +514,7 @@ describe("saving a card", () => {
     });
 
     test("ink → text keeps an SVG that other cards or notes still embed", async () => {
-        const back = vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const links = vault.app.metadataCache.resolvedLinks;
         const toText = async () => {
             ModalMock.mockClear();
@@ -544,8 +544,8 @@ describe("saving a card", () => {
     });
 
     test("ink → text decides what to keep before the link index catches up with the write", async () => {
-        const front = vault.add("pencards/pencard-abc-front.svg", svgOf([stroke(0)]));
-        const back = vault.add("pencards/pencard-abc-back.svg", svgOf([stroke(5)]));
+        const front = vault.add("sr-ink/sr-ink-abc-front.svg", svgOf([stroke(0)]));
+        const back = vault.add("sr-ink/sr-ink-abc-back.svg", svgOf([stroke(5)]));
         const links = vault.app.metadataCache.resolvedLinks;
         // The back is also embedded in another note
         links[NOTE_PATH] = { [front.path]: 1, [back.path]: 1 };
@@ -565,7 +565,7 @@ describe("saving a card", () => {
     });
 
     test("ink → text keeps an SVG another card in the note embeds, with the index already updated", async () => {
-        const back = vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const links = vault.app.metadataCache.resolvedLinks;
         links[NOTE_PATH] = { [back.path]: 2 };
         writeText.mockImplementation(() => {
@@ -583,7 +583,7 @@ describe("saving a card", () => {
 
     test("a typed line that would split or end the card is rejected, nothing is written", async () => {
         settings.multilineCardEndMarker = "---";
-        const back = vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(mixedNote + "---\n"));
 
         await expect(
@@ -603,19 +603,19 @@ describe("saving a card", () => {
     });
 
     test("ink → text keeps an SVG the new text still embeds", async () => {
-        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(mixedNote));
         await save(session, {
             front: unchanged(session.opts.initial.front),
-            back: text("See ![[pencards/pencard-20261031-141502123-back.svg]] again"),
+            back: text("See ![[sr-ink/sr-ink-20261031-141502123-back.svg]] again"),
         });
         expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
     });
 
     test("the embed's folder decides which file is edited, not just its name", async () => {
-        const archived = vault.add("archive/pencard-abc-front.svg", svgOf([stroke(0)]));
-        const front = vault.add("pencards/pencard-abc-front.svg", svgOf([stroke(1), stroke(2)]));
-        vault.add("pencards/pencard-abc-back.svg", svgOf([stroke(5)]));
+        const archived = vault.add("archive/sr-ink-abc-front.svg", svgOf([stroke(0)]));
+        const front = vault.add("sr-ink/sr-ink-abc-front.svg", svgOf([stroke(1), stroke(2)]));
+        vault.add("sr-ink/sr-ink-abc-back.svg", svgOf([stroke(5)]));
         const session = await edit(await parseQuestion(inkNote));
         expect(session.opts.initial.front.strokes).toHaveLength(2);
 
@@ -628,7 +628,7 @@ describe("saving a card", () => {
     });
 
     test("the note write is the commit point: if it finds no card, everything is undone", async () => {
-        const back = vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const original = vault.content(back.path);
         writeText.mockResolvedValue(false);
 
@@ -654,36 +654,36 @@ describe("saving a card", () => {
     });
 
     test("a failed note write is undone the same way", async () => {
-        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         writeText.mockRejectedValue(new Error("disk full"));
         const session = await edit(await parseQuestion(mixedNote));
         await expect(
             session.opts.save({ front: ink([stroke(3)]), back: text("Mitochondria") }),
         ).rejects.toThrow("disk full");
-        expect([...vault.files.keys()]).toEqual(["pencards/pencard-20261031-141502123-back.svg"]);
+        expect([...vault.files.keys()]).toEqual(["sr-ink/sr-ink-20261031-141502123-back.svg"]);
     });
 
     test("a side failing after another side's file was created removes that file", async () => {
-        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         vault.app.vault.modify.mockRejectedValueOnce(new Error("disk full"));
         const session = await edit(await parseQuestion(mixedNote));
 
         await expect(
             session.opts.save({ front: ink([stroke(3)]), back: ink([stroke(4)]) }),
         ).rejects.toThrow("disk full");
-        expect([...vault.files.keys()]).toEqual(["pencards/pencard-20261031-141502123-back.svg"]);
+        expect([...vault.files.keys()]).toEqual(["sr-ink/sr-ink-20261031-141502123-back.svg"]);
         expect(writeText).not.toHaveBeenCalled();
 
         // A retry reuses the card's stem, as no file was left behind
         const result = await save(session, { front: ink([stroke(3)]), back: ink([stroke(4)]) });
-        expect(result.text.startsWith("![[pencards/pencard-20261031-141502123-front.svg]]")).toBe(
+        expect(result.text.startsWith("![[sr-ink/sr-ink-20261031-141502123-front.svg]]")).toBe(
             true,
         );
     });
 
     test("a failed write rejects the save and trashes nothing", async () => {
-        vault.add("pencards/pencard-abc-front.svg", svgOf([stroke(0)]));
-        vault.add("pencards/pencard-abc-back.svg", svgOf([stroke(5)]));
+        vault.add("sr-ink/sr-ink-abc-front.svg", svgOf([stroke(0)]));
+        vault.add("sr-ink/sr-ink-abc-back.svg", svgOf([stroke(5)]));
         vault.app.vault.modify.mockRejectedValueOnce(new Error("disk full"));
         const session = await edit(await parseQuestion(inkNote));
 
@@ -764,13 +764,13 @@ describe("adding cards", () => {
         const [front, back] = cardText.split("\n?\n");
         const frontName = inkEmbedFileName(front);
         const backName = inkEmbedFileName(back);
-        expect(front).toEqual(`![[pencards/${frontName}]]`);
+        expect(front).toEqual(`![[sr-ink/${frontName}]]`);
         expect(parseInkFileName(frontName)).toEqual({
             stem: parseInkFileName(backName).stem,
             side: "front",
         });
         expect(parseInkFileName(backName).side).toEqual("back");
-        expect(svgToStrokes(vault.content(`pencards/${backName}`)).strokes).toHaveLength(2);
+        expect(svgToStrokes(vault.content(`sr-ink/${backName}`)).strokes).toHaveLength(2);
     });
 
     test("a mixed card has a typed front and a handwritten back", async () => {
@@ -782,7 +782,7 @@ describe("adding cards", () => {
 
         const [front, back] = vault.content(NOTE_PATH).slice(NOTE.length).trim().split("\n?\n");
         expect(front).toEqual("What is the powerhouse of the cell?");
-        expect(inkEmbedFileName(back)).toMatch(/^pencard-.+-back\.svg$/);
+        expect(inkEmbedFileName(back)).toMatch(/^sr-ink-.+-back\.svg$/);
         expect(vault.app.vault.create).toHaveBeenCalledTimes(1);
     });
 
@@ -847,16 +847,16 @@ describe("editing from a note", () => {
 
 What is the powerhouse of the cell?
 ?
-![[pencards/pencard-20261031-141502123-back.svg]]
+![[sr-ink/sr-ink-20261031-141502123-back.svg]]
 <!--SR:!2026-10-27,3,250-->
 
-Draw a cell::![](pencards/pencard-xyz-back.svg)
+Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
 `;
     let noteFile: UnitTestSRFile;
 
     beforeEach(async () => {
-        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
-        vault.add("pencards/pencard-xyz-back.svg", svgOf([stroke(1)]));
+        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        vault.add("sr-ink/sr-ink-xyz-back.svg", svgOf([stroke(1)]));
         noteFile = new UnitTestSRFile(pencilNote, NOTE_PATH);
         const parser = createTestNoteQuestionParser(settings);
         const questions = await parser.createQuestionList(
@@ -879,21 +879,21 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
     test("finds the card whose text embeds the image, in either embed form", () => {
         const [first, second] = loadedNote.questionList;
         expect(
-            findQuestionWithInk(loadedNote.questionList, "pencard-20261031-141502123-back.svg"),
+            findQuestionWithInk(loadedNote.questionList, "sr-ink-20261031-141502123-back.svg"),
         ).toBe(first);
-        expect(findQuestionWithInk(loadedNote.questionList, "pencard-xyz-back.svg")).toBe(second);
-        expect(findQuestionWithInk(loadedNote.questionList, "pencard-other-back.svg")).toBeNull();
+        expect(findQuestionWithInk(loadedNote.questionList, "sr-ink-xyz-back.svg")).toBe(second);
+        expect(findQuestionWithInk(loadedNote.questionList, "sr-ink-other-back.svg")).toBeNull();
     });
 
     test("opens the whole card, a typed front and a handwritten back", async () => {
-        const { opts } = await tapPencil("pencard-20261031-141502123-back.svg");
+        const { opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
         expect(opts.initial.front.mode).toEqual("text");
         expect(opts.initial.front.text).toEqual("What is the powerhouse of the cell?");
         expect(opts.initial.back.mode).toEqual("ink");
     });
 
     test("a changed text is written to the note, keeping the schedule, and the vault is rescanned", async () => {
-        const { done, opts } = await tapPencil("pencard-20261031-141502123-back.svg");
+        const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
         await opts.save({
             front: text("What is the powerhouse of the eukaryotic cell?"),
             back: unchanged(opts.initial.back),
@@ -909,21 +909,21 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
 
     test("changed ink rewrites only the image, and its copies are reloaded", async () => {
         const refresh = jest.spyOn(service.inkFiles, "refresh");
-        const { done, opts } = await tapPencil("pencard-xyz-back.svg");
+        const { done, opts } = await tapPencil("sr-ink-xyz-back.svg");
         await opts.save({ front: unchanged(opts.initial.front), back: ink([stroke(7)]) });
         opts.closed();
         await done;
 
         expect(noteFile.content).toEqual(pencilNote);
         expect(sync).not.toHaveBeenCalled();
-        expect(refresh).toHaveBeenCalledWith([vault.byName("pencard-xyz-back.svg")]);
-        expect(svgToStrokes(vault.content("pencards/pencard-xyz-back.svg")).strokes).toEqual([
+        expect(refresh).toHaveBeenCalledWith([vault.byName("sr-ink-xyz-back.svg")]);
+        expect(svgToStrokes(vault.content("sr-ink/sr-ink-xyz-back.svg")).strokes).toEqual([
             stroke(7),
         ]);
     });
 
     test("a card changed in the note meanwhile: the save fails, the note and SVGs stay", async () => {
-        const { done, opts } = await tapPencil("pencard-20261031-141502123-back.svg");
+        const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
         const changed = pencilNote.replace("powerhouse", "power plant");
         noteFile.content = changed;
 
@@ -931,7 +931,7 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
             opts.save({ front: text("Typed"), back: text("Mitochondria") }),
         ).rejects.toThrow("The card's text in the note has changed");
         expect(noteFile.content).toEqual(changed);
-        expect(vault.content("pencards/pencard-20261031-141502123-back.svg")).toBeDefined();
+        expect(vault.content("sr-ink/sr-ink-20261031-141502123-back.svg")).toBeDefined();
         expect(loadedNote.questionList[0].questionText.actualQuestion).toContain("powerhouse");
 
         opts.closed();
@@ -956,7 +956,7 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
                 }),
             },
         ];
-        const { done, opts } = await tapPencil("pencard-xyz-back.svg");
+        const { done, opts } = await tapPencil("sr-ink-xyz-back.svg");
         expect(save).toHaveBeenCalledTimes(1);
         expect(other).not.toHaveBeenCalled();
         opts.closed();
@@ -964,7 +964,7 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
     });
 
     test("cancel writes nothing", async () => {
-        const { done, opts } = await tapPencil("pencard-xyz-back.svg");
+        const { done, opts } = await tapPencil("sr-ink-xyz-back.svg");
         opts.closed();
         await done;
         expect(noteFile.content).toEqual(pencilNote);
@@ -972,10 +972,10 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
     });
 
     test("a second tap while the editor is open is ignored", async () => {
-        const { done, opts } = await tapPencil("pencard-xyz-back.svg");
+        const { done, opts } = await tapPencil("sr-ink-xyz-back.svg");
         await service.editInNote(
             { path: NOTE_PATH, extension: "md" } as TFile,
-            "pencard-xyz-back.svg",
+            "sr-ink-xyz-back.svg",
         );
         expect(ModalMock).toHaveBeenCalledTimes(1);
         opts.closed();
@@ -983,14 +983,14 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
     });
 
     test("the editor's title is the note's name", async () => {
-        const { done, opts } = await tapPencil("pencard-xyz-back.svg");
+        const { done, opts } = await tapPencil("sr-ink-xyz-back.svg");
         expect(opts.title).toEqual("bio");
         opts.closed();
         await done;
     });
 
     test("a failed note write leaves the question matching the note, so a review can still be saved", async () => {
-        const { done, opts } = await tapPencil("pencard-20261031-141502123-back.svg");
+        const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
         const question = loadedNote.questionList[0];
         const before = question.questionText.original;
         jest.spyOn(noteFile, "write").mockRejectedValueOnce(new Error("disk full"));
@@ -1010,14 +1010,14 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
     test("an image in a Canvas text node gets a notice, the canvas is not read as a note", async () => {
         await service.editInNote(
             { path: "board.canvas", extension: "canvas" } as TFile,
-            "pencard-xyz-back.svg",
+            "sr-ink-xyz-back.svg",
         );
         expect(Notice).toHaveBeenCalledWith("This image is not part of any card in this note.");
         expect(ModalMock).not.toHaveBeenCalled();
     });
 
     test("an image that is not part of a card gets a notice", async () => {
-        const { done, opts } = await tapPencil("pencard-other-back.svg");
+        const { done, opts } = await tapPencil("sr-ink-other-back.svg");
         await done;
         expect(opts).toBeNull();
         expect(Notice).toHaveBeenCalledWith("This image is not part of any card in this note.");
@@ -1025,7 +1025,7 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
         loadedNote = null;
         await service.editInNote(
             { path: NOTE_PATH, extension: "md" } as TFile,
-            "pencard-xyz-back.svg",
+            "sr-ink-xyz-back.svg",
         );
         expect(Notice).toHaveBeenCalledTimes(2);
         expect(ModalMock).not.toHaveBeenCalled();

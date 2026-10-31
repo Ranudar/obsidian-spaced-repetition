@@ -90,7 +90,7 @@ describe("ink SVG", () => {
         expect(r.svg).toMatch(
             /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" width="\d+" height="\d+"/,
         );
-        expect(r.svg).toContain('<metadata id="pen-cards">{"v":1');
+        expect(r.svg).toContain('<metadata id="sr-ink">{"v":1');
         expect(r.svg).toContain('<g fill="#1f1f1f" stroke="none"><path d="M');
         expect(strokesToSvg([], { size: 5 })).toBeNull();
     });
@@ -122,15 +122,15 @@ describe("ink SVG", () => {
 
     test("Other SVGs have no strokes", () => {
         expect(svgToStrokes('<svg xmlns="http://www.w3.org/2000/svg"></svg>')).toBeNull();
-        expect(svgToStrokes('<svg><metadata id="pen-cards">{broken</metadata></svg>')).toBeNull();
+        expect(svgToStrokes('<svg><metadata id="sr-ink">{broken</metadata></svg>')).toBeNull();
         expect(
-            svgToStrokes('<svg><metadata id="pen-cards">{"v":2,"strokes":[]}</metadata></svg>'),
+            svgToStrokes('<svg><metadata id="sr-ink">{"v":2,"strokes":[]}</metadata></svg>'),
         ).toBeNull();
     });
 
     test("Metadata is escaped and unescaped", () => {
         const svg =
-            '<svg><metadata id="pen-cards">{"v":1,"size":4,"x":"&lt;&amp;&gt;","strokes":[]}</metadata></svg>';
+            '<svg><metadata id="sr-ink">{"v":1,"size":4,"x":"&lt;&amp;&gt;","strokes":[]}</metadata></svg>';
         expect(svgToStrokes(svg)).toEqual({ size: 4, strokes: [] });
     });
 });
@@ -138,15 +138,15 @@ describe("ink SVG", () => {
 describe("ink file names", () => {
     test("File name and stem", () => {
         expect(inkFileName("20261031-141502123", "back")).toEqual(
-            "pencard-20261031-141502123-back.svg",
+            "sr-ink-20261031-141502123-back.svg",
         );
-        expect(parseInkFileName("pencard-20261031-141502123-front.svg")).toEqual({
+        expect(parseInkFileName("sr-ink-20261031-141502123-front.svg")).toEqual({
             stem: "20261031-141502123",
             side: "front",
         });
-        expect(parseInkFileName("pencard-front.svg")).toBeNull();
-        expect(parseInkFileName("pencard-x-side.svg")).toBeNull();
-        expect(parseInkFileName("pencard-x-front.png")).toBeNull();
+        expect(parseInkFileName("sr-ink-front.svg")).toBeNull();
+        expect(parseInkFileName("sr-ink-x-side.svg")).toBeNull();
+        expect(parseInkFileName("sr-ink-x-front.png")).toBeNull();
     });
 
     test("Timestamp name", () => {

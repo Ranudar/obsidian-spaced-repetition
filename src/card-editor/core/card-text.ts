@@ -3,21 +3,21 @@ import { CardFrontBackUtil } from "src/data/data-structures/card/questions/quest
 import { SRSettings } from "src/data/settings";
 import { findLineIndexOfSearchStringIgnoringWs } from "src/utils/strings";
 
-/** Every handwritten side is stored as "pencard-<stem>-<front|back>.svg" (Pen Cards' scheme). */
-export const INK_FILE_PREFIX = "pencard-";
+/** Every handwritten side is stored as "sr-ink-<stem>-<front|back>.svg". */
+export const INK_FILE_PREFIX = "sr-ink-";
 
 const WIKI_EMBED_REGEX = /^!\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]$/;
 // ![alt](path), ![alt](<path with spaces>), optionally with a "title"
 const MARKDOWN_EMBED_REGEX = /^!\[[^\]]*\]\((?:<([^>]+)>|([^)\s]+))(?:\s+"[^"]*")?\)$/;
 
-/** Whether a file name is that of an ink image ("pencard-….svg"), also one renamed by hand */
+/** Whether a file name is that of an ink image ("sr-ink-….svg"), also one renamed by hand */
 export function isInkFileName(name: string): boolean {
     return name.startsWith(INK_FILE_PREFIX) && /\.svg$/i.test(name);
 }
 
 /**
  * Link path if the side is exactly one embed of an ink SVG
- * ("![[…/pencard-…svg]]" or "![](…/pencard-…svg)"), else null.
+ * ("![[…/sr-ink-…svg]]" or "![](…/sr-ink-…svg)"), else null.
  * Markdown links are url-decoded.
  */
 export function inkEmbedPath(sideText: string): string | null {
@@ -63,7 +63,7 @@ export function inkEmbedFileNames(text: string): string[] {
     return names;
 }
 
-/** The embed stored in the note for a handwritten side, e.g. "![[pencards/x.svg]]". */
+/** The embed stored in the note for a handwritten side, e.g. "![[sr-ink/x.svg]]". */
 export function inkEmbed(linkPath: string): string {
     return `![[${linkPath}]]`;
 }
