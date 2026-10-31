@@ -25,13 +25,17 @@ Already done on `main` (not part of this work): the edit dialog splits cards wit
 ┌──────────────────────────────────────────────────────────┐
 │ Biology › Cells (2 added)          ●  ⌫  ↶  🗑          ✕ │  header: note, counter, pen tools, close
 ├──────────────────────────────────────────────────────────┤
-│ Front                                        [⌨ | ✎]    │  per-side mode switch
+│ Front                                                    │
 │ ┌──────────────────────────────────────────────────────┐ │
-│ │  text area  — or —  ink field with guide lines       │ │
+│ │  text area (about 3 lines, scrolls inside)           │ │
+│ ├──────────────────────────────────────────────────────┤ │
+│ │  ink field with guide lines (rest of the side)       │ │
 │ └──────────────────────────────────────────────────────┘ │
-│ Back                                         [⌨ | ✎]    │
+│ Back                                                     │
 │ ┌──────────────────────────────────────────────────────┐ │
-│ │                                                      │ │
+│ │  text area                                           │ │
+│ ├──────────────────────────────────────────────────────┤ │
+│ │  ink field                                           │ │
 │ └──────────────────────────────────────────────────────┘ │
 ├──────────────────────────────────────────────────────────┤
 │ Discard                        Save & close   Save & next │  add mode
@@ -39,15 +43,15 @@ Already done on `main` (not part of this work): the edit dialog splits cards wit
 └──────────────────────────────────────────────────────────┘
 ```
 
-- **Mode switch per side**: segmented control "Text | Pen" (lucide `keyboard` / `pen-line`).
-  Only the user switches modes (no pen autodetection, see "Device test round 1").
-- **Pen tools** (pen size, eraser toggle, undo, clear side) are enabled only while a side is in pen
-  mode. The S Pen side button erases too. Only the pen draws, fingers are ignored (setting).
-- **Text mode** keeps the existing textarea behaviour: Tab inserts a tab, Ctrl/Cmd+Enter saves
-  (in add mode: Save & next).
-- **Switching a side that has content** keeps both drafts until saving; the mode visible at
-  save time wins. A dot badge on the inactive mode button marks a hidden draft (no hint line).
-- **Cloze cards**: one text field, no pen switch, no back side.
+- **Every side holds typed text and handwriting at once** (no input modes, see "Device test
+  round 1b"): a fixed-height text area on top, the ink field below it. Keyboard and fingers type,
+  the pen writes. No auto-detection, no switch.
+- **Pen tools** (pen size, eraser toggle, undo, clear side) are always enabled. The S Pen side
+  button erases too. Only the pen draws, fingers are ignored (setting). Clear side clears text and
+  ink of the active side, one undo step.
+- **Text area** keeps the existing textarea behaviour: Tab inserts a tab, Ctrl/Cmd+Enter saves
+  (in add mode: Save & next), native undo for typing.
+- **Cloze cards**: one text field, no ink field, no back side.
 - **Save is disabled** while a needed side is empty (front and back; front only for cloze).
 - Fullscreen on mobile, a large dialog on desktop. Exactly one close button, top right.
 
@@ -58,12 +62,12 @@ Already done on `main` (not part of this work): the edit dialog splits cards wit
 1. In a note, run **Spaced Repetition: Add card** (command palette, mobile pull-down, toolbar).
    The command is available when the active file is a Markdown note.
 2. If the note has no flashcard tag (SR's `flashcardTags`): a notice says so; the editor still opens.
-3. The editor opens in add mode. Both sides start in the **default input mode** setting (Text).
-4. Fill front and back, typing or writing; switch modes per side as needed.
+3. The editor opens in add mode. Both sides are empty.
+4. Fill front and back, typing, writing or both.
 5. **Save & next**: the card is inserted below the cursor, after the block the cursor is in
    (frontmatter, card with its schedule comment, code block, paragraph), or at the end of the note in
    reading view / when no editor is open; the fields clear, the counter goes up, focus returns to the
-   front side (text mode) or the front ink field. Consecutive cards are inserted one after the other.
+   front side's text area on desktop (on mobile nothing is focused, so no soft keyboard). Consecutive cards are inserted one after the other.
    **Save & close**: insert and close. **Discard**: first tap arms it ("Tap again to discard"),
    second tap within 3 s clears the card and closes.
 6. Closing with the back gesture / Esc / ✕ keeps the unsaved card as a draft (text and strokes);
@@ -86,11 +90,11 @@ The blank line before the end marker stops `---` from turning the line above int
 ### F2 Edit a card during review
 
 1. Tap **Edit** in the review toolbar (unchanged button).
-2. The same editor opens in edit mode with both sides of the current card: text sides as text,
-   handwritten sides as ink, loaded from the strokes stored in the SVG.
-3. Change anything, including switching a side between text and pen.
-4. **Save**: ink sides that changed overwrite their SVG; the card text is written only if it
-   changed (a side switched mode or typed text changed). The review window redraws the card with
+2. The same editor opens in edit mode with both sides of the current card: each side's typed text,
+   and its handwriting loaded from the strokes stored in the SVG.
+3. Change anything: type, write, erase.
+4. **Save**: changed handwriting overwrites its SVG; the card text is written only if it
+   changed (typed text changed, handwriting added to a side or erased from it). The review window redraws the card with
    the new content. The schedule stays.
 5. **Cancel** / ✕ / back gesture: nothing is written.
 
@@ -117,7 +121,7 @@ src/card-editor/
     ink-svg.ts                ← pen-cards/src/core/svg.ts     (strokes ⇄ SVG with embedded strokes, names)
     card-text.ts              split/compose card text, side ⇄ ink embed, insertion spacing
   ink-field.ts                ← pen-cards/src/ink-field.ts    (canvas, pen-only, eraser, guides)
-  side-editor.ts              one side: textarea or ink field, mode switch, both drafts
+  side-editor.ts              one side: textarea above ink field
   card-editor-modal.ts        the editor (add / edit mode); replaces modals/edit-modal.tsx
   card-editor-service.ts      entry points + all file/note writes
   ink-files.ts                create / overwrite / trash SVGs, resolve, refresh images
@@ -157,10 +161,16 @@ export function newCardBody(front: string, back: string, settings: SRSettings): 
 export function cardInsertion(before: string, body: string, after: string): string;
 export function inkEmbed(linkPath: string): string; // "![[sr-ink/x.svg]]"
 
+// card-text.ts (round 1b)
+export interface SideParts {
+    text: string;
+    inkEmbed: string | null;
+} // inkEmbed: the whole trailing embed
+export function splitSide(sideText: string): SideParts;
+export function joinSide(cardType: CardType, text: string, inkEmbed: string | null): string;
+
 // side-editor.ts
-export type InputMode = "text" | "ink";
 export interface SideState {
-    mode: InputMode;
     text: string;
     strokes: Stroke[];
     penSize: number;
@@ -178,12 +188,9 @@ export class SideEditor {
             onInkCommit(prev: Stroke[]): void;
         },
     );
-    readonly mode: InputMode;
-    setMode(m: InputMode): void;
     readonly state: SideState;
-    readonly isEmpty: boolean;
+    readonly isEmpty: boolean; // blank text and no strokes
     readonly inkChanged: boolean;
-    readonly replacesOther: boolean;
     setStrokes(s: Stroke[]): void;
     clear(): void;
     setEraser(on: boolean): void;
@@ -200,9 +207,10 @@ export interface CardEditorResult {
     front: SideResult;
     back: SideResult | null;
 }
-export type SideResult =
-    | { mode: "text"; text: string }
-    | { mode: "ink"; strokes: Stroke[]; penSize: number; changed: boolean };
+export type SideResult = {
+    text: string;
+    ink: { strokes: Stroke[]; penSize: number; changed: boolean } | null; // null: no strokes
+};
 export type CardEditorOptions =
     | {
           kind: "add";
@@ -246,14 +254,16 @@ export class CardEditorService {
 - **One modal, two modes.** The modal collects side states; the service does all writes.
 - **Splitting** uses `CardFrontBackUtil.expand` (already used by the current edit dialog on main).
   `composeCardText` takes over the newline rules from `FlashcardEditModal.save()`.
-- **A side is ink if, and only if,** its trimmed text is exactly one embed of a `sr-ink-*.svg`
-  file. Everything else is text. No new syntax. Ink without stored strokes (unreadable SVG) opens as
-  text showing the embed, so nothing is lost.
+- **A side's ink** is one embed of a `sr-ink-*.svg` file at the very end of the side (after the
+  start of the side, whitespace or a newline); everything before it is the side's text. No new
+  syntax. Ink without stored strokes (unreadable SVG) stays in the text, showing the embed, so
+  nothing is lost. (Until round 1b: a side was ink only if it was exactly one embed.)
 - **Saving in edit mode**
-    - ink → ink, strokes changed: overwrite the same SVG (note text unchanged). Unchanged: no write.
-    - text → ink: new SVG `sr-ink-<stem>-<side>.svg`; `<stem>` is the card's other ink side's stem
+    - ink kept, strokes changed: overwrite the same SVG (embed unchanged). Unchanged: no write.
+    - ink added: new SVG `sr-ink-<stem>-<side>.svg`; `<stem>` is the card's other ink side's stem
       if there is one, else a new timestamp.
-    - ink → text: the SVG is moved to trash with `app.fileManager.trashFile`.
+    - ink erased to nothing: the embed is removed, the SVG moved to trash with
+      `app.fileManager.trashFile`.
     - Text changed → the caller's `writeText` writes the question (`updateCurrentQuestionTextAndCards`
       in review, `question.writeQuestion()` in the note), which keeps the `<!--SR:…-->` schedule
       comment. Text unchanged → no note write.
@@ -295,8 +305,7 @@ Nothing changes in the parser, scheduling or data store.
 
 | Key                      | Setting                                    | Default    |
 | ------------------------ | ------------------------------------------ | ---------- |
-| `cardEditorDefaultMode`  | Default input mode (text / pen)            | `"text"`   |
-| `cardEditorPenOnly`      | Ignore fingers in pen mode                 | `true`     |
+| `cardEditorPenOnly`      | Ignore fingers on the ink fields           | `true`     |
 | `cardEditorImageFolder`  | Image folder                               | `"sr-ink"` |
 | `cardEditorGuide`        | Guide lines (lined / dotted / grid / none) | `"lined"`  |
 | `cardEditorGuideSpacing` | Line spacing (px, 24–80)                   | `44`       |
@@ -384,13 +393,38 @@ Feedback from the S22 Ultra (Obsidian Android, dark mode, S Pen) and what change
    gap (its tap area stays in the gap), so it never sits on or right next to the ink, slightly translucent until pressed; tighter image box padding. Taps still
    don't reach CodeMirror.
 7. **Mode switch**: a clear "Text | Pen" segmented control with Obsidian's lucide icons
-   (`keyboard`, `pen-line`) and accessible labels, same height as before.
+   (`keyboard`, `pen-line`) and accessible labels, same height as before. (Removed in round 1b.)
+
+## Device test round 1b: combined sides
+
+Switching a side between Text and Pen was awkward once it had content. Input modes are gone:
+
+1. **Every side holds text and handwriting**: a fixed-height text area (about 3 lines, scrolls
+   inside, placeholder, RTL) on top, the ink field filling the rest of the side below it. Both
+   sides have the same fixed geometry; nothing shifts while typing or writing. No mode switch, no
+   dot badges, no hints, no auto-detection.
+2. **Pen tools always enabled**. Clear side clears text and ink of the active side; one undo step
+   restores both. Undo stays ink-focused across sides; typing keeps the native textarea undo.
+3. **Focus**: on mobile no text area is focused on open or after Save & next (no soft keyboard); on
+   desktop the front text area is.
+4. **Storage**: a side is its typed text, optionally followed by exactly one `sr-ink` embed at the
+   very end: multi-line cards `text + "\n" + embed`, single-line cards (`::`, `:::`)
+   `text + " " + embed` on the same line; the embed alone without text, the text alone without
+   ink (`joinSide` / `splitSide` in `card-text.ts`). Existing ink-only and text-only sides read
+   exactly as before. The composed card still goes through the parser check (`misreadSide`).
+5. **Saving**: per side, ink kept → SVG overwritten if changed; ink added → new SVG (stem rules as
+   before); ink erased to nothing → embed removed, SVG trashed with the existing safety checks. A
+   side whose typed text and embed are unchanged is written back exactly as it was in the note.
+   A side with blank text and no strokes is empty: save stays disabled, and the service refuses it.
+6. **Cloze cards**: text area only; a trailing embed in a cloze stays part of its text.
+7. **Setting removed**: `cardEditorDefaultMode` (type `CardEditorInputMode`, settings UI, strings
+   `CARD_EDITOR_DEFAULT_MODE*`, `CARD_EDITOR_MODE_TEXT` / `_INK`). `upgradeSettings` deletes the
+   key from data saved by earlier builds.
 
 ## Deviations from this plan
 
-- **Settings**: the default mode is stored as `"text" | "ink"` (the dropdown shows "Text" / "Pen"),
-  so it matches `InputMode`. The "Card editor" section is a group on the existing Flashcards
-  settings page.
+- **Settings**: the "Card editor" section is a group on the existing Flashcards settings page.
+  (The default mode setting was removed in round 1b.)
 - **Ink field**: guides are drawn with CSS (classes `sr-ink-guide-*`, variable
   `--sr-ink-guide-spacing`) instead of on the canvas. The field label is a placeholder inside the
   field; the side label sits in the side header.
@@ -417,15 +451,14 @@ Feedback from the S22 Ultra (Obsidian Android, dark mode, S Pen) and what change
 - **Note edit**: editors showing the note are saved before the card is read, so unsaved typing is
   not mistaken for a changed card. Images are refreshed in every window, incl. popouts.
 - **Theme change** while the editor is open redraws the ink in the new color (`css-change`).
-- **Shortcuts**: Ctrl/Cmd+Z undoes ink only outside a text area; undo switches the affected side back
-  to ink. Clear side acts on the side last touched or focused.
+- **Shortcuts**: Ctrl/Cmd+Z undoes ink only outside a text area. Clear side acts on the side last touched or focused.
 - **Embeds**: always the wiki form `![[…]]`, regardless of Obsidian's link-format setting. If a
   sibling stem's file name already exists, a new timestamp stem is used, so no file is overwritten.
 - **Image refresh** uses the query parameter `sr-ink` (Pen Cards used `pc`). Images that Obsidian adds
   after rendering are caught by a short-lived MutationObserver; live-preview editors are re-checked on
   `layout-change` and `active-leaf-change`.
 - **Discard** arms first on an empty card too, as in F1; nothing is lost either way.
-- **Ink → text** trashes the SVG only when no other note or card links to it (Obsidian's
+- **Erased ink** (formerly ink → text) trashes the SVG only when no other note or card links to it (Obsidian's
   `resolvedLinks`, with this card's links counted by the file they resolve to, not by name), the
   new text has no link resolving to it, and no `.md` or `.canvas` file refers to it when read
   (`InkFiles.isReferenced`: a resolving link, or its name in other text such as `<img>`). A read
@@ -443,13 +476,13 @@ Feedback from the S22 Ultra (Obsidian Android, dark mode, S Pen) and what change
   where it is a whole block (blank lines around it); otherwise the next card goes to the note's end.
 - **Editing indentation**: an edited text side of an existing card keeps its leading indentation;
   only leading blank lines and trailing whitespace are removed (new cards are fully trimmed).
-- **While saving** the sides are locked (read-only, ink and mode switches ignored, Undo / Clear
+- **While saving** the sides are locked (read-only, ink ignored, Undo / Clear
   disabled) so the saved content is what Save & next clears or Save & close closes over.
 - **Unload**: the service closes open editors on plugin unload; later saves are refused with a
   notice and nothing more is written. Unreadable or malformed ink metadata opens the side as text.
 - **Pen only** also guards the editor's buttons: a finger press while the pen is down or within
   500 ms of pen use is taken for the palm and ignored.
-- **Mobile focus**: on mobile a text side is not focused on open (no soft keyboard for pen users).
+- **Mobile focus**: on mobile no text area is focused on open (no soft keyboard for pen users).
 - **Pencil**: a press that moves more than 10 px is not a tap. Canvas text nodes get a pencil, but
   `editInNote` only edits `.md` notes (notice otherwise).
 - **Flashcard tag notice**: tag matching reuses SR's `SettingsUtil.isFlashcardTag` (Pen Cards'
@@ -464,5 +497,5 @@ Feedback from the S22 Ultra (Obsidian Android, dark mode, S Pen) and what change
 
 - Command name: **Add card**.
 - Add card creates **multi-line basic** cards only; reversed can come later.
-- Default input mode is a setting (Text); only the user switches a side (pen autodetection was
-  removed after device test round 1).
+- No input modes: every side holds text and handwriting (round 1b); the default input mode setting
+  and pen autodetection (round 1) were removed.

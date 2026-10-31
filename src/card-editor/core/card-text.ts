@@ -104,6 +104,60 @@ export function inkEmbed(linkPath: string): string {
     return `![[${linkPath}]]`;
 }
 
+// An embed (in either form, see above) at the very end of a side, after its start or whitespace
+const TRAILING_EMBED_REGEX =
+    /(?:^|\s)(!\[\[[^\]]+\]\]|!\[[^\]]*\]\((?:<[^>]+>|[^)\s]+)(?:\s+"[^"]*")?\))$/;
+
+/** A side as stored in the note: typed text, optionally followed by one ink embed */
+export interface SideParts {
+    /** The typed text; "" for a side with only ink */
+    text: string;
+    /** The full trailing embed markup, e.g. "![[sr-ink/x.svg]]"; null without ink */
+    inkEmbed: string | null;
+}
+
+/**
+ * Typed text and ink of a side: its ink is an ink embed (see inkEmbedPath) at the very end, after
+ * the start of the side, whitespace or a newline; the text is everything before it, without
+ * trailing whitespace. A side without such an embed is all text, kept as is.
+ */
+export function splitSide(sideText: string): SideParts {
+    const trimmed = sideText.trimEnd();
+    const match = trimmed.match(TRAILING_EMBED_REGEX);
+    if (!match || inkEmbedPath(match[1]) === null) return { text: sideText, inkEmbed: null };
+    const embedStart = trimmed.length - match[1].length;
+    return { text: trimmed.substring(0, embedStart).trimEnd(), inkEmbed: match[1] };
+}
+
+/**
+ * Inverse of splitSide: the text, then the ink embed on a line of its own (multi-line and cloze
+ * cards) or after a space (single-line cards, which must stay on one line).
+ * Only the embed when the text is blank, only the text without ink.
+ * A code block the text leaves open is closed first, else the embed would show as code.
+ */
+export function joinSide(cardType: CardType, text: string, inkEmbed: string | null): string {
+    if (inkEmbed === null) return text;
+    if (text.trim() === "") return inkEmbed;
+    if (!isMultiLine(cardType) && cardType !== CardType.Cloze)
+        return text.trimEnd() + " " + inkEmbed;
+    const fence = openFence(text.trimEnd());
+    return text.trimEnd() + (fence !== null ? "\n" + fence : "") + "\n" + inkEmbed;
+}
+
+/** The fence of a code block still open at the end of the text, else null */
+function openFence(text: string): string | null {
+    let fence: string | null = null;
+    for (const line of text.split("\n")) {
+        if (fence !== null) {
+            if (line.startsWith(fence)) fence = null;
+            continue;
+        }
+        const open = line.match(/^(`{3,}|~{3,})/);
+        if (open) fence = open[1];
+    }
+    return fence;
+}
+
 /** The separator between front and back of a card type; null for cloze cards. */
 export function cardSeparator(cardType: CardType, settings: SRSettings): string | null {
     switch (cardType) {

@@ -1,10 +1,10 @@
 # Card Editor
 
 The card editor lets you add and edit flashcards without typing the card syntax yourself.
-Each side of a card (front and back) can be **typed** on a keyboard or **written by hand** with a pen,
-and you can switch a side between the two at any time.
+Each side of a card (front and back) can hold **typed** text and **handwriting** at the same time:
+type on the keyboard and write with the pen, no switching needed.
 
-Handwritten sides are saved as SVG images in your vault. The image also stores the original pen
+Handwriting is saved as SVG images in your vault. The image also stores the original pen
 strokes, so you can open a handwritten card later and keep writing, erase or undo.
 
 ## Adding Cards
@@ -12,7 +12,7 @@ strokes, so you can open a handwritten card later and keep writing, erase or und
 1. Open the note the cards should go into.
 2. Run the command **Spaced Repetition: Add card**, from the command palette, the mobile toolbar or
    the mobile pull-down menu. The command is available whenever the active file is a Markdown note.
-3. Fill in the front and the back, typing or writing by hand.
+3. Fill in the front and the back, typing, writing by hand or both.
 4. Choose how to continue:
 
 | Button       | What it does                                                                                                                          |
@@ -37,14 +37,19 @@ added in this session (for example "2 added").
 - Otherwise (reading view, or no editor open), the card is added at the end of the note.
 
 The editor always creates [multi-line basic](q-and-a-cards.md#multi-line-basic) cards, using the
-separator from your [settings](../user-options.md#flashcard-separators). A handwritten side is stored
-as a single image embed:
+separator from your [settings](../user-options.md#flashcard-separators). A side is stored as its
+typed text, followed by one image embed of its handwriting on the next line. A side with only
+handwriting is just the embed, a side with only text has no embed:
 
 ```markdown
 What is the powerhouse of the cell?
 ?
+Mitochondria, drawn:
 ![[sr-ink/sr-ink-20261031-141502123-back.svg]]
 ```
+
+In [single-line cards](q-and-a-cards.md#single-line-basic) (`::` and `:::`) the embed follows the text on the same
+line, after a space: `Draw a cell::A cell ![[sr-ink/sr-ink-20261031-141502123-back.svg]]`.
 
 If you have set `Characters denoting the end of clozes and multiline flashcards`, the editor adds it
 after the card, with a blank line before it so the line above does not turn into a heading.
@@ -68,35 +73,30 @@ empty card leave no draft behind. Drafts are kept until Obsidian is closed or th
 
 ## Typing and Writing by Hand
 
-Each side has a switch with two parts: **Text** (keyboard icon) and **Pen** (pen icon). Tap one to
-choose how you fill that side.
+Each side has a text field at the top (about three lines; longer text scrolls inside it) and a
+writing field filling the rest of the side below it. Type in the text field with the keyboard or a
+finger, write in the writing field with the pen. Both are always there, so nothing moves while you
+type or write, and nothing needs to be switched.
 
-- **Default input mode**: new cards start in the mode set in the settings (text by default).
-- **You choose the mode**: the editor never switches a side on its own. Touching a typed side with
-  the pen or typing on a handwritten side does not change the mode; tap the switch instead.
-- **Nothing moves**: the text field and the writing field have exactly the same size, so switching
-  only swaps what is inside. On phones and tablets, switching to text does not open the soft
-  keyboard; tap the text field when you want to type. The editor also keeps its height while the
-  soft keyboard is open (it scrolls instead), so the sides don't jump. On desktop, choosing Text
-  puts the cursor in the text field.
-- **Both drafts are kept**: if a side has text and you switch to handwriting (or the other way
-  round), the other draft is kept until you save. A small dot on the other mode's button shows that
-  it still holds a draft. The mode that is visible when you save wins; the other draft is dropped.
+- **Nothing moves**: both sides have the same fixed layout. The editor also keeps its height while
+  the soft keyboard is open (it scrolls instead), so the sides don't jump.
+- **Keyboard**: on phones and tablets, no text field is focused when the editor opens (or after
+  **Save & next**), so the soft keyboard only appears once you tap a text field. Writing in a
+  writing field closes it again. On desktop the cursor starts in the front's text field.
 
-In a typed side, `Tab` inserts a tab character, like the old edit dialog. Long text scrolls with a
-finger as usual.
+In the text field, `Tab` inserts a tab character, like the old edit dialog, and `Ctrl/Cmd + Z`
+undoes typing as usual. Right-to-left text is supported.
 
 ### Pen Tools
 
-The header holds the pen tools. They always stay in the same place and are only enabled while at
-least one side is in handwriting mode.
+The header holds the pen tools. They always stay in the same place and are always enabled.
 
 | Tool       | What it does                                                                                                                                                                                                              |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pen size   | Switches between thin, medium and thick (0.6×, 1× and 1.6× the **Pen thickness** setting). The dot in the icon shows the current size. Applies to new strokes until the editor closes; existing strokes keep their width. |
 | Eraser     | Erases only the ink under the eraser, like a real eraser: a stroke you cross is cut, and the rest of it stays. Holding the pen's side button, or using its eraser end, erases too.                                        |
-| Undo       | Undoes the last pen change, on either side. A whole eraser movement is one step. `Ctrl/Cmd + Z` does the same outside a text field.                                                                                       |
-| Clear side | Removes all strokes from the side you last used. Undo brings them back.                                                                                                                                                   |
+| Undo       | Undoes the last pen change, on either side. A whole eraser movement is one step. `Ctrl/Cmd + Z` does the same outside a text field (writing moves you out of it).                                                         |
+| Clear side | Removes the text and all strokes from the side you last used. Undo brings both back in one step.                                                                                                                          |
 
 While erasing, a circle shows the eraser's size and position. The eraser grows with the pen size.
 
@@ -104,9 +104,6 @@ With **Pen only** on (the default), fingers are ignored on the writing fields, s
 on the screen. A finger touching one of the editor's buttons while the pen is writing, or just
 after, is ignored too, so a resting palm doesn't save or discard the card. Turn it off to write with
 a finger or a mouse.
-
-On phones and tablets, a typed side is not focused when the editor opens, so the soft keyboard only
-appears once you tap a text field.
 
 On phones the editor fills the screen; on desktop and tablets it opens as a large dialog. In dark
 mode, handwriting is shown in light ink. The images themselves keep dark ink on a transparent
@@ -117,17 +114,17 @@ background, so they look right in both themes.
 ### During Review
 
 Tap **Edit** in the review toolbar (see [Reviewing](reviewing.md#operation)). The card opens in the
-same editor, with the note's name in the header and both sides: typed sides as text, handwritten sides with their strokes, ready to
-change. You can also switch a side between typing and handwriting here.
+same editor, with the note's name in the header and both sides, each with its typed text and its
+handwriting, ready to change.
 
 - **Save** writes the changes, keeps the card's review schedule and shows the updated card.
 - **Cancel**, `Esc`, the close button or the back gesture closes without writing anything.
 
-The note is only written when the card text changed, for example when you edited typed text or
-switched a side between text and handwriting. If you only changed the handwriting, just the image is
-rewritten.
+The note is only written when the card text changed, for example when you edited typed text, wrote
+on a side that had no handwriting yet or erased all of a side's handwriting. If you only changed
+existing handwriting, just the image is rewritten.
 
-[Cloze cards](cloze-cards.md) open as a single text field without a pen switch.
+[Cloze cards](cloze-cards.md) open as a single text field without a writing field.
 
 ### From a Note
 
@@ -145,28 +142,28 @@ edited from there.
 
 ### What Happens to the Images
 
-| Change                             | Result                                                                         |
-| ---------------------------------- | ------------------------------------------------------------------------------ |
-| Handwriting changed                | The same SVG file is overwritten. The note text stays the same.                |
-| Handwriting unchanged              | Nothing is written.                                                            |
-| Typed side switched to handwriting | A new SVG file is created, named like the card's other image if it has one.    |
-| Handwritten side switched to text  | The old SVG file is moved to the trash, unless another note or card embeds it. |
+| Change                           | Result                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Handwriting changed              | The same SVG file is overwritten. The embed stays where it is.                                   |
+| Handwriting unchanged            | Nothing is written.                                                                              |
+| Handwriting added to a side      | A new SVG file is created, named like the card's other image if it has one.                      |
+| All handwriting of a side erased | The embed is removed and the SVG file moved to the trash, unless another note or card embeds it. |
 
-A side only counts as handwritten if its text is exactly one embed of a `sr-ink-….svg` image.
-Anything else, including an image whose strokes can't be read, opens as text, so nothing gets lost.
+A side's handwriting is the embed of a `sr-ink-….svg` image at the very end of the side; everything
+before it is the side's text. An embed anywhere else, and an image whose strokes can't be read, stay
+part of the text, so nothing gets lost.
 
 ## Settings
 
 The settings are in the **Card editor** section of the flashcard settings.
 
-| Setting            | Default  | Description                                                                                           |
-| ------------------ | -------- | ----------------------------------------------------------------------------------------------------- |
-| Default input mode | Text     | How the front and back of a new card start: text or pen.                                              |
-| Pen only           | On       | Ignore finger touches on the writing fields. Turn off to write with a finger or mouse.                |
-| Image folder       | `sr-ink` | Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.           |
-| Guide lines        | Lined    | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image. |
-| Line spacing       | 44       | Distance between guide lines, in pixels (24–80).                                                      |
-| Pen thickness      | 2.5      | Stroke width for new handwriting (1–8). Existing images keep the thickness they were written with.    |
+| Setting       | Default  | Description                                                                                           |
+| ------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| Pen only      | On       | Ignore finger touches on the writing fields. Turn off to write with a finger or mouse.                |
+| Image folder  | `sr-ink` | Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.           |
+| Guide lines   | Lined    | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image. |
+| Line spacing  | 44       | Distance between guide lines, in pixels (24–80).                                                      |
+| Pen thickness | 2.5      | Stroke width for new handwriting (1–8). Existing images keep the thickness they were written with.    |
 
 The card separator and the end marker are Spaced Repetition's own
 [flashcard separator settings](../user-options.md#flashcard-separators).

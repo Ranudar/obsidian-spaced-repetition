@@ -65,7 +65,7 @@ export class InkField {
         private opts: InkFieldOptions,
     ) {
         this.el = parent.createDiv({ cls: "sr-ink-field" });
-        // Focusable, so switching a side to pen can move the focus off the text area
+        // Focusable, so writing in it can move the focus off the text area (see SideEditor)
         this.el.setAttr("tabindex", 0);
         this.el.createDiv({ cls: "sr-ink-placeholder", text: opts.placeholder });
         this.canvas = this.el.createEl("canvas", { cls: "sr-ink-canvas" });
@@ -323,7 +323,7 @@ export class InkField {
     private resize() {
         const dpr = activeWindow.devicePixelRatio || 1;
         const { width, height } = this.el.getBoundingClientRect();
-        // Hidden (e.g. the side is in text mode): keep the old bitmap, nothing to draw
+        // Hidden (e.g. not laid out yet): keep the old bitmap, nothing to draw
         if (width === 0 || height === 0) return;
         const w = Math.max(1, Math.round(width * dpr));
         const h = Math.max(1, Math.round(height * dpr));

@@ -1,7 +1,7 @@
 import { Setting, SettingGroup } from "obsidian";
 
 import { DataManager } from "src/data/data-manager";
-import { CardEditorGuide, CardEditorInputMode, DEFAULT_SETTINGS } from "src/data/settings";
+import { CardEditorGuide, DEFAULT_SETTINGS } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
 import { t, tHTML } from "src/lang/helpers";
 import SRPlugin from "src/main";
@@ -528,24 +528,6 @@ export class FlashcardsPage extends SettingsPage {
 
         new SettingGroup(this.containerEl)
             .setHeading(t("GROUP_CARD_EDITOR"))
-            .addSetting((setting: Setting) => {
-                setting
-                    .setName(t("CARD_EDITOR_DEFAULT_MODE"))
-                    .setDesc(t("CARD_EDITOR_DEFAULT_MODE_DESC"))
-                    .addDropdown((dropdown) =>
-                        dropdown
-                            .addOptions({
-                                text: t("CARD_EDITOR_MODE_TEXT"),
-                                ink: t("CARD_EDITOR_MODE_INK"),
-                            })
-                            .setValue(this.settingsManager.settings.cardEditorDefaultMode)
-                            .onChange(async (value) => {
-                                this.settingsManager.settings.cardEditorDefaultMode =
-                                    value as CardEditorInputMode;
-                                await this.settingsManager.save();
-                            }),
-                    );
-            })
             .addSetting((setting: Setting) => {
                 setting
                     .setName(t("CARD_EDITOR_PEN_ONLY"))

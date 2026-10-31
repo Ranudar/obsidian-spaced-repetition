@@ -208,109 +208,80 @@ img[src*="sr-ink-"] {
 .sr-card-editor-side-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--size-4-2);
+  padding-inline-start: var(--size-2-1);
 }
 .sr-card-editor-side-label {
-  font-size: var(--font-ui-small);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.sr-card-editor-mode-switch {
-  display: inline-flex;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-  overflow: hidden;
-}
-.sr-card-editor-mode-switch .sr-card-editor-mode-button {
-  position: relative;
-  min-width: 44px;
-  height: 32px;
-  padding: 0 var(--size-4-3);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--size-4-1);
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  background-color: transparent;
-  color: var(--text-muted);
-  font-size: var(--font-ui-small);
-  white-space: nowrap;
-}
-.sr-card-editor-mode-switch
-  .sr-card-editor-mode-button
-  + .sr-card-editor-mode-button {
-  border-inline-start: 1px solid var(--background-modifier-border);
-}
-.sr-card-editor-mode-switch .sr-card-editor-mode-button.is-active {
-  background-color: var(--interactive-accent);
-  color: var(--text-on-accent);
-}
-.sr-card-editor-mode-icon {
-  display: inline-flex;
-}
-.sr-card-editor-mode-icon svg {
-  width: 16px;
-  height: 16px;
-}
-.sr-card-editor-mode-dot {
-  position: absolute;
-  top: 4px;
-  inset-inline-end: 4px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background-color: var(--text-warning);
-  pointer-events: none;
-  display: none;
-}
-.sr-card-editor-mode-button.has-draft .sr-card-editor-mode-dot {
-  display: block;
-}
 .sr-card-editor-side-body {
+  --sr-card-editor-text-lines: 3;
   position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
-}
-.sr-card-editor-side-body > .sr-card-editor-text,
-.sr-card-editor-side-body > .sr-card-editor-ink {
-  flex: 1;
-  min-width: 0;
-  min-height: 80px;
-}
-.sr-card-editor-side-body > .sr-card-editor-text,
-.sr-card-editor-ink > .sr-ink-field {
+  flex-direction: column;
   box-sizing: border-box;
-  margin: 0;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-l);
   background-color: var(--background-primary);
-  box-shadow: none;
+  overflow: hidden;
+}
+.sr-card-editor-side-body:focus-within {
+  border-color: var(--interactive-accent);
 }
 .sr-card-editor-side-body > .sr-card-editor-text {
+  flex: 0 1 auto;
+  box-sizing: border-box;
   width: 100%;
-  height: auto;
-  resize: none;
+  height: calc(
+    var(--sr-card-editor-text-lines) * var(--font-text-size) *
+      var(--line-height-normal) + 2 * var(--size-4-2)
+  );
+  min-height: calc(
+    var(--font-text-size) * var(--line-height-normal) + 2 * var(--size-4-2)
+  );
+  max-height: none;
+  margin: 0;
   padding: var(--size-4-2) var(--size-4-3);
+  resize: none;
+  overflow-y: auto;
+  border: none;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
   font-size: var(--font-text-size);
   line-height: var(--line-height-normal);
   color: var(--text-normal);
 }
 .sr-card-editor-side-body > .sr-card-editor-text:focus,
-.sr-card-editor-ink > .sr-ink-field:focus-visible {
-  border-color: var(--interactive-accent);
+.sr-card-editor-side-body > .sr-card-editor-text:focus-visible {
   box-shadow: none;
   outline: none;
 }
 .sr-card-editor-ink {
+  flex: 1;
+  min-height: 60px;
   display: flex;
+  border-top: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary-alt);
 }
-.sr-card-editor-side-body > .sr-is-hidden {
-  display: none;
+.sr-card-editor-ink > .sr-ink-field {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+.sr-card-editor-side.is-text-only
+  .sr-card-editor-side-body
+  > .sr-card-editor-text {
+  flex: 1;
+  height: auto;
 }
 .sr-ink-field {
   --sr-ink-guide-spacing: 44px;

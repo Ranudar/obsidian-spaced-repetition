@@ -13,10 +13,11 @@ export interface CardEditorSides {
     back: SideState | null;
 }
 
-/** What a side is saved as: the mode visible at save time wins */
-export type SideResult =
-    | { mode: "text"; text: string }
-    | { mode: "ink"; strokes: Stroke[]; penSize: number; changed: boolean };
+/** What a side is saved as: its typed text and its handwriting (null when it has no strokes) */
+export type SideResult = {
+    text: string;
+    ink: { strokes: Stroke[]; penSize: number; changed: boolean } | null;
+};
 
 export interface CardEditorResult {
     front: SideResult;
@@ -67,9 +68,10 @@ export class CardEditorModal extends Modal {
     private opts: CardEditorOptions;
     private front!: SideEditor;
     private back: SideEditor | null = null;
-    /** The side the pen tools act on: the one last touched or focused */
+    /** The side Clear acts on: the one last touched or focused */
     private activeSide: SideEditor | null = null;
-    private undoStack: { side: SideEditor; prev: Stroke[] }[] = [];
+    /** Ink changes, newest last; a cleared side also keeps its text (see clearSide()) */
+    private undoStack: { side: SideEditor; prev: Stroke[]; prevText?: string }[] = [];
     private eraser = false;
     /** Index into PEN_SIZE_STEPS; kept for this editor only */
     private penSizeStep = DEFAULT_PEN_SIZE_STEP;
@@ -114,13 +116,13 @@ export class CardEditorModal extends Modal {
         return this.opts.kind === "add";
     }
 
-    /** Every needed side has content in its visible mode */
+    /** Every needed side has text or ink */
     private get ready(): boolean {
         return this.sides.every((side) => !side.isEmpty);
     }
 
     private get allEmpty(): boolean {
-        return this.sides.every((side) => side.isEmpty && !side.replacesOther);
+        return this.sides.every((side) => side.isEmpty);
     }
 
     onOpen(): void {
@@ -147,7 +149,7 @@ export class CardEditorModal extends Modal {
         if (initial.back) {
             this.back = this.createSide(sidesEl, t("CARD_EDITOR_BACK"), initial.back, true);
         }
-        this.activeSide = this.front;
+        this.setActiveSide(this.front);
         // New strokes follow the toolbar's size, also on a card being edited (whose file has its
         // own size) and on a restored draft (saved with the size picked then); every stroke
         // already written keeps its own size
@@ -268,8 +270,8 @@ export class CardEditorModal extends Modal {
         return this.opts.draft ?? { front: this.blankSide(), back: this.blankSide() };
     }
 
-    private blankSide(mode = this.settings.cardEditorDefaultMode): SideState {
-        return { mode, text: "", strokes: [], penSize: this.penSize };
+    private blankSide(): SideState {
+        return { text: "", strokes: [], penSize: this.penSize };
     }
 
     /** Pen thickness for new ink: the setting, scaled by the toolbar's thin / medium / thick */
@@ -291,24 +293,27 @@ export class CardEditorModal extends Modal {
             settings: this.settings,
             textDirection: this.opts.textDirection ?? TextDirection.Ltr,
             onChange: () => this.updateButtons(),
-            onInkCommit: (prev) => {
-                this.undoStack.push({ side, prev });
-                this.activeSide = side;
+            onInkCommit: (prev, prevText) => {
+                this.undoStack.push({ side, prev, prevText });
+                this.setActiveSide(side);
             },
             isPalm: (evt) => this.isPalm(evt),
         });
         side.setEraser(this.eraser);
         side.el.addEventListener("pointerdown", (evt) => {
-            // With pen-only on, a finger can't draw on an ink side: such a touch is the hand
+            // With pen-only on, a finger can't draw in the ink field: such a touch is the hand
             // resting on the screen, not a choice of side
+            const inInk = side.inkEl?.contains(evt.target as Node) ?? false;
             const ignored =
                 this.isPalm(evt) ||
-                (this.settings.cardEditorPenOnly &&
-                    evt.pointerType === "touch" &&
-                    side.mode === "ink");
-            if (!ignored) this.activeSide = side;
+                (this.settings.cardEditorPenOnly && evt.pointerType === "touch" && inInk);
+            if (ignored) return;
+            this.setActiveSide(side);
+            // The ink field takes the focus off the text area: the soft keyboard closes before
+            // the pen writes, and Ctrl/Cmd+Z undoes the ink, not the typing
+            if (inInk) side.focusInk();
         });
-        side.el.addEventListener("focusin", () => (this.activeSide = side));
+        side.el.addEventListener("focusin", () => this.setActiveSide(side));
         return side;
     }
 
@@ -355,7 +360,7 @@ export class CardEditorModal extends Modal {
 
     /**
      * On phones and tablets the soft keyboard makes the window lower while it is open: tapping a
-     * text area opens it, switching that side to pen closes it. An editor sized to the window
+     * text area opens it, writing in an ink field closes it. An editor sized to the window
      * would then grow and shrink, and both sides with it. Instead it keeps the height of the
      * window without keyboard, and scrolls while the keyboard covers its lower part.
      * A window that gets wider or narrower (rotation, split screen) or higher starts over.
@@ -398,24 +403,31 @@ export class CardEditorModal extends Modal {
         this.updateButtons();
     }
 
-    /** Undoes the last ink change, on whichever side it was */
+    /**
+     * Undoes the last ink change, on whichever side it was. Undoing "Clear side" restores the
+     * side's text as well, unless something was typed since; typing is undone by the text area
+     * itself.
+     */
     private undo() {
         if (this.busy) return;
         const step = this.undoStack.pop();
         if (!step) return;
-        step.side.setMode("ink");
         step.side.setStrokes(step.prev);
-        this.activeSide = step.side;
+        // Not over text typed since the clear: setText would lose it for good
+        if (step.prevText !== undefined && step.side.text === "") step.side.setText(step.prevText);
+        this.setActiveSide(step.side);
     }
 
-    /** Clears the active ink side, or the first ink side if the active one is text */
+    /** Clears text and ink of the active side, as one undo step */
     private clearSide() {
         if (this.busy) return;
-        const side =
-            this.activeSide?.mode === "ink"
-                ? this.activeSide
-                : this.sides.find((s) => s.mode === "ink");
-        side?.clear();
+        this.activeSide?.clear();
+    }
+
+    private setActiveSide(side: SideEditor) {
+        if (side === this.activeSide) return;
+        this.activeSide = side;
+        this.updateButtons();
     }
 
     /** The first tap arms the button, a second one within 3 s discards the card */
@@ -452,22 +464,28 @@ export class CardEditorModal extends Modal {
             this.close();
             return;
         }
-        // Next card: same input mode per side, so pen users keep writing
         this.undoStack = [];
         this.disarmDiscard();
-        this.sides.forEach((side) => side.reset(this.blankSide(side.mode)));
-        this.activeSide = this.front;
+        this.sides.forEach((side) => side.reset(this.blankSide()));
+        this.setActiveSide(this.front);
         this.updateButtons();
         this.focusFront();
     }
 
     /**
-     * Focuses the front side. On mobile a text side is not focused: the soft keyboard would
-     * open, and close again under the pen (moving the sides) when the user writes by hand.
+     * Focuses the front text area. Not on mobile: the soft keyboard would open, and close again
+     * under the pen when the user writes by hand. There a text area that still has the focus
+     * (e.g. typed in before "Save & next") loses it instead, closing the keyboard.
      */
     private focusFront() {
-        if (Platform.isMobile && this.front.mode === "text") return;
-        this.front.focus();
+        if (!Platform.isMobile) {
+            this.front.focus();
+            return;
+        }
+        const focused = this.sidesEl.ownerDocument.activeElement;
+        if (focused?.instanceOf(HTMLTextAreaElement) && this.sidesEl.contains(focused)) {
+            focused.blur();
+        }
     }
 
     private async saveEdit() {
@@ -556,21 +574,17 @@ export class CardEditorModal extends Modal {
     }
 
     private updateButtons() {
-        const anyInk = this.sides.some((side) => side.mode === "ink");
-        if (!anyInk && this.eraser) {
-            this.eraser = false;
-            this.sides.forEach((side) => side.setEraser(false));
-        }
+        // Cloze cards have no ink field
+        const hasInk = this.back !== null;
         const step = PEN_SIZE_STEPS[this.penSizeStep];
-        this.penSizeButton.disabled = this.busy || !anyInk;
+        this.penSizeButton.disabled = this.busy || !hasInk;
         for (const s of PEN_SIZE_STEPS) this.penSizeButton.toggleClass(s.cls, s === step);
         this.penSizeButton.setAttr("aria-label", `${t("CARD_EDITOR_PEN_SIZE")}: ${t(step.label)}`);
-        this.eraserButton.disabled = !anyInk;
+        this.eraserButton.disabled = !hasInk;
         this.eraserButton.toggleClass("is-active", this.eraser);
         this.eraserButton.setAttr("aria-pressed", this.eraser);
-        this.undoButton.disabled = this.busy || !anyInk || this.undoStack.length === 0;
-        this.clearButton.disabled =
-            this.busy || !this.sides.some((side) => side.mode === "ink" && !side.isEmpty);
+        this.undoButton.disabled = this.busy || this.undoStack.length === 0;
+        this.clearButton.disabled = this.busy || (this.activeSide?.isEmpty ?? true);
 
         // Callbacks from the sides can arrive while the footer is still being built
         if (!this.saveButton) return;
@@ -653,6 +667,9 @@ export class CardEditorModal extends Modal {
 }
 
 function sideResult(side: SideEditor): SideResult {
-    const { mode, text, strokes, penSize } = side.state;
-    return mode === "ink" ? { mode, strokes, penSize, changed: side.inkChanged } : { mode, text };
+    const { text, strokes, penSize } = side.state;
+    return {
+        text,
+        ink: strokes.length > 0 ? { strokes, penSize, changed: side.inkChanged } : null,
+    };
 }

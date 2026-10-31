@@ -423,11 +423,6 @@ const en: IBaseLocale = {
 
     // Card editor > settings
     GROUP_CARD_EDITOR: "Card editor",
-    CARD_EDITOR_DEFAULT_MODE: "Default input mode",
-    CARD_EDITOR_DEFAULT_MODE_DESC:
-        "How the front and back of a new card start. You can switch each side between text and pen at any time.",
-    CARD_EDITOR_MODE_TEXT: "Text",
-    CARD_EDITOR_MODE_INK: "Pen",
     CARD_EDITOR_PEN_ONLY: "Pen only",
     CARD_EDITOR_PEN_ONLY_DESC:
         "Ignore finger touches on the writing fields, so your hand can rest on the screen. Turn off to write with a finger or mouse.",
@@ -450,10 +445,8 @@ const en: IBaseLocale = {
     CARD_EDITOR_FRONT: "Front",
     CARD_EDITOR_BACK: "Back",
     CARD_EDITOR_CLOZE: "Card",
-    CARD_EDITOR_TEXT_PLACEHOLDER: "Type here",
+    CARD_EDITOR_TEXT_PLACEHOLDER: "Type…",
     CARD_EDITOR_INK_PLACEHOLDER: "Write here with the pen",
-    CARD_EDITOR_HINT_REPLACES_TEXT: "Saving replaces the text with handwriting",
-    CARD_EDITOR_HINT_REPLACES_INK: "Saving replaces the handwriting with text",
     CARD_EDITOR_PEN_THIN: "Thin",
     CARD_EDITOR_PEN_MEDIUM: "Medium",
     CARD_EDITOR_PEN_THICK: "Thick",

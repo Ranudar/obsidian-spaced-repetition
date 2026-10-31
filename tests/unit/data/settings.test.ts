@@ -268,7 +268,6 @@ describe("SettingsUtil", () => {
 
     test("card editor defaults", () => {
         expect(DEFAULT_SETTINGS).toMatchObject({
-            cardEditorDefaultMode: "text",
             cardEditorPenOnly: true,
             cardEditorImageFolder: "sr-ink",
             cardEditorGuide: "lined",
@@ -277,8 +276,18 @@ describe("SettingsUtil", () => {
         });
     });
 
-    test("pen autodetection setting is gone", () => {
+    test("pen autodetection and default input mode settings are gone", () => {
         expect(DEFAULT_SETTINGS).not.toHaveProperty("cardEditorPenSwitchesToInk");
+        expect(DEFAULT_SETTINGS).not.toHaveProperty("cardEditorDefaultMode");
+    });
+
+    test("data from earlier card editor builds: default input mode dropped", () => {
+        const settings = {
+            ...DEFAULT_SETTINGS,
+            cardEditorDefaultMode: "ink",
+        } as unknown as SRSettings;
+        upgradeSettings(settings);
+        expect(settings).not.toHaveProperty("cardEditorDefaultMode");
     });
 
     test("data from earlier card editor builds: autodetection dropped, old default pen thinner", () => {

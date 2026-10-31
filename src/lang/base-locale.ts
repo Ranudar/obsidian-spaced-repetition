@@ -356,10 +356,6 @@ export interface IBaseLocale {
 
     // Card editor > settings
     GROUP_CARD_EDITOR: string;
-    CARD_EDITOR_DEFAULT_MODE: string;
-    CARD_EDITOR_DEFAULT_MODE_DESC: string;
-    CARD_EDITOR_MODE_TEXT: string;
-    CARD_EDITOR_MODE_INK: string;
     CARD_EDITOR_PEN_ONLY: string;
     CARD_EDITOR_PEN_ONLY_DESC: string;
     CARD_EDITOR_IMAGE_FOLDER: string;
@@ -382,8 +378,6 @@ export interface IBaseLocale {
     CARD_EDITOR_CLOZE: string;
     CARD_EDITOR_TEXT_PLACEHOLDER: string;
     CARD_EDITOR_INK_PLACEHOLDER: string;
-    CARD_EDITOR_HINT_REPLACES_TEXT: string;
-    CARD_EDITOR_HINT_REPLACES_INK: string;
     CARD_EDITOR_PEN_THIN: string;
     CARD_EDITOR_PEN_MEDIUM: string;
     CARD_EDITOR_PEN_THICK: string;

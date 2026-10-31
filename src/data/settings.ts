@@ -3,8 +3,6 @@ import { t } from "src/lang/helpers";
 import { SRAlgorithmType } from "src/scheduling/algorithms/base/isr-algorithm";
 import { pathMatchesPattern } from "src/utils/fs";
 
-/** Input mode of a card side in the card editor */
-export type CardEditorInputMode = "text" | "ink";
 /** Background guides of the card editor's ink fields */
 export type CardEditorGuide = "lined" | "dotted" | "grid" | "none";
 
@@ -77,7 +75,6 @@ export interface SRSettings {
     useCalloutsForSchedulingComments: boolean;
 
     // card editor
-    cardEditorDefaultMode: CardEditorInputMode;
     cardEditorPenOnly: boolean;
     // Folder for handwritten card images; empty = Obsidian's attachment location
     cardEditorImageFolder: string;
@@ -176,7 +173,6 @@ export const DEFAULT_SETTINGS: SRSettings = {
     useCalloutsForSchedulingComments: false,
 
     // card editor
-    cardEditorDefaultMode: "text",
     cardEditorPenOnly: true,
     cardEditorImageFolder: "sr-ink",
     cardEditorGuide: "lined",
@@ -273,6 +269,8 @@ export function upgradeSettings(settings: SRSettings) {
             settings.cardEditorPenSize = DEFAULT_SETTINGS.cardEditorPenSize;
         }
     }
+    // They also had a default input mode; every side now holds text and handwriting at once
+    delete raw.cardEditorDefaultMode;
 
     // Only published reminder settings are upgraded here. We deliberately do not preserve
     // unpublished draft field names from this feature branch, so the shipped schema stays clean.

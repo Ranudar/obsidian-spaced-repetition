@@ -9,11 +9,14 @@ import {
     inkEmbedPath,
     inkEmbedPaths,
     isInkFileName,
+    joinSide,
     linksIn,
     misreadSide,
     newCardBody,
+    parsesAsCard,
     protectBlankLines,
     splitCardText,
+    splitSide,
 } from "src/card-editor/core/card-text";
 import { CardType, Question } from "src/data/data-structures/card/questions/question";
 import { TopicPath } from "src/data/data-structures/deck/topic-path";
@@ -545,5 +548,259 @@ describe("protectBlankLines", () => {
             front: "Q\n<br>\nmore Q",
             back: "line 1\n<br>\nline 2",
         });
+    });
+});
+
+describe("splitSide", () => {
+    const ink = "![[sr-ink/sr-ink-20261031-141502123-front.svg]]";
+
+    test("A side without a trailing ink embed is all text, kept as is", () => {
+        expect(splitSide("Capital of France")).toEqual({
+            text: "Capital of France",
+            inkEmbed: null,
+        });
+        expect(splitSide("Line 1\nLine 2  \n")).toEqual({
+            text: "Line 1\nLine 2  \n",
+            inkEmbed: null,
+        });
+        expect(splitSide("")).toEqual({ text: "", inkEmbed: null });
+        // Embeds of other files
+        expect(splitSide("See ![[diagram.png]]")).toEqual({
+            text: "See ![[diagram.png]]",
+            inkEmbed: null,
+        });
+        expect(splitSide("![[notes/sr-ink-x.png]]")).toEqual({
+            text: "![[notes/sr-ink-x.png]]",
+            inkEmbed: null,
+        });
+    });
+
+    test("An ink-only side, in both embed forms", () => {
+        expect(splitSide(ink)).toEqual({ text: "", inkEmbed: ink });
+        expect(splitSide(`  ${ink}  \n`)).toEqual({ text: "", inkEmbed: ink });
+        expect(splitSide("![[sr-ink/sr-ink-a.svg|200]]")).toEqual({
+            text: "",
+            inkEmbed: "![[sr-ink/sr-ink-a.svg|200]]",
+        });
+        expect(splitSide("![](sr-ink/sr-ink-a-back.svg)")).toEqual({
+            text: "",
+            inkEmbed: "![](sr-ink/sr-ink-a-back.svg)",
+        });
+        expect(splitSide('![ink](<my ink/sr-ink-a.svg> "title")')).toEqual({
+            text: "",
+            inkEmbed: '![ink](<my ink/sr-ink-a.svg> "title")',
+        });
+    });
+
+    test("Text followed by ink, on the same line or on a line of its own", () => {
+        expect(splitSide(`Sketch the cell ${ink}`)).toEqual({
+            text: "Sketch the cell",
+            inkEmbed: ink,
+        });
+        expect(splitSide(`Sketch the cell\n${ink}`)).toEqual({
+            text: "Sketch the cell",
+            inkEmbed: ink,
+        });
+        expect(splitSide(`Line 1\n- item\n\n${ink}\n`)).toEqual({
+            text: "Line 1\n- item",
+            inkEmbed: ink,
+        });
+        expect(splitSide("Q\t![](sr-ink/sr-ink-a.svg)")).toEqual({
+            text: "Q",
+            inkEmbed: "![](sr-ink/sr-ink-a.svg)",
+        });
+        // Only the last embed is the ink, an earlier one is part of the text
+        expect(splitSide(`![[sr-ink/old.svg]]\n${ink}`)).toEqual({
+            text: "![[sr-ink/old.svg]]",
+            inkEmbed: ink,
+        });
+    });
+
+    test("An ink embed that isn't at the very end is text", () => {
+        expect(splitSide(`Before ${ink} after`)).toEqual({
+            text: `Before ${ink} after`,
+            inkEmbed: null,
+        });
+        expect(splitSide(`${ink}\nmore text`)).toEqual({
+            text: `${ink}\nmore text`,
+            inkEmbed: null,
+        });
+        // Not separated by whitespace from the text before it
+        expect(splitSide(`word${ink}`)).toEqual({ text: `word${ink}`, inkEmbed: null });
+    });
+
+    test("Uses the same embed rules as inkEmbedFileName", () => {
+        for (const side of [
+            ink,
+            "![](sr-ink/sr-ink-%C3%A4.svg)",
+            "![[sr-ink/x.png]]",
+            "![[a.svg]]",
+        ]) {
+            const { inkEmbed } = splitSide(`Text ${side}`);
+            expect(inkEmbed === null ? null : inkEmbedFileName(inkEmbed)).toEqual(
+                inkEmbedFileName(side),
+            );
+        }
+    });
+});
+
+describe("joinSide", () => {
+    const ink = "![[sr-ink/sr-ink-x-back.svg]]";
+
+    test("Multi-line and cloze cards put the ink on a line of its own", () => {
+        for (const cardType of [
+            CardType.MultiLineBasic,
+            CardType.MultiLineReversed,
+            CardType.Cloze,
+        ]) {
+            expect(joinSide(cardType, "Q", ink)).toEqual(`Q\n${ink}`);
+            expect(joinSide(cardType, "Line 1\nLine 2  ", ink)).toEqual(`Line 1\nLine 2\n${ink}`);
+        }
+    });
+
+    test("Single-line cards keep the ink on the same line", () => {
+        expect(joinSide(CardType.SingleLineBasic, "Q", ink)).toEqual(`Q ${ink}`);
+        expect(joinSide(CardType.SingleLineReversed, "Q ", ink)).toEqual(`Q ${ink}`);
+    });
+
+    test("A code block left open is closed before the ink", () => {
+        for (const cardType of [CardType.MultiLineBasic, CardType.Cloze]) {
+            expect(joinSide(cardType, "```js\nconst a = 1", ink)).toEqual(
+                "```js\nconst a = 1\n```\n" + ink,
+            );
+            expect(joinSide(cardType, "~~~~\ncode\n```", ink)).toEqual(
+                "~~~~\ncode\n```\n~~~~\n" + ink,
+            );
+            // Closed blocks stay as they are
+            expect(joinSide(cardType, "```\ncode\n```", ink)).toEqual("```\ncode\n```\n" + ink);
+            expect(joinSide(cardType, "```js\nconst a = 1", null)).toEqual("```js\nconst a = 1");
+        }
+    });
+
+    test("Only the ink without text, only the text without ink", () => {
+        for (const cardType of [CardType.MultiLineBasic, CardType.SingleLineBasic]) {
+            expect(joinSide(cardType, "", ink)).toEqual(ink);
+            expect(joinSide(cardType, " \n ", ink)).toEqual(ink);
+            expect(joinSide(cardType, "Q  ", null)).toEqual("Q  ");
+            expect(joinSide(cardType, "", null)).toEqual("");
+        }
+    });
+
+    test("Join and split round trip", () => {
+        const types = [
+            CardType.SingleLineBasic,
+            CardType.SingleLineReversed,
+            CardType.MultiLineBasic,
+            CardType.MultiLineReversed,
+        ];
+        for (const cardType of types) {
+            for (const text of ["", "Q", "Line 1\n- Line 2"]) {
+                if (text.includes("\n") && !types.slice(2).includes(cardType)) continue;
+                for (const embed of [ink, "![](sr-ink/sr-ink-y.svg)", null]) {
+                    expect(splitSide(joinSide(cardType, text, embed))).toEqual({
+                        text,
+                        inkEmbed: embed,
+                    });
+                }
+            }
+        }
+    });
+});
+
+describe("Sides with text and ink", () => {
+    const frontInk = "![[sr-ink/sr-ink-x-front.svg]]";
+    const backInk = "![[sr-ink/sr-ink-x-back.svg]]";
+
+    async function reparse(cardType: CardType, front: string, back: string) {
+        const cardText = composeCardText(cardType, front, back, DEFAULT_SETTINGS);
+        const questions = await parseQuestions(`#flashcards\n\n${cardText}\n`, DEFAULT_SETTINGS);
+        return { cardText, questions };
+    }
+
+    test("Mixed sides of every card type are read back by SR's parser", async () => {
+        const cases: [CardType, string, string][] = [
+            [CardType.SingleLineBasic, "Sketch a cell", "Nucleus"],
+            [CardType.SingleLineReversed, "Mitochondria", "Powerhouse"],
+            [CardType.MultiLineBasic, "Sketch a cell\nwith its parts", "- Nucleus\n- Membrane"],
+            [CardType.MultiLineReversed, "Capital of France", "Paris"],
+        ];
+        for (const [cardType, frontText, backText] of cases) {
+            for (const [fInk, bInk] of [
+                [frontInk, backInk],
+                [frontInk, null],
+                [null, backInk],
+            ]) {
+                const front = joinSide(cardType, frontText, fInk);
+                const back = joinSide(cardType, backText, bInk);
+                const { cardText, questions } = await reparse(cardType, front, back);
+                expect(questions.length).toEqual(1);
+                expect(questions[0].questionType).toEqual(cardType);
+                const reread = sides(questions[0]);
+                expect(splitSide(reread.front)).toEqual({ text: frontText, inkEmbed: fInk });
+                expect(splitSide(reread.back)).toEqual({ text: backText, inkEmbed: bInk });
+                expect(
+                    parsesAsCard(cardText, cardType, front, back, DEFAULT_SETTINGS),
+                    `${CardType[cardType]} ${cardText}`,
+                ).toBe(true);
+            }
+        }
+    });
+
+    test("Ink-only sides still read back as before", async () => {
+        const { questions } = await reparse(CardType.MultiLineBasic, frontInk, backInk);
+        const { front, back } = sides(questions[0]);
+        expect(front).toEqual(frontInk);
+        expect(splitSide(front)).toEqual({ text: "", inkEmbed: frontInk });
+        expect(inkEmbedFileName(back)).toEqual("sr-ink-x-back.svg");
+    });
+
+    test("A mixed side in a new card body", async () => {
+        const front = joinSide(CardType.MultiLineBasic, "Sketch a cell", frontInk);
+        const back = joinSide(CardType.MultiLineBasic, "", backInk);
+        for (const settings of [DEFAULT_SETTINGS, END_MARKER_SETTINGS]) {
+            const questions = await parseQuestions(
+                `#flashcards\n\n${newCardBody(front, back, settings)}\n`,
+                settings,
+            );
+            expect(questions.length).toEqual(1);
+            expect(splitSide(sides(questions[0], settings).front)).toEqual({
+                text: "Sketch a cell",
+                inkEmbed: frontInk,
+            });
+        }
+    });
+
+    test("misreadSide on mixed sides", () => {
+        const added = (front: string, back: string) =>
+            misreadSide(CardType.MultiLineBasic, front, back, DEFAULT_SETTINGS, (f, b) =>
+                newCardBody(f, b, DEFAULT_SETTINGS),
+            );
+        const edited = (cardType: CardType, front: string, back: string) =>
+            misreadSide(cardType, front, back, DEFAULT_SETTINGS, (f, b) =>
+                composeCardText(cardType, f, b, DEFAULT_SETTINGS),
+            );
+        const multi = (text: string, embed: string) =>
+            joinSide(CardType.MultiLineBasic, text, embed);
+        const single = (text: string, embed: string) =>
+            joinSide(CardType.SingleLineBasic, text, embed);
+
+        expect(added(multi("Sketch a cell", frontInk), multi("Nucleus", backInk))).toBeNull();
+        expect(added(multi("", frontInk), multi("Nucleus", backInk))).toBeNull();
+        expect(
+            edited(CardType.SingleLineBasic, single("Q", frontInk), single("A", backInk)),
+        ).toBeNull();
+        expect(
+            edited(CardType.MultiLineReversed, multi("Q", frontInk), multi("A", backInk)),
+        ).toBeNull();
+        // The typed text is still checked
+        expect(added(multi("What does std::vector do?", frontInk), multi("A", backInk))).toEqual(
+            "front",
+        );
+        expect(added(multi("Q", frontInk), multi("Like std::vector", backInk))).toEqual("back");
+        expect(added(multi("#biology Cells", frontInk), multi("A", backInk))).toEqual("front");
+        expect(added(multi("Q", frontInk), multi("A\n\nB", backInk))).toEqual("back");
+        expect(
+            edited(CardType.SingleLineBasic, single("Q", frontInk), single("A:::B", backInk)),
+        ).toEqual("back");
     });
 });

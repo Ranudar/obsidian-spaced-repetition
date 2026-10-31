@@ -1,17 +1,13 @@
 import "src/card-editor/card-editor.css";
-import { Platform, setIcon } from "obsidian";
 
 import { Stroke } from "src/card-editor/core/strokes";
 import { InkField } from "src/card-editor/ink-field";
-import { CardEditorInputMode, SRSettings } from "src/data/settings";
+import { SRSettings } from "src/data/settings";
 import { t } from "src/lang/helpers";
 import { TextDirection } from "src/utils/strings";
 
-export type InputMode = CardEditorInputMode;
-
-/** Content of one side: both drafts are kept, `mode` says which one is shown (and saved) */
+/** Content of one side: typed text and handwriting, both saved */
 export interface SideState {
-    mode: InputMode;
     text: string;
     strokes: Stroke[];
     /** Pen thickness the strokes are drawn and saved with */
@@ -21,80 +17,74 @@ export interface SideState {
 export interface SideEditorOptions {
     label: string;
     initial: SideState;
-    /** false for cloze cards: text only, no mode switch */
+    /** false for cloze cards: text only, no ink field */
     allowInk: boolean;
     settings: SRSettings;
     textDirection: TextDirection;
-    /** Called after any change of text, strokes or mode */
+    /** Called after any change of text or strokes */
     onChange(): void;
-    /** Called after every ink change with the strokes before it (for undo) */
-    onInkCommit(prev: Stroke[]): void;
+    /**
+     * Called after every ink change with the strokes before it (for undo). Clearing the side
+     * reports the text before it too, so one undo step restores both.
+     */
+    onInkCommit(prev: Stroke[], prevText?: string): void;
     /** Whether a press is the palm resting on the screen (pen-only on); it is then ignored */
     isPalm?(evt: PointerEvent): boolean;
 }
 
-const MODE_ICONS: Record<InputMode, string> = { text: "keyboard", ink: "pen-line" };
-
 /**
- * One side of a card: a text area or an ink field, with a switch between the two.
- * Switching keeps both drafts; the mode visible at save time wins. A dot on the switch shows that
- * the hidden mode holds a draft, which saving would replace.
- *
- * Both modes fill the same box and switching only swaps its content, so nothing moves.
+ * One side of a card: a text area of a few lines on top, for typing, and an ink field filling the
+ * rest of the box, for the pen. Both are saved. The text area has a fixed height and scrolls
+ * inside itself, so nothing moves while typing or writing.
  */
 export class SideEditor {
     readonly el: HTMLDivElement;
 
     private opts: SideEditorOptions;
     private initial: SideState;
-    private currentMode: InputMode;
     private penSize: number;
     private eraser = false;
     private textArea: HTMLTextAreaElement;
-    private inkHost: HTMLDivElement;
     private ink: InkField | null = null;
-    /** Strokes while the ink field has not been created yet */
-    private pendingStrokes: Stroke[];
-    private switchButtons = new Map<InputMode, HTMLButtonElement>();
 
     constructor(parent: HTMLElement, opts: SideEditorOptions) {
         this.opts = opts;
         this.initial = withOwnSizes(opts.initial);
-        this.currentMode = opts.allowInk ? opts.initial.mode : "text";
         this.penSize = opts.initial.penSize;
-        this.pendingStrokes = this.initial.strokes;
 
         this.el = parent.createDiv({ cls: "sr-card-editor-side" });
+        this.el.toggleClass("is-text-only", !opts.allowInk);
         const header = this.el.createDiv({ cls: "sr-card-editor-side-header" });
         header.createDiv({ cls: "sr-card-editor-side-label", text: opts.label });
-        if (opts.allowInk) {
-            const modeSwitch = header.createDiv({ cls: "sr-card-editor-mode-switch" });
-            modeSwitch.setAttr("role", "group");
-            modeSwitch.setAttr("aria-label", opts.label);
-            this.addSwitchButton(modeSwitch, "text", t("CARD_EDITOR_MODE_TEXT"));
-            this.addSwitchButton(modeSwitch, "ink", t("CARD_EDITOR_MODE_INK"));
-        }
 
         const body = this.el.createDiv({ cls: "sr-card-editor-side-body" });
         this.textArea = body.createEl("textarea", { cls: "sr-card-editor-text" });
         this.textArea.placeholder = t("CARD_EDITOR_TEXT_PLACEHOLDER");
         this.textArea.value = opts.initial.text;
+        this.textArea.setAttr("aria-label", opts.label);
         if (opts.textDirection === TextDirection.Rtl) this.textArea.setAttr("dir", "rtl");
         this.textArea.addEventListener("input", this.onTextInput);
         this.textArea.addEventListener("keydown", this.onTextKeyDown);
         this.textArea.addEventListener("pointerdown", this.onTextPointerDown);
 
-        this.inkHost = body.createDiv({ cls: "sr-card-editor-ink" });
-
-        this.showMode();
-    }
-
-    get mode(): InputMode {
-        return this.currentMode;
+        if (opts.allowInk) {
+            const s = opts.settings;
+            const inkHost = body.createDiv({ cls: "sr-card-editor-ink" });
+            this.ink = new InkField(inkHost, {
+                placeholder: t("CARD_EDITOR_INK_PLACEHOLDER"),
+                style: { size: this.penSize },
+                guide: s.cardEditorGuide,
+                guideSpacing: s.cardEditorGuideSpacing,
+                penOnly: s.cardEditorPenOnly,
+                eraserActive: () => this.eraser,
+                onChange: (_, prev) => this.onInkChange(prev),
+            });
+            this.ink.setStrokes(this.initial.strokes);
+        }
     }
 
     get strokes(): Stroke[] {
-        return this.ink ? this.ink.strokes : this.pendingStrokes;
+        return this.ink ? this.ink.strokes : [];
     }
 
     get text(): string {
@@ -102,17 +92,12 @@ export class SideEditor {
     }
 
     get state(): SideState {
-        return {
-            mode: this.currentMode,
-            text: this.text,
-            strokes: this.strokes,
-            penSize: this.penSize,
-        };
+        return { text: this.text, strokes: this.strokes, penSize: this.penSize };
     }
 
-    /** Nothing to save in the visible mode */
+    /** Nothing to save: blank text and no strokes */
     get isEmpty(): boolean {
-        return this.currentMode === "ink" ? this.strokes.length === 0 : this.text.trim() === "";
+        return this.text.trim() === "" && this.strokes.length === 0;
     }
 
     /** The strokes differ from the ones the side was opened with */
@@ -120,23 +105,21 @@ export class SideEditor {
         return !sameStrokes(this.strokes, this.initial.strokes);
     }
 
-    /** Saving would drop the draft of the hidden mode */
-    get replacesOther(): boolean {
-        return this.currentMode === "ink" ? this.text.trim() !== "" : this.strokes.length > 0;
-    }
-
-    setMode(mode: InputMode): void {
-        if (mode === "ink" && !this.opts.allowInk) return;
-        if (mode === this.currentMode) return;
-        this.currentMode = mode;
-        this.showMode();
-        this.opts.onChange();
+    /** The element ink is written on, null without ink (cloze) */
+    get inkEl(): HTMLElement | null {
+        return this.ink?.el ?? null;
     }
 
     setStrokes(strokes: Stroke[]): void {
-        if (this.ink) this.ink.setStrokes(strokes);
-        else this.pendingStrokes = strokes;
-        this.updateDraftDot();
+        if (!this.ink) return;
+        this.ink.setStrokes(strokes);
+        this.opts.onChange();
+    }
+
+    /** Replaces the text, e.g. on undo of "Clear side"; the text area's own undo starts over */
+    setText(text: string): void {
+        if (text === this.text) return;
+        this.textArea.value = text;
         this.opts.onChange();
     }
 
@@ -147,19 +130,16 @@ export class SideEditor {
         this.ink?.setStyle({ size });
     }
 
-    /** Clears the visible mode; ink clearing is reported to onInkCommit so it can be undone */
+    /** Clears text and ink, reported to onInkCommit as one step so it can be undone */
     clear(): void {
-        if (this.currentMode === "ink") {
-            if (this.ink) this.ink.clear();
-            else if (this.pendingStrokes.length > 0) {
-                const prev = this.pendingStrokes;
-                this.pendingStrokes = [];
-                this.onInkChange(prev);
-            }
-        } else if (this.text !== "") {
-            this.textArea.value = "";
-            this.onTextInput();
-        }
+        if (this.text === "" && this.strokes.length === 0) return;
+        const prevStrokes = this.strokes;
+        const prevText = this.text;
+        this.textArea.value = "";
+        // Not ink.clear(): that would report the ink alone
+        this.ink?.setStrokes([]);
+        this.opts.onInkCommit(prevStrokes, prevText);
+        this.opts.onChange();
     }
 
     /** Starts over with new content, e.g. the next card after "Save & next" */
@@ -171,11 +151,7 @@ export class SideEditor {
         if (this.ink) {
             this.ink.setStyle({ size: state.penSize });
             this.ink.setStrokes(state.strokes);
-        } else {
-            this.pendingStrokes = state.strokes;
         }
-        this.currentMode = this.opts.allowInk ? state.mode : "text";
-        this.showMode();
         this.opts.onChange();
     }
 
@@ -188,9 +164,14 @@ export class SideEditor {
         this.ink?.themeChanged();
     }
 
+    /** Focuses the text area (on mobile this opens the soft keyboard) */
     focus(): void {
-        if (this.currentMode === "ink") this.ink?.el.focus();
-        else this.textArea.focus();
+        this.textArea.focus();
+    }
+
+    /** Focuses the ink field, moving the focus off the text area without scrolling */
+    focusInk(): void {
+        this.ink?.el.focus({ preventScroll: true });
     }
 
     destroy(): void {
@@ -203,97 +184,12 @@ export class SideEditor {
 
     // MARK: helpers
 
-    private addSwitchButton(parent: HTMLElement, mode: InputMode, label: string) {
-        const button = parent.createEl("button", { cls: "sr-card-editor-mode-button" });
-        button.setAttr("type", "button");
-        setIcon(button.createSpan({ cls: "sr-card-editor-mode-icon" }), MODE_ICONS[mode]);
-        button.createSpan({ cls: "sr-card-editor-mode-label", text: label });
-        // Absolutely positioned, so showing it moves nothing
-        button.createSpan({ cls: "sr-card-editor-mode-dot" });
-        let palm = false;
-        button.addEventListener("pointerdown", (evt) => (palm = this.isPalm(evt)));
-        button.addEventListener("click", () => {
-            // A click from the keyboard has no pointerdown before it
-            const ignore = palm;
-            palm = false;
-            if (ignore) return;
-            this.switchTo(mode);
-        });
-        this.switchButtons.set(mode, button);
-    }
-
-    /**
-     * Switch button. On mobile it never focuses the text area, so the soft keyboard doesn't pop
-     * up; tapping the text area itself does. On desktop, Text focuses the text area so typing can
-     * start right away. A focused text area is let go when it is hidden.
-     */
-    private switchTo(mode: InputMode) {
-        if (mode === "ink" && this.textArea.ownerDocument.activeElement === this.textArea) {
-            this.textArea.blur();
-        }
-        this.setMode(mode);
-        if (this.currentMode === "ink") this.ink?.el.focus({ preventScroll: true });
-        else if (!Platform.isMobile) this.textArea.focus();
-    }
-
-    /** The ink field (and its canvas) is only created once the side is first shown as ink */
-    private ensureInk(): InkField {
-        if (this.ink) return this.ink;
-        const s = this.opts.settings;
-        this.ink = new InkField(this.inkHost, {
-            placeholder: t("CARD_EDITOR_INK_PLACEHOLDER"),
-            style: { size: this.penSize },
-            guide: s.cardEditorGuide,
-            guideSpacing: s.cardEditorGuideSpacing,
-            penOnly: s.cardEditorPenOnly,
-            eraserActive: () => this.eraser,
-            onChange: (_, prev) => this.onInkChange(prev),
-        });
-        this.ink.setStrokes(this.pendingStrokes);
-        return this.ink;
-    }
-
-    private showMode() {
-        const ink = this.currentMode === "ink";
-        if (ink) this.ensureInk();
-        this.el.toggleClass("is-ink", ink);
-        this.el.toggleClass("is-text", !ink);
-        this.textArea.toggleClass("sr-is-hidden", ink);
-        this.inkHost.toggleClass("sr-is-hidden", !ink);
-        for (const [mode, button] of this.switchButtons) {
-            button.toggleClass("is-active", mode === this.currentMode);
-            button.setAttr("aria-pressed", mode === this.currentMode);
-        }
-        this.updateDraftDot();
-    }
-
-    /** Marks the switch button of the hidden mode while that mode holds a draft */
-    private updateDraftDot() {
-        const replaces = this.replacesOther;
-        for (const [mode, button] of this.switchButtons) {
-            const dot = replaces && mode !== this.currentMode;
-            button.toggleClass("has-draft", dot);
-            if (dot) {
-                button.setAttr(
-                    "aria-description",
-                    mode === "text"
-                        ? t("CARD_EDITOR_HINT_REPLACES_TEXT")
-                        : t("CARD_EDITOR_HINT_REPLACES_INK"),
-                );
-            } else {
-                button.removeAttribute("aria-description");
-            }
-        }
-    }
-
     private onInkChange(prev: Stroke[]) {
-        this.updateDraftDot();
         this.opts.onInkCommit(prev);
         this.opts.onChange();
     }
 
     private onTextInput = () => {
-        this.updateDraftDot();
         this.opts.onChange();
     };
 
@@ -305,13 +201,9 @@ export class SideEditor {
         }
     };
 
-    private isPalm(evt: PointerEvent): boolean {
-        return this.opts.isPalm?.(evt) ?? false;
-    }
-
     /** The palm must not focus the text area: the soft keyboard would open under the pen */
     private onTextPointerDown = (evt: PointerEvent) => {
-        if (this.isPalm(evt)) evt.preventDefault();
+        if (this.opts.isPalm?.(evt) ?? false) evt.preventDefault();
     };
 }
 
