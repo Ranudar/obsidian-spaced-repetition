@@ -1,4 +1,4 @@
-import { TFile } from "obsidian";
+import { MarkdownView, Notice, TFile } from "obsidian";
 
 import {
     CardEditorModal,
@@ -6,10 +6,12 @@ import {
     CardEditorSides,
     SideResult,
 } from "src/card-editor/card-editor-modal";
+import { CardInserter } from "src/card-editor/card-inserter";
 import {
     composeCardText,
     inkEmbed,
     inkEmbedFileName,
+    newCardBody,
     splitCardText,
 } from "src/card-editor/core/card-text";
 import {
@@ -23,7 +25,7 @@ import {
 import { InkFiles } from "src/card-editor/ink-files";
 import { SideState } from "src/card-editor/side-editor";
 import { Question } from "src/data/data-structures/card/questions/question";
-import { SRSettings } from "src/data/settings";
+import { SettingsUtil, SRSettings } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
 import { t } from "src/lang/helpers";
 import type SRPlugin from "src/main";
@@ -54,6 +56,8 @@ export class CardEditorService {
     readonly inkFiles: InkFiles;
     private plugin: SRPlugin;
     private settingsManager: SettingsManager;
+    /** The unsaved card of the last add editor closed without saving */
+    private draft: CardEditorSides | null = null;
 
     constructor(plugin: SRPlugin, settingsManager: SettingsManager) {
         this.plugin = plugin;
@@ -63,6 +67,38 @@ export class CardEditorService {
 
     private get settings(): SRSettings {
         return this.settingsManager.settings;
+    }
+
+    /**
+     * Opens the editor to add cards to a note. Each saved card is inserted below the cursor
+     * (or at the end of the note when it isn't open in an editor), and the note is rescanned
+     * once the editor has closed.
+     */
+    openAdd(file: TFile, view: MarkdownView | null): void {
+        if (!this.hasFlashcardTag(file)) {
+            new Notice(
+                t("CARD_EDITOR_NO_FLASHCARD_TAG", {
+                    tag: this.settings.flashcardTags[0] ?? "#flashcards",
+                }),
+            );
+        }
+
+        const inserter = new CardInserter(this.plugin.app, file, view);
+        let added = 0;
+        new CardEditorModal(this.plugin.app, this.settings, {
+            kind: "add",
+            title: file.basename,
+            textDirection: this.plugin.getObsidianRtlSetting(),
+            draft: this.draft,
+            save: async (r: CardEditorResult) => {
+                await this.addCard(r, file.path, inserter);
+                added++;
+            },
+            keepDraft: (draft) => (this.draft = draft),
+            closed: () => {
+                if (added > 0) void this.rescan(inserter);
+            },
+        }).open();
     }
 
     /**
@@ -100,6 +136,68 @@ export class CardEditorService {
                 closed: () => resolve(result),
             }).open();
         });
+    }
+
+    /**
+     * Writes the ink files of a new card and inserts the card.
+     * Both handwritten sides share the stem of their file names (Pen Cards' scheme).
+     */
+    private async addCard(
+        result: CardEditorResult,
+        sourcePath: string,
+        inserter: CardInserter,
+    ): Promise<void> {
+        const stem = timestampName(new Date());
+        const created: TFile[] = [];
+        try {
+            const sideText = async (r: SideResult | null, side: InkSide): Promise<string> => {
+                if (r === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
+                if (r.mode === "text") return r.text.trim();
+                const svg = strokesToSvg(r.strokes, { size: r.penSize });
+                if (svg === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
+                const file = await this.inkFiles.create(
+                    inkFileName(stem, side),
+                    svg.svg,
+                    sourcePath,
+                );
+                created.push(file);
+                return inkEmbed(this.inkFiles.linkPath(file, sourcePath));
+            };
+
+            const front = await sideText(result.front, "front");
+            const back = await sideText(result.back, "back");
+            if (front.length === 0 || back.length === 0)
+                throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
+            await inserter.insert(newCardBody(front, back, this.settings));
+        } catch (err) {
+            // The card stays in the editor; don't leave images behind that no card shows
+            for (const file of created) {
+                await this.inkFiles
+                    .trash(file)
+                    .catch((e) => console.error("SR: removing the ink image failed", e));
+            }
+            throw err;
+        }
+    }
+
+    /** Rescans the vault after cards were added, so deck counts and review queue include them */
+    private async rescan(inserter: CardInserter): Promise<void> {
+        try {
+            await inserter.flush();
+            if (this.plugin.isInitialized) await this.plugin.dataManager.sync();
+        } catch (err) {
+            console.error("SR: rescanning after adding cards failed", err);
+        }
+    }
+
+    /**
+     * Whether the note's tags (incl. frontmatter tags) contain a flashcard tag,
+     * i.e. whether SR picks up the cards in it. With folders as decks, tags don't matter.
+     */
+    private hasFlashcardTag(file: TFile): boolean {
+        if (this.settings.convertFoldersToDecks) return true;
+        const tags = this.plugin.dataManager.createSRNoteTFile(file).getAllTagsFromCache();
+        return tags.some((tag) => SettingsUtil.isFlashcardTag(this.settings, tag));
     }
 
     /** Reloads every image showing one of the files */

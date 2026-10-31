@@ -1,9 +1,10 @@
-import { TFile } from "obsidian";
+import { Notice, TFile } from "obsidian";
 
 import {
     CardEditorModal,
     CardEditorOptions,
     CardEditorResult,
+    CardEditorSides,
     SideResult,
 } from "src/card-editor/card-editor-modal";
 import { CardEditorService } from "src/card-editor/card-editor-service";
@@ -85,6 +86,11 @@ class FakeVault {
                 return Promise.resolve();
             }),
             getResourcePath: jest.fn((file: TFile) => `app://vault/${file.path}?1`),
+            process: jest.fn((file: TFile, fn: (data: string) => string) => {
+                const entry = this.files.get(file.path);
+                entry.content = fn(entry.content);
+                return Promise.resolve(entry.content);
+            }),
         },
         metadataCache: {
             getFirstLinkpathDest: jest.fn((link: string) => this.byName(link)),
@@ -105,6 +111,9 @@ class FakeVault {
 let vault: FakeVault;
 let settings: SRSettings;
 let service: CardEditorService;
+/** Tags of the notes, as Obsidian's metadata cache reports them */
+let noteTags: string[];
+const sync = jest.fn(() => Promise.resolve());
 
 beforeAll(() => {
     setupStaticDateProvider20230906();
@@ -115,7 +124,18 @@ beforeEach(() => {
     ModalMock.mockClear();
     vault = new FakeVault();
     settings = { ...DEFAULT_SETTINGS };
-    const plugin = { app: vault.app } as unknown as SRPlugin;
+    noteTags = ["#flashcards"];
+    sync.mockClear();
+    jest.mocked(Notice).mockClear();
+    const plugin = {
+        app: vault.app,
+        isInitialized: true,
+        getObsidianRtlSetting: () => TextDirection.Ltr,
+        dataManager: {
+            createSRNoteTFile: () => ({ getAllTagsFromCache: () => noteTags }),
+            sync,
+        },
+    } as unknown as SRPlugin;
     service = new CardEditorService(plugin, new SettingsManager(settings, () => Promise.resolve()));
 });
 
@@ -450,5 +470,133 @@ describe("saving a card", () => {
         // The editor stays open; closing it now is a cancel
         session.opts.closed();
         await expect(session.result).resolves.toBeNull();
+    });
+});
+
+describe("adding cards", () => {
+    const NOTE = "#flashcards\n";
+    let note: TFile;
+
+    type AddOptions = Extract<CardEditorOptions, { kind: "add" }>;
+
+    beforeEach(() => {
+        note = vault.add(NOTE_PATH, NOTE);
+    });
+
+    /** Opens the add editor on the note (no editor open, so cards are appended) */
+    function openAdd(): AddOptions {
+        service.openAdd(note, null);
+        const calls = ModalMock.mock.calls;
+        const opts = calls[calls.length - 1][2];
+        if (opts.kind !== "add") throw new Error("not opened for adding");
+        return opts;
+    }
+
+    async function flush() {
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+    }
+
+    test("typed cards are appended to the note, one after the other", async () => {
+        const opts = openAdd();
+        expect(opts.title).toEqual("bio");
+        expect(opts.draft).toBeNull();
+
+        await opts.save({ front: text("Q1  "), back: text("A1") });
+        await opts.save({ front: text("Q2"), back: text("A2") });
+
+        expect(vault.content(NOTE_PATH)).toEqual("#flashcards\n\nQ1\n?\nA1\n\nQ2\n?\nA2\n");
+        expect(vault.app.vault.create).not.toHaveBeenCalled();
+    });
+
+    test("the end marker follows a blank line", async () => {
+        settings.multilineCardEndMarker = "---";
+        const opts = openAdd();
+        await opts.save({ front: text("Q"), back: text("A") });
+        expect(vault.content(NOTE_PATH)).toEqual("#flashcards\n\nQ\n?\nA\n\n---\n");
+    });
+
+    test("handwritten sides become SVGs sharing one stem, embedded in the card", async () => {
+        const opts = openAdd();
+        await opts.save({ front: ink([stroke(0)]), back: ink([stroke(5), stroke(9)]) });
+
+        const cardText = vault.content(NOTE_PATH).slice(NOTE.length).trim();
+        const [front, back] = cardText.split("\n?\n");
+        const frontName = inkEmbedFileName(front);
+        const backName = inkEmbedFileName(back);
+        expect(front).toEqual(`![[pencards/${frontName}]]`);
+        expect(parseInkFileName(frontName)).toEqual({
+            stem: parseInkFileName(backName).stem,
+            side: "front",
+        });
+        expect(parseInkFileName(backName).side).toEqual("back");
+        expect(svgToStrokes(vault.content(`pencards/${backName}`)).strokes).toHaveLength(2);
+    });
+
+    test("a mixed card has a typed front and a handwritten back", async () => {
+        const opts = openAdd();
+        await opts.save({
+            front: text("What is the powerhouse of the cell?"),
+            back: ink([stroke(0)]),
+        });
+
+        const [front, back] = vault.content(NOTE_PATH).slice(NOTE.length).trim().split("\n?\n");
+        expect(front).toEqual("What is the powerhouse of the cell?");
+        expect(inkEmbedFileName(back)).toMatch(/^pencard-.+-back\.svg$/);
+        expect(vault.app.vault.create).toHaveBeenCalledTimes(1);
+    });
+
+    test("a failed insert rejects the save and removes the new SVGs", async () => {
+        vault.app.vault.process.mockRejectedValueOnce(new Error("disk full"));
+        const opts = openAdd();
+
+        await expect(
+            opts.save({ front: ink([stroke(0)]), back: ink([stroke(5)]) }),
+        ).rejects.toThrow("disk full");
+        expect(vault.app.fileManager.trashFile).toHaveBeenCalledTimes(2);
+        expect([...vault.files.keys()]).toEqual([NOTE_PATH]);
+    });
+
+    test("the note is rescanned after closing, if cards were added", async () => {
+        let opts = openAdd();
+        opts.keepDraft(null);
+        opts.closed();
+        await flush();
+        expect(sync).not.toHaveBeenCalled();
+
+        opts = openAdd();
+        await opts.save({ front: text("Q"), back: text("A") });
+        expect(sync).not.toHaveBeenCalled();
+        opts.keepDraft(null);
+        opts.closed();
+        await flush();
+        expect(sync).toHaveBeenCalledTimes(1);
+    });
+
+    test("an unsaved card is restored the next time", () => {
+        const draft: CardEditorSides = {
+            front: { mode: "text", text: "Q", strokes: [], penSize: 5 },
+            back: { mode: "ink", text: "", strokes: [stroke(0)], penSize: 5 },
+        };
+        openAdd().keepDraft(draft);
+        const opts = openAdd();
+        expect(opts.draft).toBe(draft);
+
+        opts.keepDraft(null);
+        expect(openAdd().draft).toBeNull();
+    });
+
+    test("a note without a flashcard tag gets a notice, but the editor opens", () => {
+        noteTags = ["#flashcards/biology"];
+        openAdd();
+        expect(Notice).not.toHaveBeenCalled();
+
+        noteTags = ["#biology"];
+        openAdd();
+        expect(Notice).toHaveBeenCalledTimes(1);
+        expect(ModalMock).toHaveBeenCalledTimes(2);
+
+        settings.convertFoldersToDecks = true;
+        openAdd();
+        expect(Notice).toHaveBeenCalledTimes(1);
     });
 });

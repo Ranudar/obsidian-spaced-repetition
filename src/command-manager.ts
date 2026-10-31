@@ -1,4 +1,4 @@
-import { Platform, TFile } from "obsidian";
+import { MarkdownView, Platform, TFile } from "obsidian";
 
 import { SettingsManager } from "src/data/settings-manager";
 import { t } from "src/lang/helpers";
@@ -427,6 +427,24 @@ export class CommandManager {
 
                 if (!checking) {
                     void this.uiManager.openDeckContainer(FlashcardReviewMode.Cram, openFile);
+                }
+                return true;
+            },
+        });
+
+        this.plugin.addCommand({
+            id: "srs-add-card",
+            name: t("ADD_CARD"),
+            icon: "pen-line",
+            checkCallback: (checking: boolean) => {
+                const view = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+                const openFile: TFile | null =
+                    view?.file ?? this.plugin.app.workspace.getActiveFile();
+
+                if (openFile === null || openFile.extension !== "md") return false;
+
+                if (!checking) {
+                    this.plugin.cardEditorService.openAdd(openFile, view);
                 }
                 return true;
             },
