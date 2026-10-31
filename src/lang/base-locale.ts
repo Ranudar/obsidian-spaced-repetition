@@ -379,7 +379,6 @@ export interface IBaseLocale {
     ADD_CARD: string;
 
     // Card editor > editor
-    CARD_EDITOR_EDIT_TITLE: string;
     CARD_EDITOR_FRONT: string;
     CARD_EDITOR_BACK: string;
     CARD_EDITOR_CLOZE: string;

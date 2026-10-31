@@ -389,6 +389,15 @@ Each step is one commit; `pnpm jest`, `tsc -noEmit -skipLibCheck` and `pnpm esli
 - **Image refresh** uses the query parameter `sr-ink` (Pen Cards used `pc`). Images that Obsidian adds
   after rendering are caught by a short-lived MutationObserver; live-preview editors are re-checked on
   `layout-change` and `active-leaf-change`.
+- **Discard** arms first on an empty card too, as in F1; nothing is lost either way.
+- **Ink → text** trashes the SVG only when no other note or card links to it (Obsidian's
+  `resolvedLinks`) and the new text doesn't embed it.
+- **Pen only** also guards the editor's buttons: a finger press while the pen is down or within
+  500 ms of pen use is taken for the palm and ignored.
+- **Mobile focus**: on mobile a text side is not focused on open (no soft keyboard for pen users);
+  a pen touch on a text area blurs it before switching to ink.
+- **Pencil**: a press that moves more than 10 px is not a tap. Canvas text nodes get a pencil, but
+  `editInNote` only edits `.md` notes (notice otherwise).
 - **Flashcard tag notice**: tag matching reuses SR's `SettingsUtil.isFlashcardTag` (Pen Cards'
   `hasFlashcardTag` was not ported); the notice is skipped when folders are converted to decks.
   Text sides are trimmed before insertion.

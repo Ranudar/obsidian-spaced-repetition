@@ -1,4 +1,4 @@
-import { App, Notice } from "obsidian";
+import { App, Notice, Platform } from "obsidian";
 
 import {
     CardEditorModal,
@@ -200,7 +200,11 @@ describe("CardEditorModal add mode", () => {
             back: { mode: "text", text: "A1" },
         });
         expect(textAreas().map((ta) => ta.value)).toEqual(["", ""]);
-        expect($(".sr-card-editor-counter").textContent).toContain("1 card(s) added");
+        // The counter sits in the footer, between Discard and the save buttons
+        const counter = $(".sr-card-editor-counter");
+        expect(counter.parentElement).toBe($(".sr-card-editor-footer"));
+        expect(counter.previousElementSibling).toBe(button("Discard"));
+        expect(counter.textContent).toBe("1 card(s) added");
         expect(document.activeElement).toBe(textAreas()[0]);
         expect(cb.closed).not.toHaveBeenCalled();
 
@@ -380,9 +384,13 @@ describe("CardEditorModal drafts and discard", () => {
         expect(discard.textContent).toBe("Tap again to discard");
     });
 
-    test("Discard on an empty card closes right away", () => {
+    test("Discard arms first on an empty card too", () => {
         const { cb } = openAdd();
-        $<HTMLButtonElement>(".sr-card-editor-discard").click();
+        const discard = $<HTMLButtonElement>(".sr-card-editor-discard");
+        discard.click();
+        expect(cb.closed).not.toHaveBeenCalled();
+        expect(discard.textContent).toBe("Tap again to discard");
+        discard.click();
         expect(cb.closed).toHaveBeenCalledTimes(1);
     });
 
@@ -549,4 +557,70 @@ test("a theme change redraws the ink with the new color, until the editor closes
     modal.close();
     expect(workspaceEvents.has("css-change")).toBe(false);
     themeChanged.mockRestore();
+});
+
+// jsdom has no PointerEvent, a MouseEvent with the pointer fields added does the job
+function pointer(type: string, target: HTMLElement, pointerType: string) {
+    const evt = new MouseEvent(type, { bubbles: true, cancelable: true, buttons: 1 });
+    Object.assign(evt, { pointerType, pointerId: 1, pressure: 0.5 });
+    target.dispatchEvent(evt);
+    return evt;
+}
+
+describe("CardEditorModal pen only", () => {
+    /** A finger tap on a button: pointerdown, then the click the browser adds */
+    function fingerTap(el: HTMLElement) {
+        pointer("pointerdown", el, "touch");
+        el.click();
+    }
+
+    test("the palm touching a button while the pen writes doesn't press it", () => {
+        jest.useFakeTimers({ now: 10_000 });
+        const { cb } = openAdd(null, { cardEditorPenOnly: true });
+        type(0, "Q");
+        type(1, "A");
+        const ink = $$(".sr-card-editor-side")[1];
+        pointer("pointerdown", ink, "pen");
+
+        fingerTap(saveNext());
+        fingerTap(button("Discard"));
+        fingerTap(button("Discard"));
+        fingerTap(undo());
+        expect(cb.save).not.toHaveBeenCalled();
+        expect(cb.closed).not.toHaveBeenCalled();
+        expect(button("Discard")).toBeDefined();
+
+        // Just after the pen was lifted, still the palm
+        pointer("pointerup", ink, "pen");
+        jest.advanceTimersByTime(300);
+        fingerTap(saveNext());
+        expect(cb.save).not.toHaveBeenCalled();
+
+        // A finger tap a moment later, the pen, and a key press work
+        jest.advanceTimersByTime(300);
+        fingerTap(saveNext());
+        expect(cb.save).toHaveBeenCalledTimes(1);
+    });
+
+    test("without pen only, a finger tap during a stroke counts", () => {
+        const { cb } = openAdd(null, { cardEditorPenOnly: false });
+        type(0, "Q");
+        type(1, "A");
+        pointer("pointerdown", $$(".sr-card-editor-side")[1], "pen");
+        fingerTap(saveNext());
+        expect(cb.save).toHaveBeenCalledTimes(1);
+    });
+});
+
+test("on mobile a text side isn't focused on open, so the soft keyboard stays closed", () => {
+    const isMobile = jest.spyOn(Platform, "isMobile", "get").mockReturnValue(true);
+    try {
+        openAdd();
+        expect(document.activeElement).not.toBe(textAreas()[0]);
+        document.body.replaceChildren();
+        openAdd(null, { cardEditorDefaultMode: "ink" });
+        expect(document.activeElement).toBe($(".sr-ink-field"));
+    } finally {
+        isMobile.mockRestore();
+    }
 });

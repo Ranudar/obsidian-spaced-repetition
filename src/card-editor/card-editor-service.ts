@@ -156,7 +156,7 @@ export class CardEditorService {
             let result: EditQuestionResult | null = null;
             new CardEditorModal(this.plugin.app, this.settings, {
                 kind: "edit",
-                title: t("CARD_EDITOR_EDIT_TITLE"),
+                title: question.note.file.basename,
                 textDirection: question.questionText.textDirection,
                 initial,
                 cardType,
@@ -174,6 +174,11 @@ export class CardEditorService {
      */
     async editInNote(noteFile: TFile, imageName: string): Promise<void> {
         if (this.editingInNote) return;
+        // E.g. a Canvas text node: its file is JSON, not a note with cards
+        if (noteFile.extension !== "md") {
+            new Notice(t("CARD_EDITOR_CARD_NOT_FOUND"));
+            return;
+        }
         this.editingInNote = true;
         try {
             await this.saveOpenEditors(noteFile);
@@ -185,14 +190,16 @@ export class CardEditorService {
             }
 
             const result = await this.editQuestion(question, async (text) => {
-                // Replaces just the question's text, so its schedule comment stays
-                const previous = question.questionText.actualQuestion;
-                question.questionText.actualQuestion = text;
+                // Replaces just the question's text, so its schedule comment stays.
+                // writeQuestion restores the question's text object if the write throws.
+                const q = question.questionText;
+                const previous = q.actualQuestion;
+                q.actualQuestion = text;
                 let written = false;
                 try {
                     written = await question.writeQuestion(this.settings);
                 } finally {
-                    if (!written) question.questionText.actualQuestion = previous;
+                    if (!written) q.actualQuestion = previous;
                 }
                 return written;
             });
@@ -416,8 +423,9 @@ export class CardEditorService {
             throw err;
         }
 
-        // The note no longer shows these images
+        // The card no longer shows these images; keep those other cards or notes still embed
         for (const file of toTrash) {
+            if (this.isEmbeddedElsewhere(file, card.original, text)) continue;
             await this.inkFiles
                 .trash(file)
                 .catch((e) => console.error("SR: removing the ink image failed", e));
@@ -427,6 +435,17 @@ export class CardEditorService {
             textChanged: text !== card.original,
             changedImages: overwritten.map((side) => side.file),
         };
+    }
+
+    /**
+     * Whether the ink file is still embedded after the card's text changed from `before` to
+     * `after`: in another note, in another card of this note or in the card itself.
+     */
+    private isEmbeddedElsewhere(file: TFile, before: string, after: string): boolean {
+        const embedsIn = (text: string) =>
+            inkEmbedFileNames(text).filter((name) => name === file.name).length;
+        if (embedsIn(after) > 0) return true;
+        return this.inkFiles.linkCount(file) - embedsIn(before) > 0;
     }
 
     /** Leaves the ink files of a card as they were before a failed save */

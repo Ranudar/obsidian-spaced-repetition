@@ -47,6 +47,12 @@ Object.assign(HTMLElement.prototype, {
     },
 });
 
+// Obsidian's cross-window instanceof: a node of a popout window has that window's classes
+Node.prototype.instanceOf = function (type) {
+    const own = this.ownerDocument?.defaultView?.[type.name];
+    return this instanceof type || (typeof own === "function" && this instanceof own);
+};
+
 // Obsidian's globals for the active window, used instead of window/document in src/
 globalThis.activeWindow = window;
 globalThis.activeDocument = document;

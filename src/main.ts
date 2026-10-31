@@ -76,7 +76,10 @@ export default class SRPlugin extends Plugin {
 
                 this.isInitialized = true;
                 this._reminderManager.restartReviewReminders();
+            });
 
+            // Pencils in live preview don't wait for the vault scan above
+            this.app.workspace.onLayoutReady(() => {
                 // Editors opened later (also deferred tabs, loaded once shown) are watched as they appear
                 pencilButtons.watchLivePreview();
                 this.registerEvent(

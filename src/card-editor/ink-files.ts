@@ -80,6 +80,14 @@ export class InkFiles {
         await this.app.fileManager.trashFile(file);
     }
 
+    /** How many links and embeds in all notes point to the file, as Obsidian's link index has it */
+    linkCount(file: TFile): number {
+        const links = this.app.metadataCache.resolvedLinks ?? {};
+        let count = 0;
+        for (const targets of Object.values(links)) count += targets[file.path] ?? 0;
+        return count;
+    }
+
     /** Link text for an embed of the file in the note at sourcePath */
     linkPath(file: TFile, sourcePath: string): string {
         return this.app.metadataCache.fileToLinktext(file, sourcePath, false);

@@ -1,4 +1,4 @@
-import { App, EventRef, Modal, Notice, setIcon } from "obsidian";
+import { App, EventRef, Modal, Notice, Platform, setIcon } from "obsidian";
 
 import { Stroke } from "src/card-editor/core/strokes";
 import { SideEditor, SideState } from "src/card-editor/side-editor";
@@ -46,6 +46,8 @@ export type CardEditorOptions =
       });
 
 const DISCARD_ARM_MS = 3000;
+/** With pen-only on, finger taps on buttons this soon after the pen was used count as the palm */
+const PALM_GUARD_MS = 500;
 
 /**
  * The card editor, used to add new cards and to edit existing ones.
@@ -70,6 +72,10 @@ export class CardEditorModal extends Modal {
     private discardArmedAt = 0;
     private discardTimer: number | null = null;
     private cssChangeRef: EventRef | null = null;
+    /** The pen is touching the screen */
+    private penDown = false;
+    /** When the pen was last used */
+    private lastPenAt = 0;
 
     private counterEl: HTMLElement | null = null;
     private eraserButton!: HTMLButtonElement;
@@ -128,6 +134,10 @@ export class CardEditorModal extends Modal {
 
         this.buildFooter(root);
         root.addEventListener("keydown", this.onKeyDown);
+        this.modalEl.addEventListener("pointerdown", this.onPenActivity, true);
+        this.modalEl.addEventListener("pointermove", this.onPenActivity, true);
+        this.modalEl.addEventListener("pointerup", this.onPenActivity, true);
+        this.modalEl.addEventListener("pointercancel", this.onPenActivity, true);
 
         // A theme change (e.g. to dark mode at night) changes the ink color
         this.cssChangeRef = this.app.workspace.on("css-change", () =>
@@ -135,12 +145,16 @@ export class CardEditorModal extends Modal {
         );
 
         this.updateButtons();
-        this.front.focus();
+        this.focusFront();
     }
 
     onClose(): void {
         this.isClosed = true;
         this.contentEl.removeEventListener("keydown", this.onKeyDown);
+        this.modalEl.removeEventListener("pointerdown", this.onPenActivity, true);
+        this.modalEl.removeEventListener("pointermove", this.onPenActivity, true);
+        this.modalEl.removeEventListener("pointerup", this.onPenActivity, true);
+        this.modalEl.removeEventListener("pointercancel", this.onPenActivity, true);
         if (this.cssChangeRef !== null) this.app.workspace.offref(this.cssChangeRef);
         this.disarmDiscard();
 
@@ -163,8 +177,7 @@ export class CardEditorModal extends Modal {
 
     private buildHeader(root: HTMLElement) {
         const header = root.createDiv({ cls: "sr-card-editor-header" });
-        const title = header.createDiv({ cls: "sr-card-editor-title", text: this.opts.title });
-        if (this.isAdd) this.counterEl = title.createSpan({ cls: "sr-card-editor-counter" });
+        header.createDiv({ cls: "sr-card-editor-title", text: this.opts.title });
 
         this.eraserButton = this.iconButton(header, "eraser", t("CARD_EDITOR_ERASER"), () =>
             this.setEraser(!this.eraser),
@@ -187,7 +200,9 @@ export class CardEditorModal extends Modal {
                 this.discard(),
             );
             this.discardButton.addClass("sr-card-editor-discard");
-            footer.createDiv({ cls: "sr-card-editor-footer-spacer" });
+            this.counterEl = footer.createDiv({
+                cls: ["sr-card-editor-footer-spacer", "sr-card-editor-counter"],
+            });
             this.saveCloseButton = this.textButton(footer, t("CARD_EDITOR_SAVE_CLOSE"), () => {
                 void this.saveAdd(true);
             });
@@ -287,7 +302,7 @@ export class CardEditorModal extends Modal {
     /** The first tap arms the button, a second one within 3 s discards the card */
     private discard() {
         if (this.busy || !this.discardButton) return;
-        if (this.allEmpty || Date.now() - this.discardArmedAt < DISCARD_ARM_MS) {
+        if (Date.now() - this.discardArmedAt < DISCARD_ARM_MS) {
             this.dropDraft = true;
             this.close();
             return;
@@ -324,6 +339,15 @@ export class CardEditorModal extends Modal {
         this.sides.forEach((side) => side.reset(this.blankSide(side.mode)));
         this.activeSide = this.front;
         this.updateButtons();
+        this.focusFront();
+    }
+
+    /**
+     * Focuses the front side. On mobile a text side is not focused: the soft keyboard would
+     * open, and close again under the pen (moving the sides) when the user writes by hand.
+     */
+    private focusFront() {
+        if (Platform.isMobile && this.front.mode === "text") return;
         this.front.focus();
     }
 
@@ -366,7 +390,8 @@ export class CardEditorModal extends Modal {
             else void this.saveEdit();
         } else if (evt.key.toLowerCase() === "z" && !evt.shiftKey) {
             // Text areas keep their own undo
-            if (evt.target instanceof HTMLTextAreaElement) return;
+            // (instanceOf works across windows, e.g. an editor opened in a popout)
+            if ((evt.target as Node | null)?.instanceOf(HTMLTextAreaElement)) return;
             evt.preventDefault();
             this.undo();
         }
@@ -404,7 +429,7 @@ export class CardEditorModal extends Modal {
         if (this.discardButton) this.discardButton.disabled = this.busy;
         if (this.counterEl) {
             this.counterEl.setText(
-                this.added > 0 ? " · " + t("CARD_EDITOR_CARDS_ADDED", { count: this.added }) : "",
+                this.added > 0 ? t("CARD_EDITOR_CARDS_ADDED", { count: this.added }) : "",
             );
         }
     }
@@ -421,9 +446,10 @@ export class CardEditorModal extends Modal {
         button.setAttr("aria-label", label);
         button.setAttr("type", "button");
         setIcon(button, icon);
+        const isPalm = this.palmGuard(button);
         button.addEventListener("click", (evt) => {
             evt.stopPropagation();
-            onClick();
+            if (!isPalm()) onClick();
         });
         return button;
     }
@@ -431,8 +457,39 @@ export class CardEditorModal extends Modal {
     private textButton(parent: HTMLElement, text: string, onClick: () => void): HTMLButtonElement {
         const button = parent.createEl("button", { text });
         button.setAttr("type", "button");
-        button.addEventListener("click", onClick);
+        const isPalm = this.palmGuard(button);
+        button.addEventListener("click", () => {
+            if (!isPalm()) onClick();
+        });
         return button;
+    }
+
+    /** Records pen use anywhere in the editor, for palmGuard() */
+    private onPenActivity = (evt: PointerEvent) => {
+        if (evt.pointerType !== "pen") return;
+        this.penDown = evt.type === "pointerdown" || (this.penDown && evt.type === "pointermove");
+        this.lastPenAt = Date.now();
+    };
+
+    /**
+     * With pen-only on, a button pressed by a finger while the pen is down or was just used is
+     * the palm resting on the screen, not a tap. Returns whether the button's current click is
+     * such a touch.
+     */
+    private palmGuard(button: HTMLButtonElement): () => boolean {
+        let palm = false;
+        button.addEventListener("pointerdown", (evt) => {
+            palm =
+                this.settings.cardEditorPenOnly &&
+                evt.pointerType === "touch" &&
+                (this.penDown || Date.now() - this.lastPenAt < PALM_GUARD_MS);
+        });
+        return () => {
+            const result = palm;
+            // A click from the keyboard has no pointerdown before it
+            palm = false;
+            return result;
+        };
     }
 }
 

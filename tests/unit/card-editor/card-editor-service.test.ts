@@ -102,6 +102,8 @@ class FakeVault {
             }),
         },
         metadataCache: {
+            /** Source note → linked file → number of links, like Obsidian's link index */
+            resolvedLinks: {} as Record<string, Record<string, number>>,
             getFirstLinkpathDest: jest.fn((link: string) => this.byLink(link)),
             fileToLinktext: jest.fn((file: TFile) => file.path),
         },
@@ -511,6 +513,46 @@ describe("saving a card", () => {
         expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
     });
 
+    test("ink → text keeps an SVG that other cards or notes still embed", async () => {
+        const back = vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const links = vault.app.metadataCache.resolvedLinks;
+        const toText = async () => {
+            ModalMock.mockClear();
+            const session = await edit(await parseQuestion(mixedNote));
+            await save(session, {
+                front: unchanged(session.opts.initial.front),
+                back: text("Mitochondria"),
+            });
+        };
+
+        // Embedded in another note too
+        links[NOTE_PATH] = { [back.path]: 1 };
+        links["notes/summary.md"] = { [back.path]: 1 };
+        await toText();
+        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
+
+        // Embedded twice in this note, e.g. by a copy of the card
+        delete links["notes/summary.md"];
+        links[NOTE_PATH] = { [back.path]: 2 };
+        await toText();
+        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
+
+        // Only this card embeds it
+        links[NOTE_PATH] = { [back.path]: 1 };
+        await toText();
+        expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
+    });
+
+    test("ink → text keeps an SVG the new text still embeds", async () => {
+        vault.add("pencards/pencard-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const session = await edit(await parseQuestion(mixedNote));
+        await save(session, {
+            front: unchanged(session.opts.initial.front),
+            back: text("See ![[pencards/pencard-20261031-141502123-back.svg]] again"),
+        });
+        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
+    });
+
     test("the embed's folder decides which file is edited, not just its name", async () => {
         const archived = vault.add("archive/pencard-abc-front.svg", svgOf([stroke(0)]));
         const front = vault.add("pencards/pencard-abc-front.svg", svgOf([stroke(1), stroke(2)]));
@@ -759,7 +801,7 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
 
     /** Taps the pencil on an image and waits until the editor is shown */
     async function tapPencil(imageName: string) {
-        const done = service.editInNote({ path: NOTE_PATH } as TFile, imageName);
+        const done = service.editInNote({ path: NOTE_PATH, extension: "md" } as TFile, imageName);
         for (let i = 0; i < 20 && ModalMock.mock.calls.length === 0; i++) await Promise.resolve();
         const opts = ModalMock.mock.calls[0]?.[2];
         return { done, opts: opts?.kind === "edit" ? opts : null };
@@ -862,10 +904,47 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
 
     test("a second tap while the editor is open is ignored", async () => {
         const { done, opts } = await tapPencil("pencard-xyz-back.svg");
-        await service.editInNote({ path: NOTE_PATH } as TFile, "pencard-xyz-back.svg");
+        await service.editInNote(
+            { path: NOTE_PATH, extension: "md" } as TFile,
+            "pencard-xyz-back.svg",
+        );
         expect(ModalMock).toHaveBeenCalledTimes(1);
         opts.closed();
         await done;
+    });
+
+    test("the editor's title is the note's name", async () => {
+        const { done, opts } = await tapPencil("pencard-xyz-back.svg");
+        expect(opts.title).toEqual("bio");
+        opts.closed();
+        await done;
+    });
+
+    test("a failed note write leaves the question matching the note, so a review can still be saved", async () => {
+        const { done, opts } = await tapPencil("pencard-20261031-141502123-back.svg");
+        const question = loadedNote.questionList[0];
+        const before = question.questionText.original;
+        jest.spyOn(noteFile, "write").mockRejectedValueOnce(new Error("disk full"));
+
+        await expect(
+            opts.save({ front: text("Typed"), back: unchanged(opts.initial.back) }),
+        ).rejects.toThrow("disk full");
+        expect(noteFile.content).toEqual(pencilNote);
+        expect(question.questionText.original).toEqual(before);
+        expect(question.questionText.actualQuestion).toContain("powerhouse");
+        expect(noteFile.content).toContain(question.questionText.original);
+
+        opts.closed();
+        await done;
+    });
+
+    test("an image in a Canvas text node gets a notice, the canvas is not read as a note", async () => {
+        await service.editInNote(
+            { path: "board.canvas", extension: "canvas" } as TFile,
+            "pencard-xyz-back.svg",
+        );
+        expect(Notice).toHaveBeenCalledWith("This image is not part of any card in this note.");
+        expect(ModalMock).not.toHaveBeenCalled();
     });
 
     test("an image that is not part of a card gets a notice", async () => {
@@ -875,7 +954,10 @@ Draw a cell::![](pencards/pencard-xyz-back.svg)
         expect(Notice).toHaveBeenCalledWith("This image is not part of any card in this note.");
 
         loadedNote = null;
-        await service.editInNote({ path: NOTE_PATH } as TFile, "pencard-xyz-back.svg");
+        await service.editInNote(
+            { path: NOTE_PATH, extension: "md" } as TFile,
+            "pencard-xyz-back.svg",
+        );
         expect(Notice).toHaveBeenCalledTimes(2);
         expect(ModalMock).not.toHaveBeenCalled();
     });

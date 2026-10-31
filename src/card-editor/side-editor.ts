@@ -280,7 +280,11 @@ export class SideEditor {
         if (evt.pointerType !== "pen" || !this.opts.allowInk) return;
         if (!this.opts.settings.cardEditorPenSwitchesToInk) return;
         evt.preventDefault();
+        // Blurred first: a focused text area that is hidden would close the soft keyboard on
+        // its own, at a moment of the browser's choosing, while the stroke is being drawn
+        this.textArea.blur();
         this.setMode("ink");
+        this.ink?.el.focus({ preventScroll: true });
         this.ink?.beginStroke(evt);
     };
 

@@ -108,8 +108,9 @@ img[src*="pencard-"] {
 }
 
 .sr-card-editor-counter {
+    align-self: center;
     color: var(--text-success);
-    font-weight: var(--font-normal);
+    font-size: var(--font-ui-small);
 }
 
 .sr-card-editor-icon-button {

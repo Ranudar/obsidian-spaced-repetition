@@ -450,7 +450,6 @@ const en: IBaseLocale = {
     ADD_CARD: "Add card",
 
     // Card editor > editor
-    CARD_EDITOR_EDIT_TITLE: "Edit card",
     CARD_EDITOR_FRONT: "Front",
     CARD_EDITOR_BACK: "Back",
     CARD_EDITOR_CLOZE: "Card",

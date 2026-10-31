@@ -317,9 +317,17 @@ export class Question {
     async writeQuestion(settings: SRSettings): Promise<boolean> {
         const fileText: string = await this.note.file.read();
 
+        // replaceQuestionWithinNoteText already points the question at the new text;
+        // if the write fails, the question must still match the note on disk
+        const previous = this.questionText;
         const newText = this.replaceQuestionWithinNoteText(fileText, settings);
         if (newText === null) return false;
-        await this.note.file.write(newText);
+        try {
+            await this.note.file.write(newText);
+        } catch (err) {
+            this.questionText = previous;
+            throw err;
+        }
         this.hasChanged = false;
         return true;
     }

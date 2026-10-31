@@ -7,6 +7,8 @@ import { t } from "src/lang/helpers";
 const BUTTON_CLASS = "sr-pencil-button";
 const HOST_CLASS = "sr-pencil-host";
 const INK_IMAGE_SELECTOR = `img[src*="${INK_FILE_PREFIX}"]`;
+/** How far a pointer may move between press and release for a tap */
+const TAP_SLOP_PX = 10;
 
 /** What a pencil button does when tapped */
 export interface PencilButtonActions {
@@ -64,16 +66,14 @@ export class PencilButtons {
     /** Watches the live preview of every open markdown editor not watched yet */
     watchLivePreview(): void {
         if (this.destroyed) return;
-        // Stop watching editors that were closed, forget buttons that are gone
+        // Stop watching editors that were closed. Hosts are kept even while detached: reading view
+        // puts sections scrolled out of view back later, with their buttons, so destroy() needs them.
         for (const [el, observer] of this.observers) {
             if (!el.isConnected) {
                 observer.disconnect();
                 this.observers.delete(el);
             }
         }
-        this.hosts.forEach((host) => {
-            if (!host.isConnected) this.hosts.delete(host);
-        });
 
         for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
             const view = leaf.view as MarkdownView;
@@ -114,8 +114,9 @@ export class PencilButtons {
     }
 
     private scanLivePreview(node: Node, noteOf: NoteOf): void {
-        if (!(node instanceof HTMLElement)) return;
-        if (node instanceof HTMLImageElement) {
+        // instanceOf, not instanceof: an editor in a popout window has that window's classes
+        if (!node.instanceOf(HTMLElement)) return;
+        if (node.instanceOf(HTMLImageElement)) {
             this.considerLivePreview(node, noteOf);
             return;
         }
@@ -125,7 +126,7 @@ export class PencilButtons {
     }
 
     private considerLivePreview(node: Node, noteOf: NoteOf): void {
-        if (!(node instanceof HTMLImageElement)) return;
+        if (!node.instanceOf(HTMLImageElement)) return;
         // Embedded notes are rendered as markdown and post-processed, with their own source path
         if (node.closest(".markdown-embed")) return;
         this.consider(node, noteOf);
@@ -155,7 +156,8 @@ export class PencilButtons {
 
         // In live preview the editor (CodeMirror) handles touches on the line itself and moves the
         // cursor, which re-renders the embed and swallows the tap. Keep every part of the tap here.
-        let pressed = false;
+        // A drag starting on the button is not a tap (the page can't scroll from here)
+        let pressedAt: { x: number; y: number } | null = null;
         const swallow = (e: Event) => {
             e.preventDefault();
             e.stopPropagation();
@@ -166,14 +168,17 @@ export class PencilButtons {
         button.addEventListener("mouseup", swallow);
         button.addEventListener("pointerdown", (e) => {
             swallow(e);
-            pressed = true;
+            pressedAt = { x: e.clientX, y: e.clientY };
         });
         button.addEventListener("pointerup", (e) => {
             swallow(e);
-            if (pressed) this.open(img, noteOf);
-            pressed = false;
+            const tap =
+                pressedAt !== null &&
+                Math.hypot(e.clientX - pressedAt.x, e.clientY - pressedAt.y) <= TAP_SLOP_PX;
+            pressedAt = null;
+            if (tap) this.open(img, noteOf);
         });
-        button.addEventListener("pointercancel", () => (pressed = false));
+        button.addEventListener("pointercancel", () => (pressedAt = null));
         button.addEventListener("click", (e) => {
             swallow(e);
             // Keyboard activation (Enter/Space) has no pointer events
@@ -182,6 +187,8 @@ export class PencilButtons {
     }
 
     private open(img: HTMLImageElement, noteOf: NoteOf): void {
+        // A button left behind in an element that was detached when the plugin was unloaded
+        if (this.destroyed) return;
         const name = imageFileName(img);
         if (name === null) return;
         if (img.closest(".sr-view")) {

@@ -183,6 +183,26 @@ describe("tapping the pencil", () => {
         expect(editInNote).not.toHaveBeenCalled();
     });
 
+    test("a drag that starts on the button is not a tap", () => {
+        const button = buttonOf(img);
+        fire(button, "pointerdown", { clientX: 10, clientY: 100 });
+        fire(button, "pointerup", { clientX: 12, clientY: 40 });
+        expect(editInNote).not.toHaveBeenCalled();
+
+        // A little jitter is still a tap
+        fire(button, "pointerdown", { clientX: 10, clientY: 100 });
+        fire(button, "pointerup", { clientX: 14, clientY: 104 });
+        expect(editInNote).toHaveBeenCalledTimes(1);
+    });
+
+    test("a button left behind after destroy opens nothing", () => {
+        const button = buttonOf(img);
+        img.parentElement.remove();
+        buttons.destroy();
+        tap(button);
+        expect(editInNote).not.toHaveBeenCalled();
+    });
+
     test("Enter or Space (a click without pointer events) opens the card", () => {
         fire(buttonOf(img), "click", { detail: 0 });
         expect(editInNote).toHaveBeenCalledWith(note, INK_NAME);
@@ -265,6 +285,46 @@ describe("live preview", () => {
 
         expect(buttonOf(inReading)).toBeNull();
         expect(buttonOf(inEmbeddedNote)).toBeNull();
+    });
+
+    test("images in a popout window (another window's classes) get a button", async () => {
+        const frame = document.body.createEl("iframe");
+        const popoutDoc = frame.contentDocument;
+        // Obsidian adds its DOM helpers to popout windows too
+        const popoutWindow = frame.contentWindow as unknown as typeof globalThis;
+        for (const [ours, theirs] of [
+            [Node.prototype, popoutWindow.Node.prototype],
+            [HTMLElement.prototype, popoutWindow.HTMLElement.prototype],
+        ]) {
+            for (const key of Object.getOwnPropertyNames(ours)) {
+                if (!(key in theirs))
+                    Object.defineProperty(theirs, key, Object.getOwnPropertyDescriptor(ours, key));
+            }
+        }
+        const popoutView = popoutDoc.body.appendChild(popoutDoc.createElement("div"));
+        popoutView.className = "markdown-source-view";
+        leaves = [{ view: { containerEl: popoutDoc.body, file: note } }];
+        buttons.watchLivePreview();
+
+        const span = popoutDoc.createElement("span");
+        const img = span.appendChild(popoutDoc.createElement("img"));
+        img.setAttribute("src", INK_SRC);
+        popoutView.appendChild(span);
+        await mutations();
+        expect(img instanceof HTMLElement).toBe(false);
+        expect(span.querySelector(".sr-pencil-button")).not.toBeNull();
+    });
+
+    test("a section scrolled out of view keeps being tracked, so destroy cleans it", () => {
+        const section = document.body.createDiv();
+        const img = embed(INK_SRC, section);
+        postProcess(section);
+        section.remove();
+        buttons.watchLivePreview();
+        document.body.appendChild(section);
+
+        buttons.destroy();
+        expect(buttonOf(img)).toBeNull();
     });
 
     test("an editor is watched only once, and not after destroy", async () => {

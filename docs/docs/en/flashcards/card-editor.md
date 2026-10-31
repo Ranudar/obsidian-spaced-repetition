@@ -15,11 +15,11 @@ strokes, so you can open a handwritten card later and keep writing, erase or und
 3. Fill in the front and the back, typing or writing by hand.
 4. Choose how to continue:
 
-| Button       | What it does                                                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Save & next  | Inserts the card, clears both sides and counts the card in the header ("3 card(s) added"), so you can write the next one right away.  |
-| Save & close | Inserts the card and closes the editor.                                                                                               |
-| Discard      | The first tap changes the button to "Tap again to discard". A second tap within 3 seconds throws the card away and closes the editor. |
+| Button       | What it does                                                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Save & next  | Inserts the card, clears both sides and counts the card next to the buttons ("3 card(s) added"), so you can write the next one right away. |
+| Save & close | Inserts the card and closes the editor.                                                                                                    |
+| Discard      | The first tap changes the button to "Tap again to discard". A second tap within 3 seconds throws the card away and closes the editor.      |
 
 The save buttons stay disabled until both sides have content. `Ctrl/Cmd + Enter` does the same as
 **Save & next**.
@@ -88,7 +88,12 @@ The header holds the pen tools. They are only enabled while at least one side is
 | Clear side | Removes all strokes from the side you last used. Undo brings them back.                                              |
 
 With **Pen only** on (the default), fingers are ignored on the writing fields, so your hand can rest
-on the screen. Turn it off to write with a finger or a mouse.
+on the screen. A finger touching one of the editor's buttons while the pen is writing, or just
+after, is ignored too, so a resting palm doesn't save or discard the card. Turn it off to write with
+a finger or a mouse.
+
+On phones and tablets, a typed side is not focused when the editor opens, so the soft keyboard only
+appears once you tap a text field.
 
 On phones the editor fills the screen; on desktop and tablets it opens as a large dialog. In dark
 mode, handwriting is shown in light ink. The images themselves keep dark ink on a transparent
@@ -99,7 +104,7 @@ background, so they look right in both themes.
 ### During Review
 
 Tap **Edit** in the review toolbar (see [Reviewing](reviewing.md#operation)). The card opens in the
-same editor with both sides: typed sides as text, handwritten sides with their strokes, ready to
+same editor, with the note's name in the header and both sides: typed sides as text, handwritten sides with their strokes, ready to
 change. You can also switch a side between typing and handwriting here.
 
 - **Save** writes the changes, keeps the card's review schedule and shows the updated card.
@@ -122,16 +127,17 @@ After saving, every visible copy of a changed image reloads. When the card text 
 is updated and Spaced Repetition rescans your notes.
 
 Inside the review window, the pencil does the same as the **Edit** button. If the image is not part
-of any card in the note, a notice says so.
+of any card in the note, a notice says so. Images in Canvas text nodes get a pencil, but can't be
+edited from there.
 
 ### What Happens to the Images
 
-| Change                             | Result                                                                      |
-| ---------------------------------- | --------------------------------------------------------------------------- |
-| Handwriting changed                | The same SVG file is overwritten. The note text stays the same.             |
-| Handwriting unchanged              | Nothing is written.                                                         |
-| Typed side switched to handwriting | A new SVG file is created, named like the card's other image if it has one. |
-| Handwritten side switched to text  | The old SVG file is moved to the trash.                                     |
+| Change                             | Result                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------ |
+| Handwriting changed                | The same SVG file is overwritten. The note text stays the same.                |
+| Handwriting unchanged              | Nothing is written.                                                            |
+| Typed side switched to handwriting | A new SVG file is created, named like the card's other image if it has one.    |
+| Handwritten side switched to text  | The old SVG file is moved to the trash, unless another note or card embeds it. |
 
 A side only counts as handwritten if its text is exactly one embed of a `pencard-….svg` image.
 Anything else, including an image whose strokes can't be read, opens as text, so nothing gets lost.

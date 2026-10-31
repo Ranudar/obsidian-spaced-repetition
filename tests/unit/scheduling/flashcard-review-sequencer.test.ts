@@ -1330,6 +1330,29 @@ ${updatedStr}
         expect(c.reviewSequencer.currentQuestion.questionText.actualQuestion).toEqual("Q2::A2");
         expect(c.reviewSequencer.currentCard.front).toEqual("Q2");
     });
+
+    test("A failed note write leaves the question matching the note, so the review is saved", async () => {
+        const text = "#flashcards Q2::A2\n";
+        const c: TestContext = TestContext.Create(
+            orderDueFirstSequential,
+            FlashcardReviewMode.Review,
+            DEFAULT_SETTINGS,
+            text,
+        );
+        await c.setSequencerDeckTreeFromOriginalText();
+        jest.spyOn(c.file, "write").mockRejectedValueOnce(new Error("disk full"));
+
+        await expect(
+            c.reviewSequencer.updateCurrentQuestionTextAndCards("New::Text"),
+        ).rejects.toThrow("disk full");
+        expect(await c.file.read()).toEqual(text);
+        expect(c.reviewSequencer.currentQuestion.questionText.original).toEqual(
+            "#flashcards Q2::A2",
+        );
+
+        await c.reviewSequencer.processReview(ReviewResponse.Hard);
+        expect(await c.file.read()).toEqual("#flashcards Q2::A2\n<!--SR:!2023-09-07,1,230-->\n");
+    });
 });
 
 function checkQuestionPostponementListCount(c: TestContext, expectedListLength: number) {

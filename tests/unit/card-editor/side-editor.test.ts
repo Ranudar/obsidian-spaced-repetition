@@ -129,9 +129,12 @@ describe("SideEditor modes", () => {
 
     test("a pen touching the text area switches to ink when the setting is on", () => {
         const { side, parent, onInkCommit } = setup(state({ text: "typed" }));
+        textArea(parent).focus();
         const evt = pointerDown(textArea(parent), "pen");
         expect(side.mode).toBe("ink");
         expect(evt.defaultPrevented).toBe(true);
+        // The hidden text area doesn't keep the focus (and the soft keyboard)
+        expect(document.activeElement).toBe(inkField(parent));
 
         // The same pen touch draws the first stroke
         pointer("pointerup", parent.querySelector("canvas"), "pen");
