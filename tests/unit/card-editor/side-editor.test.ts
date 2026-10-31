@@ -138,8 +138,8 @@ describe("SideEditor layout", () => {
             "utf8",
         );
         const rule = css.match(/\.sr-card-editor-side-body > \.sr-card-editor-text \{[^}]*\}/)[0];
-        // Never grows; shrinks only in a low window, down to one line
-        expect(rule).toMatch(/flex: 0 1 auto/);
+        // Never grows; shrinks only in a low window, down to one line, before the ink field does
+        expect(rule).toMatch(/flex: 0 100 auto/);
         expect(rule).toMatch(/min-height: calc\(var\(--font-text-size\)/);
         expect(rule).toMatch(/--sr-card-editor-text-lines/);
         expect(rule).toMatch(/overflow-y: auto/);
@@ -148,7 +148,11 @@ describe("SideEditor layout", () => {
         expect(rule).not.toMatch(/border-bottom/);
         const ink = css.match(/\.sr-card-editor-ink \{[^}]*\}/)[0];
         expect(ink).toMatch(/border-top: 1px/);
-        expect(ink).toMatch(/min-height: 60px/);
+        // Always inside the box: it shrinks instead of being pushed past the box' bottom edge,
+        // where it would be cut off but still take ink
+        expect(ink).toMatch(/flex: 1 1 60px/);
+        expect(ink).toMatch(/min-height: 0/);
+        expect(ink).toMatch(/overflow: hidden/);
     });
 
     test("focusInk moves the focus from the text area to the ink field", () => {

@@ -36,6 +36,23 @@ img[src*="sr-ink-"] {
     pointer-events: none;
 }
 
+/* Live preview: the image is an embed in the editor, and a tap inside it doesn't place the cursor.
+   So the pencil sits outside the frame without padding that widens the embed; the space beside it
+   is the editor's, where a tap puts the cursor after the image (to delete it with Backspace). */
+.markdown-source-view .sr-pencil-host {
+    max-width: calc(100% - var(--sr-pencil-size) - var(--sr-pencil-gap));
+    padding: 4px;
+}
+
+.markdown-source-view .sr-pencil-host::after {
+    right: 0;
+}
+
+.markdown-source-view .sr-pencil-host > .sr-pencil-button {
+    right: auto;
+    left: calc(100% + var(--sr-pencil-gap));
+}
+
 .sr-pencil-host > img {
     display: block;
     max-width: 100%;
@@ -293,10 +310,11 @@ img[src*="sr-ink-"] {
 /*
  * Specific enough to win over the theme's textarea rules, focus included.
  * In a low window (landscape phone, split screen) it shrinks down to one line before the ink
- * field below gets too small to write in.
+ * field below gets smaller than its 60 px (its much larger flex-shrink takes nearly all of the
+ * shrinking first).
  */
 .sr-card-editor-side-body > .sr-card-editor-text {
-    flex: 0 1 auto;
+    flex: 0 100 auto;
     box-sizing: border-box;
     width: 100%;
     height: calc(
@@ -327,11 +345,14 @@ img[src*="sr-ink-"] {
 /*
  * The writing area: a shade off the text area, so the two read as separate parts of the box.
  * The divider is its border, not the text area's: the text area's height is exactly its lines.
+ * It always fits inside the box (no min-height that could push it past the box' bottom edge,
+ * where it would be cut off but still take ink): in a very low box it gets smaller instead.
  */
 .sr-card-editor-ink {
-    flex: 1;
-    min-height: 60px;
+    flex: 1 1 60px;
+    min-height: 0;
     display: flex;
+    overflow: hidden;
     border-top: 1px solid var(--background-modifier-border);
     background-color: var(--background-primary-alt);
 }

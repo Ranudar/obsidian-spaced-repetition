@@ -27,6 +27,17 @@ img[src*="sr-ink-"] {
   border-radius: var(--radius-m);
   pointer-events: none;
 }
+.markdown-source-view .sr-pencil-host {
+  max-width: calc(100% - var(--sr-pencil-size) - var(--sr-pencil-gap));
+  padding: 4px;
+}
+.markdown-source-view .sr-pencil-host::after {
+  right: 0;
+}
+.markdown-source-view .sr-pencil-host > .sr-pencil-button {
+  right: auto;
+  left: calc(100% + var(--sr-pencil-gap));
+}
 .sr-pencil-host > img {
   display: block;
   max-width: 100%;
@@ -235,7 +246,7 @@ img[src*="sr-ink-"] {
   border-color: var(--interactive-accent);
 }
 .sr-card-editor-side-body > .sr-card-editor-text {
-  flex: 0 1 auto;
+  flex: 0 100 auto;
   box-sizing: border-box;
   width: 100%;
   height: calc(
@@ -264,9 +275,10 @@ img[src*="sr-ink-"] {
   outline: none;
 }
 .sr-card-editor-ink {
-  flex: 1;
-  min-height: 60px;
+  flex: 1 1 60px;
+  min-height: 0;
   display: flex;
+  overflow: hidden;
   border-top: 1px solid var(--background-modifier-border);
   background-color: var(--background-primary-alt);
 }

@@ -275,3 +275,48 @@ function segmentSegmentDist2(a: XY, b: XY, c: XY, d: XY): number {
         pointSegmentDist2(d[0], d[1], a, b),
     );
 }
+
+// MARK: clipping
+
+/** Whether (x, y) lies inside the box, its edges included */
+export function inBox(box: Box, x: number, y: number): boolean {
+    return x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY;
+}
+
+/**
+ * The part of the segment from a to b inside the box (Liang–Barsky), null when none of it is.
+ * Ends inside the box come back as the same objects, so callers can tell a clipped end (a new
+ * point on the box' edge, its pressure interpolated) from an original one.
+ */
+export function clipSegment(a: Point, b: Point, box: Box): [Point, Point] | null {
+    if (box.minX > box.maxX || box.minY > box.maxY) return null;
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    let t0 = 0;
+    let t1 = 1;
+    // For each edge: p < 0 the segment enters across it, p > 0 it leaves, q its distance inside
+    const edges: [number, number][] = [
+        [-dx, a[0] - box.minX],
+        [dx, box.maxX - a[0]],
+        [-dy, a[1] - box.minY],
+        [dy, box.maxY - a[1]],
+    ];
+    for (const [p, q] of edges) {
+        if (p === 0) {
+            // Parallel to the edge: all outside or all inside it
+            if (q < 0) return null;
+            continue;
+        }
+        const t = q / p;
+        if (p < 0) {
+            if (t > t1) return null;
+            if (t > t0) t0 = t;
+        } else {
+            if (t < t0) return null;
+            if (t < t1) t1 = t;
+        }
+    }
+    const at = (t: number): Point =>
+        t <= 0 ? a : t >= 1 ? b : [a[0] + dx * t, a[1] + dy * t, a[2] + (b[2] - a[2]) * t];
+    return [at(t0), at(t1)];
+}

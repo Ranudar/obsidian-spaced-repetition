@@ -1,6 +1,9 @@
 import {
+    Box,
+    clipSegment,
     eraserRadius,
     eraseStrokes,
+    inBox,
     Point,
     Stroke,
     strokePath,
@@ -31,6 +34,11 @@ const MIN_GUIDE_SPACING = 8;
  * the ink under it (pixel eraser: strokes are cut, not removed whole), shown by a circle cursor
  * (an element over the canvas, so a hovering pen doesn't repaint the strokes).
  *
+ * Ink is only taken where the field can be seen: inside the canvas, every ancestor that clips it
+ * and the (visual) viewport. Pointer capture keeps sending the pen's moves after it left that
+ * area, so no stroke is lost, but a stroke ends where the pen crosses out of the area and a new
+ * one starts where it comes back in; nothing outside is stored.
+ *
  * To stay light on battery, the guides are a CSS background, the canvas only redraws once per
  * animation frame, finished strokes are cached as Path2D and a hidden field does not draw at all.
  */
@@ -41,18 +49,33 @@ export class InkField {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
     private current: Stroke | null = null;
+    /** Strokes of the gesture in progress that ended at the edge of the visible area */
+    private parts: Stroke[] = [];
+    /** The gesture's last sample, inside the visible area or not */
+    private lastSample: Point | null = null;
+    private gesturePressure = false;
     private erasing = false;
     private eraseSnapshot: Stroke[] | null = null;
     /** Last eraser position of the gesture, the next move erases the stretch from here */
-    private eraseFrom: [number, number] | null = null;
+    private eraseFrom: Point | null = null;
     /**
      * The eraser circle (while erasing or hovering in eraser mode). An element on top of the
      * canvas, so moving it doesn't repaint the strokes.
      */
     private cursorEl: HTMLDivElement;
     private cursorShown = false;
-    /** The canvas' position on screen, read once per gesture or hover instead of on every move */
-    private rect: DOMRect | null = null;
+    /**
+     * The canvas' position on screen and its visible part (in canvas coordinates; null when the
+     * canvas is not laid out), read once per gesture or hover instead of on every move, and
+     * again after anything that can move the field: resize, scroll, the soft keyboard.
+     */
+    private view: { left: number; top: number; box: Box | null } | null = null;
+    /**
+     * The view the gesture's last sample was taken in. When the field moves mid-gesture, the
+     * samples before and after are in different coordinates and must not be joined.
+     */
+    private gestureView: { left: number; top: number } | null = null;
+    private win: Window;
     private activePointer: number | null = null;
     private frame = 0;
     /** Finished strokes as Path2D, with the size they were built for */
@@ -74,6 +97,7 @@ export class InkField {
         if (!ctx) throw new Error("Canvas not supported");
         this.ctx = ctx;
         this.applyGuides();
+        this.win = this.el.ownerDocument.defaultView ?? activeWindow;
 
         this.canvas.addEventListener("pointerdown", this.onDown);
         this.canvas.addEventListener("pointermove", this.onMove);
@@ -88,6 +112,11 @@ export class InkField {
             this.resizeObserver = new ResizeObserver(() => this.resize());
             this.resizeObserver.observe(this.el);
         }
+        // Scrolls don't bubble: caught on the way down, from any scrolling ancestor
+        this.el.ownerDocument.addEventListener("scroll", this.invalidateView, SCROLL_OPTIONS);
+        this.win.addEventListener("resize", this.invalidateView);
+        this.win.visualViewport?.addEventListener("resize", this.invalidateView);
+        this.win.visualViewport?.addEventListener("scroll", this.invalidateView);
         this.updateEmpty();
     }
 
@@ -121,6 +150,10 @@ export class InkField {
 
     destroy(): void {
         this.resizeObserver?.disconnect();
+        this.el.ownerDocument.removeEventListener("scroll", this.invalidateView, SCROLL_OPTIONS);
+        this.win.removeEventListener("resize", this.invalidateView);
+        this.win.visualViewport?.removeEventListener("resize", this.invalidateView);
+        this.win.visualViewport?.removeEventListener("scroll", this.invalidateView);
         if (this.frame) activeWindow.cancelAnimationFrame(this.frame);
         this.frame = 0;
         this.canvas.removeEventListener("pointerdown", this.onDown);
@@ -139,9 +172,42 @@ export class InkField {
     // MARK: input
 
     private point(e: PointerEvent): Point {
-        const r = (this.rect ??= this.canvas.getBoundingClientRect());
+        const v = (this.view ??= this.measure());
         const pressure = e.pointerType === "pen" ? e.pressure || 0.5 : 0.5;
-        return [e.clientX - r.left, e.clientY - r.top, pressure];
+        return [e.clientX - v.left, e.clientY - v.top, pressure];
+    }
+
+    private invalidateView = () => {
+        this.view = null;
+    };
+
+    /** The visible part of the canvas: see visibleBox() */
+    private measure() {
+        const r = this.canvas.getBoundingClientRect();
+        const box = visibleBox(this.canvas, r, this.win);
+        if (box === null) return { left: r.left, top: r.top, box: null };
+        return {
+            left: r.left,
+            top: r.top,
+            box: {
+                minX: box.minX - r.left,
+                minY: box.minY - r.top,
+                maxX: box.maxX - r.left,
+                maxY: box.maxY - r.top,
+            },
+        };
+    }
+
+    /** Whether a point (canvas coordinates, as from point()) can be seen */
+    private visible(p: Point): boolean {
+        const box = (this.view ??= this.measure()).box;
+        return box === null || inBox(box, p[0], p[1]);
+    }
+
+    /** The part of the move from a to b that can be seen, null when none of it */
+    private clip(a: Point, b: Point): [Point, Point] | null {
+        const box = (this.view ??= this.measure()).box;
+        return box === null ? [a, b] : clipSegment(a, b, box);
     }
 
     private wantsErase(e: PointerEvent): boolean {
@@ -162,7 +228,7 @@ export class InkField {
         e.preventDefault();
         this.activePointer = e.pointerId;
         // The field may have moved since the last gesture (e.g. the soft keyboard closed)
-        this.rect = null;
+        this.view = null;
         try {
             this.canvas.setPointerCapture(e.pointerId);
         } catch {
@@ -173,15 +239,17 @@ export class InkField {
             this.erasing = true;
             this.eraseSnapshot = this.strokes;
             const p = this.point(e);
-            this.eraseFrom = [p[0], p[1]];
+            this.gestureView = this.view;
+            this.eraseFrom = p;
             this.eraseTo(p);
         } else {
             this.hideCursor();
-            this.current = {
-                points: [this.point(e)],
-                pressure: e.pointerType === "pen",
-                size: this.opts.style.size,
-            };
+            this.gesturePressure = e.pointerType === "pen";
+            this.parts = [];
+            const p = this.point(e);
+            this.gestureView = this.view;
+            this.lastSample = p;
+            if (this.visible(p)) this.current = this.newStroke(p);
             this.updateEmpty();
         }
         this.schedule();
@@ -194,14 +262,70 @@ export class InkField {
         if (this.erasing) {
             // The eraser cuts along the whole path between moves, so coalesced samples add little;
             // the canvas is only redrawn when ink was erased
-            this.eraseTo(this.point(e));
-        } else if (this.current) {
+            const p = this.point(e);
+            if (this.fieldMoved()) this.eraseFrom = null;
+            this.eraseTo(p);
+        } else if (this.lastSample) {
             const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
             const samples = events.length > 0 ? events : [e];
-            for (const ev of samples) this.current.points.push(this.point(ev));
+            for (const ev of samples) {
+                const p = this.point(ev);
+                if (this.fieldMoved()) {
+                    this.endStroke();
+                    this.lastSample = null;
+                }
+                this.addSample(p);
+            }
+            this.updateEmpty();
             this.schedule();
         }
     };
+
+    /**
+     * Whether the field moved on screen (scroll, soft keyboard) since the gesture's last sample.
+     * The pen didn't jump, so the next sample starts afresh instead of drawing a line from where
+     * the last one is in the old coordinates.
+     */
+    private fieldMoved(): boolean {
+        const prev = this.gestureView;
+        const v = this.view;
+        if (v === null || v === prev) return false;
+        this.gestureView = v;
+        return prev !== null && (v.left !== prev.left || v.top !== prev.top);
+    }
+
+    /**
+     * Continues the gesture to p, keeping only what can be seen: leaving the visible area ends
+     * the stroke at the edge, coming back starts a new one at the edge.
+     */
+    private addSample(p: Point) {
+        const prev = this.lastSample ?? p;
+        this.lastSample = p;
+        const seg = this.clip(prev, p);
+        if (seg === null) return this.endStroke();
+        const [from, to] = seg;
+        if (this.current === null) this.current = this.newStroke(from);
+        const pts = this.current.points;
+        if (pts[pts.length - 1] !== to) pts.push(to);
+        // Clipped: the pen left the visible area on the way to p
+        if (to !== p) this.endStroke();
+    }
+
+    private newStroke(p: Point): Stroke {
+        return { points: [p], pressure: this.gesturePressure, size: this.opts.style.size };
+    }
+
+    /** The stroke in progress reached the edge of the visible area */
+    private endStroke() {
+        if (this.current === null) return;
+        this.parts.push(this.current);
+        this.current = null;
+    }
+
+    /** The gesture's strokes, those ended at an edge and the one in progress */
+    private gestureStrokes(): Stroke[] {
+        return this.current ? [...this.parts, this.current] : this.parts;
+    }
 
     /**
      * A hovering pen (or mouse) in eraser mode shows where it would erase. Only the cursor
@@ -210,15 +334,16 @@ export class InkField {
     private hover(e: PointerEvent) {
         if (e.pointerType === "touch") return;
         if (this.wantsErase(e)) {
-            const [x, y] = this.point(e);
-            this.showCursor(x, y);
+            const p = this.point(e);
+            if (this.visible(p)) this.showCursor(p[0], p[1]);
+            else this.hideCursor();
         } else {
             this.hideCursor();
         }
     }
 
     private onEnter = () => {
-        this.rect = null;
+        this.view = null;
     };
 
     private onLeave = (e: PointerEvent) => {
@@ -233,16 +358,21 @@ export class InkField {
         if (this.erasing) {
             this.erasing = false;
             this.eraseFrom = null;
+            this.gestureView = null;
             this.hideCursor();
             const prev = this.eraseSnapshot;
             this.eraseSnapshot = null;
             // One undo step for the whole gesture
             if (prev && prev !== this.strokes) this.opts.onChange(this, prev);
-        } else if (this.current) {
-            const prev = this.strokes;
-            this.strokes = [...this.strokes, this.current];
-            this.current = null;
-            this.opts.onChange(this, prev);
+        } else {
+            const added = this.gestureStrokes();
+            this.resetGesture();
+            // One undo step for the whole gesture, however often it left the visible area
+            if (added.length > 0) {
+                const prev = this.strokes;
+                this.strokes = [...this.strokes, ...added];
+                this.opts.onChange(this, prev);
+            }
         }
         this.updateEmpty();
         this.schedule();
@@ -254,18 +384,27 @@ export class InkField {
         // What was erased so far was already shown gone, so it stays erased
         if (this.erasing) return this.onUp(e);
         this.activePointer = null;
-        this.current = null;
+        this.resetGesture();
         this.updateEmpty();
         this.schedule();
     };
 
-    /** Erases the ink along the eraser's way from the last position to p */
-    private eraseTo([x, y]: Point) {
-        const from = this.eraseFrom ?? [x, y];
+    private resetGesture() {
+        this.current = null;
+        this.parts = [];
+        this.lastSample = null;
+        this.gestureView = null;
+    }
+
+    /** Erases the ink along the eraser's way from the last position to p, where it can be seen */
+    private eraseTo(p: Point) {
+        const seg = this.clip(this.eraseFrom ?? p, p);
+        this.eraseFrom = p;
+        if (this.visible(p)) this.showCursor(p[0], p[1]);
+        else this.hideCursor();
+        if (seg === null) return;
         const size = this.opts.style.size;
-        const kept = eraseStrokes(this.strokes, from, [x, y], eraserRadius(size), size);
-        this.eraseFrom = [x, y];
-        this.showCursor(x, y);
+        const kept = eraseStrokes(this.strokes, seg[0], seg[1], eraserRadius(size), size);
         if (kept !== this.strokes) {
             this.strokes = kept;
             this.updateEmpty();
@@ -295,7 +434,7 @@ export class InkField {
     // MARK: drawing
 
     private updateEmpty() {
-        this.el.toggleClass("is-empty", this.isEmpty && !this.current);
+        this.el.toggleClass("is-empty", this.isEmpty && !this.current && this.parts.length === 0);
     }
 
     /** The ink color follows the theme: read it again and redraw */
@@ -327,7 +466,7 @@ export class InkField {
         if (width === 0 || height === 0) return;
         const w = Math.max(1, Math.round(width * dpr));
         const h = Math.max(1, Math.round(height * dpr));
-        this.rect = null;
+        this.view = null;
         if (w !== this.canvas.width || h !== this.canvas.height) {
             this.canvas.width = w;
             this.canvas.height = h;
@@ -352,15 +491,65 @@ export class InkField {
         const ctx = this.ctx;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        if (this.strokes.length === 0 && !this.current) return;
+        if (this.strokes.length === 0 && !this.current && this.parts.length === 0) return;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         this.inkColor ??= cssVar(this.el, "--text-normal", "#222");
         ctx.fillStyle = this.inkColor;
         for (const s of this.strokes) ctx.fill(this.path(s));
+        // Finished parts of the gesture don't change any more
+        for (const s of this.parts) ctx.fill(this.path(s));
         // The stroke in progress changes every frame, so it is not cached
         if (this.current) ctx.fill(new Path2D(strokePath(this.current, this.opts.style)));
     }
+}
+
+const SCROLL_OPTIONS: AddEventListenerOptions = { capture: true, passive: true };
+
+/**
+ * The part of an element's box (`rect`, on screen) that can be seen: cut to every ancestor that
+ * clips its content (overflow other than visible, up to but without body, whose overflow is the
+ * window's), the window and the visual viewport (pinch zoom, soft keyboard). Ancestors that are
+ * not laid out are skipped; null when the element itself is not laid out.
+ */
+export function visibleBox(el: Element, rect: DOMRect, win: Window): Box | null {
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const box: Box = { minX: rect.left, minY: rect.top, maxX: rect.right, maxY: rect.bottom };
+    const cut = (minX: number, minY: number, maxX: number, maxY: number) => {
+        box.minX = Math.max(box.minX, minX);
+        box.minY = Math.max(box.minY, minY);
+        box.maxX = Math.min(box.maxX, maxX);
+        box.maxY = Math.min(box.maxY, maxY);
+    };
+    const doc = el.ownerDocument;
+    for (
+        let a = el.parentElement;
+        a && a !== doc.body && a !== doc.documentElement;
+        a = a.parentElement
+    ) {
+        const style = win.getComputedStyle(a);
+        const clipsX = clips(style.overflowX || style.overflow);
+        const clipsY = clips(style.overflowY || style.overflow);
+        const r = a.getBoundingClientRect();
+        if ((clipsX || clipsY) && r.width > 0 && r.height > 0) {
+            // Content is clipped at the padding box: inside the borders
+            const px = (v: string) => parseFloat(v) || 0;
+            cut(
+                clipsX ? r.left + px(style.borderLeftWidth) : -Infinity,
+                clipsY ? r.top + px(style.borderTopWidth) : -Infinity,
+                clipsX ? r.right - px(style.borderRightWidth) : Infinity,
+                clipsY ? r.bottom - px(style.borderBottomWidth) : Infinity,
+            );
+        }
+    }
+    cut(0, 0, win.innerWidth, win.innerHeight);
+    const vv = win.visualViewport;
+    if (vv) cut(vv.offsetLeft, vv.offsetTop, vv.offsetLeft + vv.width, vv.offsetTop + vv.height);
+    return box;
+}
+
+function clips(overflow: string): boolean {
+    return overflow !== "" && overflow !== "visible";
 }
 
 function cssVar(el: HTMLElement, name: string, fallback: string): string {

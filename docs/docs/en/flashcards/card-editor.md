@@ -100,6 +100,10 @@ The header holds the pen tools. They always stay in the same place and are alway
 
 While erasing, a circle shows the eraser's size and position. The eraser grows with the pen size.
 
+Ink only goes where you can see the writing field. If the pen slides off an edge, for example into
+the text field, the stroke ends at the edge; coming back without lifting the pen starts a new
+stroke there. The eraser only erases inside the field, too.
+
 With **Pen only** on (the default), fingers are ignored on the writing fields, so your hand can rest
 on the screen. A finger touching one of the editor's buttons while the pen is writing, or just
 after, is ignored too, so a resting palm doesn't save or discard the card. Turn it off to write with
@@ -135,6 +139,13 @@ handwritten back.
 
 After saving, every visible copy of a changed image reloads. When the card text changed, the note
 is updated and Spaced Repetition rescans your notes.
+
+In live preview, a handwriting embed counts as one unit: with the cursor right after it, one
+`Backspace` deletes the whole embed, and `Delete` before it does the same. The cursor jumps over it in
+one step. If the image fills its line, put the cursor at the start of the next line: the first
+`Backspace` joins the lines, the second deletes the embed. With the cursor inside the embed's
+text, `Backspace` or `Delete` also deletes the whole embed. The image file itself stays in the
+vault. An embed written in inline code or a code block is plain text and is edited as such.
 
 Inside the review window, the pencil does the same as the **Edit** button. If the image is not part
 of any card in the note, a notice says so. Images in Canvas text nodes get a pencil, but can't be

@@ -1,6 +1,7 @@
 import { Plugin } from "obsidian";
 
 import { CardEditorService } from "src/card-editor/card-editor-service";
+import { inkAtomicRanges } from "src/card-editor/ink-atomic-ranges";
 import { PencilButtons } from "src/card-editor/pencil-buttons";
 import { CommandManager } from "src/command-manager";
 import { DataManager } from "src/data/data-manager";
@@ -45,6 +46,8 @@ export default class SRPlugin extends Plugin {
             const pencilButtons = new PencilButtons(this.app, this._cardEditorService);
             this._pencilButtons = pencilButtons;
             this.registerMarkdownPostProcessor((el, ctx) => pencilButtons.postProcess(el, ctx));
+            // Handwriting in a note is deleted with one Backspace, not character by character
+            this.registerEditorExtension(inkAtomicRanges());
             const uiManager = new UIManager(this, settingsManager);
             this.uiManager = uiManager;
             this.commandManager = new CommandManager(this, settingsManager, uiManager);

@@ -1,6 +1,8 @@
 import {
+    clipSegment,
     eraserRadius,
     eraseStrokes,
+    inBox,
     Point,
     Stroke,
     strokeMaxRadius,
@@ -189,5 +191,46 @@ describe("pixel eraser", () => {
     test("pieces without their own size don't get one", () => {
         const [piece] = eraseStrokes([hline(0, 100)], [100, 0], [100, 0], 8, 2);
         expect("size" in piece).toBe(false);
+    });
+});
+
+describe("clipping to the visible area", () => {
+    const box = { minX: 0, minY: 0, maxX: 100, maxY: 50 };
+
+    test("a segment inside comes back as the same points", () => {
+        const a: Point = [10, 10, 0.5];
+        const b: Point = [90, 40, 0.5];
+        const [from, to] = clipSegment(a, b, box);
+        expect(from).toBe(a);
+        expect(to).toBe(b);
+    });
+
+    test("leaving: the end is moved to the crossing, the pressure interpolated", () => {
+        const a: Point = [50, 25, 0.2];
+        const b: Point = [150, 25, 0.6];
+        const [from, to] = clipSegment(a, b, box);
+        expect(from).toBe(a);
+        expect(to).toEqual([100, 25, 0.4]);
+    });
+
+    test("entering across a corner edge and passing through", () => {
+        const [from] = clipSegment([50, -50, 0.5], [50, 25, 0.5], box);
+        expect(from).toEqual([50, 0, 0.5]);
+        // Diagonal through the box, both ends outside
+        const [a, b] = clipSegment([-10, 25, 0.5], [110, 25, 0.5], box);
+        expect(a).toEqual([0, 25, 0.5]);
+        expect(b).toEqual([100, 25, 0.5]);
+    });
+
+    test("a segment that misses the box, or an empty box, gives nothing", () => {
+        expect(clipSegment([-10, -10, 0.5], [-10, 60, 0.5], box)).toBeNull();
+        expect(clipSegment([90, -40, 0.5], [140, 20, 0.5], box)).toBeNull();
+        const empty = { minX: 10, minY: 0, maxX: 5, maxY: 50 };
+        expect(clipSegment([0, 0, 0.5], [1, 1, 0.5], empty)).toBeNull();
+    });
+
+    test("the box' edges count as inside", () => {
+        expect(inBox(box, 0, 50)).toBe(true);
+        expect(inBox(box, 100.01, 10)).toBe(false);
     });
 });
