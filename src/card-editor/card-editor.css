@@ -40,6 +40,15 @@ img[src*="pencard-"] {
     overflow: hidden;
 }
 
+/* The editor has its own close button: Obsidian's (.modal-close-button before 1.14,
+   .modal-header-button since) and its header are hidden */
+.sr-card-editor-modal > .modal-close-button,
+.sr-card-editor-modal > .modal-header-button,
+.sr-card-editor-modal > .modal-header,
+.sr-card-editor-chrome-hidden {
+    display: none !important;
+}
+
 .sr-card-editor-header {
     display: flex;
     align-items: center;
@@ -75,6 +84,10 @@ img[src*="pencard-"] {
     color: var(--text-on-accent);
 }
 
+.sr-card-editor-icon-button.sr-card-editor-close {
+    margin-inline-start: var(--size-4-2);
+}
+
 .sr-card-editor-icon-button:disabled {
     opacity: 0.35;
 }
@@ -100,6 +113,11 @@ img[src*="pencard-"] {
 
 .sr-card-editor-footer .sr-card-editor-discard {
     color: var(--text-error);
+}
+
+.sr-card-editor-footer .sr-card-editor-discard.is-armed {
+    background-color: var(--background-modifier-error);
+    color: var(--text-on-accent);
 }
 
 .sr-card-editor-footer-spacer {

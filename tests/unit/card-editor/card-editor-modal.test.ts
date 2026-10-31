@@ -1,0 +1,502 @@
+import { App, Notice } from "obsidian";
+
+import {
+    CardEditorModal,
+    CardEditorOptions,
+    CardEditorResult,
+    CardEditorSides,
+} from "src/card-editor/card-editor-modal";
+import { Stroke } from "src/card-editor/core/strokes";
+import { SideState } from "src/card-editor/side-editor";
+import { CardType } from "src/data/data-structures/card/questions/question";
+import { DEFAULT_SETTINGS, SRSettings } from "src/data/settings";
+
+// jsdom has no canvas; the ink field only needs a context object to exist
+beforeAll(() => {
+    jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+        () => ({}) as unknown as CanvasRenderingContext2D,
+    );
+});
+
+afterAll(() => {
+    jest.restoreAllMocks();
+});
+
+afterEach(() => {
+    document.body.replaceChildren();
+    (Notice as unknown as jest.Mock).mockClear();
+    jest.useRealTimers();
+});
+
+const stroke = (x: number): Stroke => ({
+    points: [
+        [x, 0, 0.5],
+        [x + 10, 10, 0.5],
+    ],
+    pressure: false,
+});
+
+const side = (s: Partial<SideState> = {}): SideState => ({
+    mode: "text",
+    text: "",
+    strokes: [],
+    penSize: 5,
+    ...s,
+});
+
+interface Callbacks {
+    save: jest.Mock<Promise<void>, [CardEditorResult]>;
+    keepDraft: jest.Mock<void, [CardEditorSides | null]>;
+    closed: jest.Mock<void, []>;
+}
+
+function callbacks(): Callbacks {
+    return {
+        save: jest.fn<Promise<void>, [CardEditorResult]>(() => Promise.resolve()),
+        keepDraft: jest.fn<void, [CardEditorSides | null]>(),
+        closed: jest.fn<void, []>(),
+    };
+}
+
+function openAdd(
+    draft: CardEditorSides | null = null,
+    settings: Partial<SRSettings> = {},
+): { modal: CardEditorModal; cb: Callbacks } {
+    const cb = callbacks();
+    const opts: CardEditorOptions = { kind: "add", title: "Biology", draft, ...cb };
+    const modal = new CardEditorModal({} as App, { ...DEFAULT_SETTINGS, ...settings }, opts);
+    modal.open();
+    return { modal, cb };
+}
+
+function openEdit(
+    initial: CardEditorSides,
+    cardType = CardType.MultiLineBasic,
+): { modal: CardEditorModal; cb: Callbacks } {
+    const cb = callbacks();
+    const opts: CardEditorOptions = {
+        kind: "edit",
+        title: "Edit card",
+        initial,
+        cardType,
+        save: cb.save,
+        closed: cb.closed,
+    };
+    const modal = new CardEditorModal({} as App, DEFAULT_SETTINGS, opts);
+    modal.open();
+    return { modal, cb };
+}
+
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.body.querySelector<T>(sel);
+const $$ = <T extends HTMLElement = HTMLElement>(sel: string) =>
+    Array.from(document.body.querySelectorAll<T>(sel));
+
+const textAreas = () => $$<HTMLTextAreaElement>("textarea.sr-card-editor-text");
+const button = (text: string) =>
+    $$<HTMLButtonElement>("button").find((b) => b.textContent === text);
+const iconButton = (label: string) => $<HTMLButtonElement>(`button[aria-label="${label}"]`);
+const eraser = () => iconButton("Eraser (or hold the pen button)");
+const undo = () => iconButton("Undo");
+const clearSide = () => iconButton("Clear side");
+const saveNext = () => button("Save & next");
+const saveClose = () => button("Save & close");
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+function type(index: number, text: string) {
+    const ta = textAreas()[index];
+    ta.value = text;
+    ta.dispatchEvent(new Event("input"));
+}
+
+function keyDown(target: HTMLElement, key: string, init: KeyboardEventInit = {}) {
+    const evt = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(evt);
+    return evt;
+}
+
+describe("CardEditorModal layout", () => {
+    test("add mode: title, two text sides, single visible close button", () => {
+        openAdd();
+        expect($(".sr-card-editor-title").textContent).toBe("Biology");
+        expect(textAreas()).toHaveLength(2);
+        expect($(".modal-close-button").hasClass("sr-card-editor-chrome-hidden")).toBe(true);
+        expect($(".modal-bg").hasClass("sr-card-editor-chrome-hidden")).toBe(false);
+        expect($$(".sr-card-editor-close")).toHaveLength(1);
+        expect($(".sr-card-editor-header").lastElementChild).toBe($(".sr-card-editor-close"));
+        expect(saveNext()).toBeDefined();
+        expect(saveClose()).toBeDefined();
+        expect(button("Discard")).toBeDefined();
+        expect(document.activeElement).toBe(textAreas()[0]);
+    });
+
+    test("sides start in the default input mode", () => {
+        openAdd(null, { cardEditorDefaultMode: "ink" });
+        expect($$(".sr-card-editor-side.is-ink")).toHaveLength(2);
+        expect($$(".sr-ink-field")).toHaveLength(2);
+    });
+
+    test("edit mode: Cancel and Save, sides loaded from the card", () => {
+        openEdit({ front: side({ text: "Q" }), back: side({ mode: "ink", strokes: [stroke(0)] }) });
+        expect(textAreas()[0].value).toBe("Q");
+        expect($$(".sr-card-editor-side")[1].hasClass("is-ink")).toBe(true);
+        expect(button("Cancel")).toBeDefined();
+        expect(button("Save")).toBeDefined();
+        expect(saveNext()).toBeUndefined();
+        expect(button("Discard")).toBeUndefined();
+        expect($(".sr-card-editor-counter")).toBeNull();
+    });
+
+    test("cloze: one text side without pen switch", () => {
+        openEdit({ front: side({ text: "a ==b==" }), back: null }, CardType.Cloze);
+        expect($$(".sr-card-editor-side")).toHaveLength(1);
+        expect($(".sr-card-editor-side-label").textContent).toBe("Card");
+        expect($(".sr-card-editor-mode-switch")).toBeNull();
+        expect(eraser().disabled).toBe(true);
+    });
+});
+
+describe("CardEditorModal add mode", () => {
+    test("save is disabled until both sides have content", () => {
+        openAdd();
+        expect(saveNext().disabled).toBe(true);
+        expect(saveClose().disabled).toBe(false); // empty card: just closes
+        type(0, "Q");
+        expect(saveNext().disabled).toBe(true);
+        expect(saveClose().disabled).toBe(true);
+        type(1, "   ");
+        expect(saveNext().disabled).toBe(true);
+        type(1, "A");
+        expect(saveNext().disabled).toBe(false);
+        expect(saveClose().disabled).toBe(false);
+    });
+
+    test("Save & next saves, clears the sides, counts and focuses the front", async () => {
+        const { cb } = openAdd();
+        type(0, "Q1");
+        type(1, "A1");
+        saveNext().click();
+        await flush();
+        expect(cb.save).toHaveBeenCalledWith({
+            front: { mode: "text", text: "Q1" },
+            back: { mode: "text", text: "A1" },
+        });
+        expect(textAreas().map((ta) => ta.value)).toEqual(["", ""]);
+        expect($(".sr-card-editor-counter").textContent).toContain("1 card(s) added");
+        expect(document.activeElement).toBe(textAreas()[0]);
+        expect(cb.closed).not.toHaveBeenCalled();
+
+        type(0, "Q2");
+        type(1, "A2");
+        saveNext().click();
+        await flush();
+        expect(cb.save).toHaveBeenCalledTimes(2);
+        expect($(".sr-card-editor-counter").textContent).toContain("2 card(s) added");
+    });
+
+    test("Save & close saves and closes without a draft", async () => {
+        const { cb } = openAdd();
+        type(0, "Q");
+        type(1, "A");
+        saveClose().click();
+        await flush();
+        expect(cb.save).toHaveBeenCalledTimes(1);
+        expect(cb.keepDraft).toHaveBeenCalledWith(null);
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("Save & close on an empty card only closes", async () => {
+        const { cb } = openAdd();
+        saveClose().click();
+        await flush();
+        expect(cb.save).not.toHaveBeenCalled();
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("ink sides are saved with strokes, pen size and the changed flag", async () => {
+        const { cb } = openAdd({
+            front: side({ text: "Q" }),
+            back: side({ mode: "ink", strokes: [stroke(0)], penSize: 7 }),
+        });
+        saveNext().click();
+        await flush();
+        expect(cb.save.mock.calls[0][0].back).toEqual({
+            mode: "ink",
+            strokes: [stroke(0)],
+            penSize: 7,
+            changed: false,
+        });
+        // The next card keeps each side's input mode
+        expect($$(".sr-card-editor-side")[1].hasClass("is-ink")).toBe(true);
+    });
+
+    test("save errors keep the editor open and show a notice", async () => {
+        const { cb } = openAdd();
+        cb.save.mockRejectedValueOnce(new Error("disk full"));
+        jest.spyOn(console, "error").mockImplementation(() => {});
+        type(0, "Q");
+        type(1, "A");
+        saveClose().click();
+        await flush();
+        expect(Notice).toHaveBeenCalledWith("Could not save the card: Error: disk full");
+        expect(cb.closed).not.toHaveBeenCalled();
+        expect(textAreas().map((ta) => ta.value)).toEqual(["Q", "A"]);
+        expect(saveNext().disabled).toBe(false);
+    });
+
+    test("a second save while saving is ignored", async () => {
+        const { cb } = openAdd();
+        let finish: () => void = () => {};
+        cb.save.mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)));
+        type(0, "Q");
+        type(1, "A");
+        saveNext().click();
+        expect(saveNext().disabled).toBe(true);
+        keyDown(textAreas()[0], "Enter", { ctrlKey: true });
+        saveClose().click();
+        finish();
+        await flush();
+        expect(cb.save).toHaveBeenCalledTimes(1);
+    });
+
+    test("Ctrl/Cmd+Enter is Save & next", async () => {
+        const { cb } = openAdd();
+        type(0, "Q");
+        type(1, "A");
+        const evt = keyDown(textAreas()[1], "Enter", { metaKey: true });
+        expect(evt.defaultPrevented).toBe(true);
+        await flush();
+        expect(cb.save).toHaveBeenCalledTimes(1);
+        expect(cb.closed).not.toHaveBeenCalled();
+    });
+
+    test("Ctrl+Enter with an empty side shows a notice instead of saving", async () => {
+        const { cb } = openAdd();
+        type(0, "Q");
+        keyDown(textAreas()[0], "Enter", { ctrlKey: true });
+        await flush();
+        expect(cb.save).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith("Fill in both sides of the card first.");
+    });
+});
+
+describe("CardEditorModal drafts and discard", () => {
+    test("closing keeps the unsaved card as a draft, which restores", () => {
+        const first = openAdd();
+        type(0, "Q");
+        first.modal.close();
+        expect(first.cb.keepDraft).toHaveBeenCalledTimes(1);
+        const draft = first.cb.keepDraft.mock.calls[0][0];
+        expect(draft.front.text).toBe("Q");
+        expect(draft.back.text).toBe("");
+        expect(first.cb.closed).toHaveBeenCalledTimes(1);
+
+        openAdd(draft);
+        expect(textAreas().map((ta) => ta.value)).toEqual(["Q", ""]);
+    });
+
+    test("a draft keeps the strokes of a side switched back to text", () => {
+        const { modal, cb } = openAdd({
+            front: side({ mode: "text", text: "", strokes: [stroke(0)] }),
+            back: side(),
+        });
+        modal.close();
+        expect(cb.keepDraft.mock.calls[0][0].front.strokes).toEqual([stroke(0)]);
+    });
+
+    test("an empty card leaves no draft", () => {
+        const { modal, cb } = openAdd();
+        modal.close();
+        expect(cb.keepDraft).toHaveBeenCalledWith(null);
+    });
+
+    test("the close button closes", () => {
+        const { cb } = openAdd();
+        $<HTMLButtonElement>(".sr-card-editor-close").click();
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("Discard arms on the first tap and discards on the second", () => {
+        const { cb } = openAdd();
+        type(0, "Q");
+        const discard = $<HTMLButtonElement>(".sr-card-editor-discard");
+        discard.click();
+        expect(discard.textContent).toBe("Tap again to discard");
+        expect(cb.closed).not.toHaveBeenCalled();
+        discard.click();
+        expect(cb.keepDraft).toHaveBeenCalledWith(null);
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("Discard disarms after 3 seconds", () => {
+        jest.useFakeTimers();
+        const { cb } = openAdd();
+        type(0, "Q");
+        const discard = $<HTMLButtonElement>(".sr-card-editor-discard");
+        discard.click();
+        jest.advanceTimersByTime(3000);
+        expect(discard.textContent).toBe("Discard");
+        discard.click();
+        expect(cb.closed).not.toHaveBeenCalled();
+        expect(discard.textContent).toBe("Tap again to discard");
+    });
+
+    test("Discard on an empty card closes right away", () => {
+        const { cb } = openAdd();
+        $<HTMLButtonElement>(".sr-card-editor-discard").click();
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("closing while saving keeps the draft only if saving fails", async () => {
+        jest.spyOn(console, "error").mockImplementation(() => {});
+        for (const fails of [false, true]) {
+            const { modal, cb } = openAdd();
+            let settle: (ok: boolean) => void = () => {};
+            cb.save.mockImplementationOnce(
+                () =>
+                    new Promise<void>((resolve, reject) => {
+                        settle = (ok) => (ok ? resolve() : reject(new Error("x")));
+                    }),
+            );
+            type(0, "Q");
+            type(1, "A");
+            saveNext().click();
+            modal.close();
+            expect(cb.closed).not.toHaveBeenCalled();
+            settle(!fails);
+            await flush();
+            expect(cb.closed).toHaveBeenCalledTimes(1);
+            const draft = cb.keepDraft.mock.calls[0][0];
+            if (fails) expect(draft.front.text).toBe("Q");
+            else expect(draft).toBeNull();
+        }
+    });
+});
+
+describe("CardEditorModal edit mode", () => {
+    test("Cancel closes without saving", () => {
+        const { cb } = openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
+        button("Cancel").click();
+        expect(cb.save).not.toHaveBeenCalled();
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("Save passes both sides and closes", async () => {
+        const strokes = [stroke(0)];
+        const { cb } = openEdit({
+            front: side({ text: "Q" }),
+            back: side({ mode: "ink", strokes, penSize: 3 }),
+        });
+        type(0, "Q2");
+        button("Save").click();
+        await flush();
+        expect(cb.save).toHaveBeenCalledWith({
+            front: { mode: "text", text: "Q2" },
+            back: { mode: "ink", strokes, penSize: 3, changed: false },
+        });
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("Save is disabled while a side is empty", () => {
+        openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
+        type(1, "");
+        expect(button("Save").disabled).toBe(true);
+    });
+
+    test("cloze saves a single text side", async () => {
+        const { cb } = openEdit({ front: side({ text: "a ==b==" }), back: null }, CardType.Cloze);
+        keyDown(textAreas()[0], "Enter", { ctrlKey: true });
+        await flush();
+        expect(cb.save).toHaveBeenCalledWith({
+            front: { mode: "text", text: "a ==b==" },
+            back: null,
+        });
+    });
+
+    test("save errors keep the editor open", async () => {
+        jest.spyOn(console, "error").mockImplementation(() => {});
+        const { cb } = openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
+        cb.save.mockRejectedValueOnce("nope");
+        button("Save").click();
+        await flush();
+        expect(Notice).toHaveBeenCalledWith("Could not save the card: nope");
+        expect(cb.closed).not.toHaveBeenCalled();
+    });
+});
+
+describe("CardEditorModal pen tools", () => {
+    test("enabled only while a side is in ink mode", () => {
+        openAdd();
+        expect(eraser().disabled).toBe(true);
+        expect(undo().disabled).toBe(true);
+        expect(clearSide().disabled).toBe(true);
+
+        $$<HTMLButtonElement>(".sr-card-editor-mode-button")[1].click(); // front → ink
+        expect(eraser().disabled).toBe(false);
+        expect(undo().disabled).toBe(true); // nothing to undo yet
+        expect(clearSide().disabled).toBe(true); // nothing to clear yet
+    });
+
+    test("eraser toggles and turns off when no side is ink", () => {
+        openAdd(null, { cardEditorDefaultMode: "ink" });
+        eraser().click();
+        expect(eraser().hasClass("is-active")).toBe(true);
+        eraser().click();
+        expect(eraser().hasClass("is-active")).toBe(false);
+        eraser().click();
+
+        const switches = $$<HTMLButtonElement>(".sr-card-editor-mode-button");
+        switches[0].click(); // front → text
+        expect(eraser().hasClass("is-active")).toBe(true);
+        switches[2].click(); // back → text
+        expect(eraser().hasClass("is-active")).toBe(false);
+        expect(eraser().disabled).toBe(true);
+    });
+
+    test("clear side and undo work across both sides", async () => {
+        const front = [stroke(0)];
+        const back = [stroke(50)];
+        const { cb } = openEdit({
+            front: side({ mode: "ink", strokes: front }),
+            back: side({ mode: "ink", strokes: back }),
+        });
+        // Clear acts on the side last touched
+        $$(".sr-card-editor-side")[1].dispatchEvent(new Event("pointerdown"));
+        clearSide().click();
+        expect(button("Save").disabled).toBe(true);
+        expect(clearSide().disabled).toBe(false); // front still has ink
+        $$(".sr-card-editor-side")[0].dispatchEvent(new Event("pointerdown"));
+        clearSide().click();
+        expect(clearSide().disabled).toBe(true);
+        expect(undo().disabled).toBe(false);
+
+        undo().click(); // front back
+        expect(button("Save").disabled).toBe(true);
+        keyDown($(".sr-ink-field"), "z", { ctrlKey: true }); // back back
+        expect(undo().disabled).toBe(true);
+        expect(button("Save").disabled).toBe(false);
+
+        button("Save").click();
+        await flush();
+        const result = cb.save.mock.calls[0][0];
+        expect(result.front).toEqual({ mode: "ink", strokes: front, penSize: 5, changed: false });
+        expect(result.back).toEqual({ mode: "ink", strokes: back, penSize: 5, changed: false });
+    });
+
+    test("undo shows the side it changes in ink mode", () => {
+        openAdd({ front: side({ mode: "ink", strokes: [stroke(0)] }), back: side() });
+        clearSide().click();
+        $$<HTMLButtonElement>(".sr-card-editor-mode-button")[0].click(); // front → text
+        expect(undo().disabled).toBe(true); // no ink side
+        $$<HTMLButtonElement>(".sr-card-editor-mode-button")[3].click(); // back → ink
+        undo().click();
+        expect($$(".sr-card-editor-side")[0].hasClass("is-ink")).toBe(true);
+    });
+
+    test("Ctrl+Z in a text area is left to the text area", () => {
+        openAdd({ front: side({ mode: "ink", strokes: [stroke(0)] }), back: side() });
+        clearSide().click();
+        const evt = keyDown(textAreas()[1], "z", { ctrlKey: true });
+        expect(evt.defaultPrevented).toBe(false);
+        expect(undo().disabled).toBe(false);
+    });
+});

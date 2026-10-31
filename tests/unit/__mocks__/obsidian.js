@@ -14,6 +14,9 @@ Object.assign(HTMLElement.prototype, {
     createDiv(o) {
         return this.createEl("div", o);
     },
+    createSpan(o) {
+        return this.createEl("span", o);
+    },
     addClass(...cls) {
         this.classList.add(...cls);
     },
@@ -51,13 +54,19 @@ globalThis.activeDocument = document;
 class Modal {
     constructor(app) {
         this.app = app;
-        this.modalEl = document.createElement("div");
-        this.contentEl = this.modalEl.createDiv();
+        // Same structure as Obsidian: container > background + modal > close button + content
+        this.containerEl = document.createElement("div");
+        this.containerEl.createDiv({ cls: "modal-bg" });
+        this.modalEl = this.containerEl.createDiv({ cls: "modal" });
+        this.modalEl.createDiv({ cls: "modal-close-button" });
+        this.contentEl = this.modalEl.createDiv({ cls: "modal-content" });
     }
     open() {
+        document.body.appendChild(this.containerEl);
         this.onOpen();
     }
     close() {
+        this.containerEl.remove();
         this.onClose();
     }
     onOpen() {}
@@ -98,6 +107,7 @@ module.exports = {
     },
 
     Notice: jest.fn().mockImplementation(),
+    setIcon: jest.fn(),
     Modal,
     ButtonComponent,
 };
