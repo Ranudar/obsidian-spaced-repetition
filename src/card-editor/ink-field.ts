@@ -48,9 +48,10 @@ const SIDE_BUTTON_QUIET_MS = 250;
  * strokes). Pressing the side button while hovering is reported to onSideButton. Writing never
  * moves the focus.
  *
- * Ink is only taken where the field can be seen: inside the canvas and the (visual) viewport. Pointer capture keeps sending the pen's moves after it left that
- * area, so no stroke is lost, but a stroke ends where the pen crosses out of the area and a new
- * one starts where it comes back in; nothing outside is stored.
+ * Ink is only taken where the field can be seen: inside the canvas and the (visual) viewport.
+ * Pointer capture keeps sending the pen's moves after it left that area, so no stroke is lost,
+ * but a stroke ends where the pen crosses out of the area and a new one starts where it comes
+ * back in; nothing outside is stored.
  *
  * To stay light on battery, the guides are a CSS background, the canvas only redraws once per
  * animation frame, finished strokes are cached as Path2D and a hidden field does not draw at all.
