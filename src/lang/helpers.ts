@@ -44,11 +44,10 @@ function insertParameters(translation: string, params: Record<string, unknown>):
  * @returns {string} The translation
  */
 export function t(translationKey: keyof IBaseLocale, params?: Record<string, unknown>): string {
-    const currentLocale: string = LocaleManagerInstance.getInstance().currentLocale;
-    const currentLocaleMap: IBaseLocale = LocaleManagerInstance.getInstance().currentTranslation();
-
     // Retrieve translation from locale. Fall back to english if something went wrong
-    const translation = (currentLocale && currentLocaleMap[translationKey]) || en[translationKey];
+    const translation =
+        LocaleManagerInstance.getInstance().currentTranslation()?.[translationKey] ||
+        en[translationKey];
 
     if (params) {
         return insertParameters(translation, params);
