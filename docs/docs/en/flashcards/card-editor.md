@@ -12,7 +12,7 @@ strokes, so you can open a handwritten card later and keep writing, erase or und
 1. Open the note the cards should go into.
 2. Run the command **Spaced Repetition: Add card**, from the command palette, the mobile toolbar or
    the mobile pull-down menu. The command is available whenever the active file is a Markdown note.
-3. Fill in the front, then tap the **Front ⇅ Back** button on the right to fill in the back. Type,
+3. Fill in the front, then tap the **Front ⇅ Back** button on the right (on the left with **Buttons on the left**) to fill in the back. Type,
    write by hand or both.
 4. Choose how to continue, with the buttons on the right below the switch:
 

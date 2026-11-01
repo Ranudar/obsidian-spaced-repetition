@@ -17,6 +17,7 @@ import {
     IFlashcardReviewSequencer,
 } from "src/scheduling/flashcard-review-sequencer";
 import { setupStaticDateProvider20230906 } from "src/utils/dates";
+import { setupNextRandomNumber, setupStaticRandomNumberProvider } from "src/utils/numbers";
 
 import { UnitTestSRFile } from "../helpers/unit-test-file";
 import { unitTestSetupStandardDataStoreAlgorithm } from "../helpers/unit-test-setup";
@@ -132,5 +133,38 @@ describe("FlashcardReviewSequencer - Bidirectional Deletion", () => {
         // Should be 0
         expect(statsAfterDelete.newCount).toEqual(2);
         expect(statsAfterDelete.cardsInQueueCount).toEqual(2);
+    });
+});
+
+describe("FlashcardReviewSequencer - Deleting another card of the note", () => {
+    beforeEach(() => {
+        setupStaticDateProvider20230906();
+    });
+
+    test("Removes it from the queue and the note, the current card stays current", async () => {
+        setupStaticRandomNumberProvider();
+        setupNextRandomNumber({ lower: 0, upper: 2, next: 2 });
+        const c: TestContext = TestContext.Create(
+            {
+                repItemOrder: RepItemOrder.NewFirstRandom,
+                deckOrder: DeckOrder.PrevDeckComplete_Sequential,
+            },
+            FlashcardReviewMode.Review,
+            DEFAULT_SETTINGS,
+            "#flashcards Q1::A1\n#flashcards Q2::A2\n#flashcards Q3::A3",
+        );
+        await c.setSequencerDeckTreeFromOriginalText();
+        const current = c.reviewSequencer.currentQuestion;
+        expect(c.reviewSequencer.currentCard.front).toEqual("Q3");
+        const first = current.note.questionList[0];
+
+        // Before the current card in the deck's list, so the current card's index shifts
+        await expect(c.reviewSequencer.deleteQuestionFromNote(first)).resolves.toEqual(true);
+
+        expect(c.reviewSequencer.currentQuestion).toBe(current);
+        expect(current.note.questionList).not.toContain(first);
+        expect(await c.file.read()).not.toContain("Q1::A1");
+        const stats = c.reviewSequencer.getDeckStats(TopicPath.getTopicPathFromTag("#flashcards"));
+        expect(stats.cardsInQueueCount).toEqual(2);
     });
 });

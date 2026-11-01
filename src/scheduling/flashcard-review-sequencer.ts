@@ -42,6 +42,8 @@ export interface IFlashcardReviewSequencer {
     updateCurrentQuestionTextAndCards(text: string): Promise<boolean>;
     updateQuestionTextAndCards(question: Question, text: string): Promise<boolean>;
     deleteCurrentCardFromNote(): Promise<void>;
+    /** For a question other than the current one; false, with nothing changed, as for updates */
+    deleteQuestionFromNote(question: Question): Promise<boolean>;
 }
 
 /**
@@ -460,5 +462,21 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
         await DataStore.getInstance().delete(question);
         this._originalDeckTree.deleteQuestionFromAllDecks(question, false);
         this.cardSequencer.deleteCurrentQuestionFromAllDecks();
+        FlashcardReviewSequencer.removeFromNote(question);
+    }
+
+    async deleteQuestionFromNote(question: Question): Promise<boolean> {
+        if (!(await DataStore.getInstance().delete(question))) return false;
+        this._originalDeckTree.deleteQuestionFromAllDecks(question, false);
+        this.cardSequencer.deleteQuestionFromAllDecks(question);
+        FlashcardReviewSequencer.removeFromNote(question);
+        return true;
+    }
+
+    // So the card editor's arrows, which step through the note's questions, skip deleted ones
+    private static removeFromNote(question: Question): void {
+        const list = question.note.questionList;
+        const index = list.indexOf(question);
+        if (index !== -1) list.splice(index, 1);
     }
 }

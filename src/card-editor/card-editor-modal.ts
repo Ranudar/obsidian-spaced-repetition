@@ -299,6 +299,7 @@ export class CardEditorModal extends Modal {
                 t("CARD_EDITOR_NEXT_CARD"),
                 () => void this.step(1),
             );
+            this.nextButton.addClass("sr-card-editor-next");
         }
         this.deleteButton = this.iconButton(header, "trash-2", t("CARD_EDITOR_DISCARD"), () => {
             void this.deleteCard();

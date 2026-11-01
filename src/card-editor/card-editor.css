@@ -221,6 +221,11 @@ img[src*="sr-ink-"] {
     white-space: nowrap;
 }
 
+/* Clear space between Next card, the most tapped while stepping, and Delete card */
+.sr-card-editor-header .sr-card-editor-icon-button.sr-card-editor-next {
+    margin-inline-end: 12px;
+}
+
 /* Clear space between Delete card and ✕ */
 .sr-card-editor-header .sr-card-editor-icon-button.sr-card-editor-close {
     margin-inline-start: 18px;

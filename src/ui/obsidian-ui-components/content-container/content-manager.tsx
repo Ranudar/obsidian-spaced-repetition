@@ -3,7 +3,6 @@ import { App, MarkdownView, Notice, Platform } from "obsidian";
 
 import { EditNoteResult } from "src/card-editor/card-editor-service";
 import { DataManager } from "src/data/data-manager";
-import { DataStore } from "src/data/data-store/base/data-store";
 import { Card } from "src/data/data-structures/card/card";
 import { Question } from "src/data/data-structures/card/questions/question";
 import { Deck } from "src/data/data-structures/deck/deck";
@@ -394,7 +393,8 @@ export default class ContentManager {
         let result: EditNoteResult | null = null;
         try {
             // The editor's arrows step through the cards of the card's note, not the review queue
-            const questions = currentQ.note.questionList;
+            // A copy: deleting a card removes it from the note's list
+            const questions = [...currentQ.note.questionList];
             const index = questions.indexOf(currentQ);
             // Write only called when the text changed: ink-only changes leave the note (and its
             // schedule) untouched
@@ -412,8 +412,7 @@ export default class ContentManager {
                           }
                         : {
                               write: (text) => sequencer.updateQuestionTextAndCards(question, text),
-                              // From the note only; this session's queue keeps the card
-                              delete: () => DataStore.getInstance().delete(question),
+                              delete: () => sequencer.deleteQuestionFromNote(question),
                           },
             );
         } catch (error) {

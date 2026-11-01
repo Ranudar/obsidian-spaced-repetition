@@ -177,6 +177,9 @@ img[src*="sr-ink-"] {
   font-size: var(--font-ui-smaller);
   white-space: nowrap;
 }
+.sr-card-editor-header .sr-card-editor-icon-button.sr-card-editor-next {
+  margin-inline-end: 12px;
+}
 .sr-card-editor-header .sr-card-editor-icon-button.sr-card-editor-close {
   margin-inline-start: 18px;
 }

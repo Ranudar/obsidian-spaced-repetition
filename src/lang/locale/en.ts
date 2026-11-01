@@ -439,7 +439,7 @@ const en: IBaseLocale = {
     CARD_EDITOR_PEN_SIZE: "Pen thickness",
     CARD_EDITOR_BUTTONS_LEFT: "Buttons on the left",
     CARD_EDITOR_BUTTONS_LEFT_DESC:
-        "For writing with the left hand: the Front ⇄ Back and save buttons move to the left of the writing fields.",
+        "For writing with the left hand: the Front ⇅ Back and save buttons move to the left of the writing fields.",
 
     // Card editor > command
     ADD_CARD: "Add card",
