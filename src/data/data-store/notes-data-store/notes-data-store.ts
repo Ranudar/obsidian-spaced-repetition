@@ -2,7 +2,7 @@ import { MULTI_SCHEDULING_EXTRACTOR, SM2_SCHEDULE_INFO_EXTRACTOR } from "src/dat
 import { IDataStore, StorageType } from "src/data/data-store/base/data-store";
 import { IFileModifier } from "src/data/data-store/base/file-modifier";
 import { RepItemStorageInfo } from "src/data/data-store/base/rep-item-storage-info";
-import { Question } from "src/data/data-structures/card/questions/question";
+import { CardType, Question } from "src/data/data-structures/card/questions/question";
 import { SRSettings } from "src/data/settings";
 import { RepItemScheduleInfo } from "src/scheduling/algorithms/base/rep-item-schedule-info";
 import { CommentParser } from "src/utils/comment-parser";
@@ -102,12 +102,50 @@ export class NotesDataStore implements IDataStore {
      */
     async delete(question: Question): Promise<void> {
         const fileText: string = await question.note.file.read();
-        const originalText: string = question.questionText.original;
-        const newText = MultiLineTextFinder.findAndReplace(fileText, originalText, "");
+        const newText = removeQuestionText(
+            fileText,
+            question.questionText.original,
+            question.questionType,
+            this.settings,
+        );
 
         // Only write if note hasn't changed
-        if (newText) {
+        if (newText !== null) {
             await question.note.file.write(newText);
         }
     }
+}
+
+/** Stands in for the question's text while the lines around it are tidied up */
+const QUESTION_PLACEHOLDER = "\u0000SR-QUESTION\u0000";
+
+/**
+ * The note's text without the question: its text with the schedule (`original`) and, for a
+ * multi-line card, the end marker line closing it. The blank lines that separated the card from
+ * the text around it become one. Null when the question's text is not in the note.
+ */
+export function removeQuestionText(
+    noteText: string,
+    original: string,
+    cardType: CardType,
+    settings: SRSettings,
+): string | null {
+    const replaced = MultiLineTextFinder.findAndReplace(noteText, original, QUESTION_PLACEHOLDER);
+    if (replaced === null) return null;
+    const lines = replaced.split("\n");
+    const i = lines.findIndex((line) => line.includes(QUESTION_PLACEHOLDER));
+    // The card shares its line with other text: only the card goes
+    if (lines[i].trim() !== QUESTION_PLACEHOLDER) return replaced.replace(QUESTION_PLACEHOLDER, "");
+    lines.splice(i, 1);
+
+    const marker = settings.multilineCardEndMarker;
+    if (marker && (cardType === CardType.MultiLineBasic || cardType === CardType.MultiLineReversed)) {
+        let j = i;
+        while (j < lines.length && lines[j].trim() === "") j++;
+        if (j < lines.length && lines[j].trim() === marker) lines.splice(i, j - i + 1);
+    }
+    // One blank line where the card was, none at the start of the note
+    while (i < lines.length && lines[i].trim() === "" && (i === 0 || lines[i - 1].trim() === ""))
+        lines.splice(i, 1);
+    return lines.join("\n");
 }

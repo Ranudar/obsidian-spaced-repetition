@@ -30,12 +30,12 @@ import {
 } from "src/card-editor/core/ink-svg";
 import { InkFiles } from "src/card-editor/ink-files";
 import { SideState } from "src/card-editor/side-editor";
+import { removeQuestionText } from "src/data/data-store/notes-data-store/notes-data-store";
 import { CardType, Question } from "src/data/data-structures/card/questions/question";
 import { SettingsUtil, SRSettings } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
 import { t } from "src/lang/helpers";
 import type SRPlugin from "src/main";
-import { MultiLineTextFinder } from "src/utils/strings";
 
 export interface EditQuestionResult {
     /** The new question text (actual question, without topic path and schedule) */
@@ -279,13 +279,14 @@ export class CardEditorService {
         }
     }
 
-    /** Removes the question's text, with its schedule, from its note */
+    /** Removes the question's text, with its schedule and end marker, from its note */
     private async deleteFromNote(question: Question): Promise<boolean> {
         const file = question.note.file;
-        const newText = MultiLineTextFinder.findAndReplace(
+        const newText = removeQuestionText(
             await file.read(),
             question.questionText.original,
-            "",
+            question.questionType,
+            this.settings,
         );
         if (newText === null) return false;
         await file.write(newText);
