@@ -1043,7 +1043,12 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
 
     test("next card saves the changes, opens the next card's editor; rescanned once at the end", async () => {
         const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
-        expect(opts.steps).toMatchObject({ prev: false, next: true, preview: false });
+        expect(opts.steps).toMatchObject({
+            prev: false,
+            next: true,
+            preview: false,
+            entering: false,
+        });
 
         // As the editor steps: save, then stepped; the service closes it once the next is open
         await opts.save({
@@ -1067,7 +1072,13 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
         const second = ModalMock.mock.calls[1][2];
         if (second.kind !== "edit") throw new Error("not opened for editing");
         expect(second.initial.front.text).toEqual("Draw a cell");
-        expect(second.steps).toMatchObject({ prev: true, next: false, preview: true });
+        // Stepped to: it appears at once, without sliding in
+        expect(second.steps).toMatchObject({
+            prev: true,
+            next: false,
+            preview: true,
+            entering: true,
+        });
         expect(sync).not.toHaveBeenCalled();
 
         // Back to the first card, without changes: nothing is written

@@ -648,6 +648,12 @@ img[src*="sr-ink-"] {
 .sr-card-editor-type-list > .sr-card-editor-type-item:hover {
   background-color: var(--background-modifier-hover);
 }
+.sr-card-editor-no-intro,
+.sr-card-editor-no-intro > .modal,
+.sr-card-editor-no-intro > .modal-bg {
+  animation: none !important;
+  transition: none !important;
+}
 
 /* src/ui/styles.css */
 [data-callout="sr"][data-callout-metadata="card-metadata"] {

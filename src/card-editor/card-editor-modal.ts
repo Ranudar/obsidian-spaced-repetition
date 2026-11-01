@@ -81,6 +81,8 @@ export type CardEditorOptions =
               prev: boolean;
               next: boolean;
               preview?: boolean;
+              /** Opened by stepping from another card's editor: appears at once, no slide-in */
+              entering?: boolean;
               stepped(direction: -1 | 1, preview: boolean): void;
           };
       });
@@ -219,6 +221,7 @@ export class CardEditorModal extends Modal {
     }
 
     onOpen(): void {
+        if (this.opts.kind === "edit" && this.opts.steps?.entering) this.skipIntro();
         this.modalEl.addClass("sr-card-editor-modal");
         this.hideModalChrome();
 
@@ -242,6 +245,19 @@ export class CardEditorModal extends Modal {
 
         // Also on mobile: the soft keyboard is meant to be open, writing doesn't close it
         this.front.focus();
+    }
+
+    /**
+     * Shows the editor at once, without the slide-in Obsidian's mobile app gives a modal: stepped
+     * to from another card's editor, it would show the background on its way up. Animations
+     * already running (CSS or scripted) are finished, now and in the next frame.
+     */
+    private skipIntro() {
+        this.containerEl.addClass("sr-card-editor-no-intro");
+        const finish = () =>
+            this.containerEl.getAnimations?.({ subtree: true }).forEach((a) => a.finish());
+        finish();
+        activeWindow.requestAnimationFrame(finish);
     }
 
     onClose(): void {

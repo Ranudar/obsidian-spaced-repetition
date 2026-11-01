@@ -65,6 +65,8 @@ export interface EditSteps {
     next: boolean;
     /** The editor opens with the preview on */
     preview?: boolean;
+    /** Stepped to from another card's editor: it appears at once, without sliding in */
+    entering?: boolean;
 }
 
 /** Writes and deletes one question of a note, see editQuestion() */
@@ -300,6 +302,7 @@ export class CardEditorService {
     ): Promise<EditNoteResult> {
         const total: EditNoteResult = { changedImages: [], textChanged: false, deleted: [] };
         let preview = false;
+        let stepped = false;
         // The editor stepped from, closed once the next one is open over it
         let previous: (() => void) | null = null;
         const closePrevious = () => {
@@ -314,7 +317,7 @@ export class CardEditorService {
                     question,
                     write,
                     del,
-                    { prev: i > 0, next: i < questions.length - 1, preview },
+                    { prev: i > 0, next: i < questions.length - 1, preview, entering: stepped },
                     closePrevious,
                 );
                 if (result === null) break;
@@ -325,6 +328,7 @@ export class CardEditorService {
                 i += result.step;
                 preview = result.preview ?? false;
                 previous = result.handOver ?? null;
+                stepped = true;
             }
         } finally {
             // The next editor didn't open (unloaded, failed to read the card)

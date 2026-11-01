@@ -889,7 +889,7 @@ describe("CardEditorModal previous / next card", () => {
     const prev = () => iconButton("Previous card");
     const next = () => iconButton("Next card");
 
-    function openStepping(prevCard: boolean, nextCard: boolean, preview = false) {
+    function openStepping(prevCard: boolean, nextCard: boolean, preview = false, entering = false) {
         const cb = callbacks();
         const stepped = jest.fn<void, [-1 | 1, boolean]>();
         const opts: CardEditorOptions = {
@@ -900,11 +900,22 @@ describe("CardEditorModal previous / next card", () => {
             save: cb.save,
             closed: cb.closed,
             delete: cb.delete,
-            steps: { prev: prevCard, next: nextCard, preview, stepped },
+            steps: { prev: prevCard, next: nextCard, preview, stepped, entering },
         };
-        new CardEditorModal(testApp(), SETTINGS, opts).open();
-        return { cb, stepped };
+        const modal = new CardEditorModal(testApp(), SETTINGS, opts);
+        modal.open();
+        return { cb, stepped, modal };
     }
+
+    test("an editor stepped to appears without sliding in", () => {
+        const { modal } = openStepping(true, true, false, true);
+        expect(modal.containerEl.hasClass("sr-card-editor-no-intro")).toBe(true);
+    });
+
+    test("the first editor opens as usual", () => {
+        const { modal } = openStepping(false, true);
+        expect(modal.containerEl.hasClass("sr-card-editor-no-intro")).toBe(false);
+    });
 
     test("only shown when editing a card of a note, disabled at the ends", () => {
         openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
