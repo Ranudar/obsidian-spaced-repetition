@@ -419,9 +419,7 @@ export default class ContentManager {
         if (this.sessionData !== null) {
             if (this.uiManager.uiState === UIState.CardFront) {
                 await this.cardContainer.drawCardFront(this.sessionData, this.settings);
-            }
-
-            if (this.uiManager.uiState === UIState.CardBack) {
+            } else if (this.uiManager.uiState === UIState.CardBack) {
                 await this.cardContainer.drawBack(
                     this.sessionData,
                     this.reviewMode,
