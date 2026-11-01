@@ -313,16 +313,22 @@ export class CardEditorModal extends Modal {
         }
         const saves = main.createDiv({ cls: "sr-card-editor-saves" });
         if (this.opts.kind === "add") {
-            this.saveButton = this.textButton(saves, t("CARD_EDITOR_SAVE_NEXT"), () => {
+            this.saveButton = this.saveButtonEl(saves, t("CARD_EDITOR_SAVE_NEXT"), "check", () => {
                 void this.saveAdd(false);
             });
             this.saveButton.addClass("sr-card-editor-save-next");
-            this.saveCloseButton = this.textButton(saves, t("CARD_EDITOR_SAVE_CLOSE"), () => {
-                void this.saveAdd(true);
-            });
+            setIcon(this.saveButton.createSpan({ cls: "sr-card-editor-save-icon" }), "arrow-right");
+            this.saveCloseButton = this.saveButtonEl(
+                saves,
+                t("CARD_EDITOR_SAVE_CLOSE"),
+                "check",
+                () => {
+                    void this.saveAdd(true);
+                },
+            );
             this.saveCloseButton.addClass("sr-card-editor-save-close");
         } else {
-            this.saveButton = this.textButton(saves, t("SAVE"), () => {
+            this.saveButton = this.saveButtonEl(saves, t("SAVE"), "check", () => {
                 void this.saveEdit();
             });
         }
@@ -752,6 +758,23 @@ export class CardEditorModal extends Modal {
             evt.stopPropagation();
             if (!isPalm()) onClick();
         });
+        return button;
+    }
+
+    /**
+     * A save button: its label, or, when the button is too low for the label (keyboard open, short
+     * screen), an icon; the label stays its accessible name
+     */
+    private saveButtonEl(
+        parent: HTMLElement,
+        text: string,
+        icon: string,
+        onClick: () => void,
+    ): HTMLButtonElement {
+        const button = this.textButton(parent, "", onClick);
+        button.setAttr("aria-label", text);
+        button.createSpan({ cls: "sr-card-editor-save-label", text });
+        setIcon(button.createSpan({ cls: "sr-card-editor-save-icon" }), icon);
         return button;
     }
 

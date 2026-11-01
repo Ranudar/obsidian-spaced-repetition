@@ -493,11 +493,36 @@ img[src*="sr-ink-"] {
     height: auto;
     padding: var(--size-4-1) var(--size-2-1);
     border-radius: var(--radius-l);
-    font-size: var(--font-ui-small);
-    line-height: 1.2;
+    font-size: var(--font-ui-smaller);
+    line-height: 1.15;
     white-space: normal;
     overflow-wrap: anywhere;
     text-align: center;
+    overflow: hidden;
+    /* The label or, in a button too low for it, the icons (see below) */
+    container-type: size;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sr-card-editor-saves .sr-card-editor-save-icon {
+    display: none;
+}
+
+.sr-card-editor-saves .sr-card-editor-save-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+@container (max-height: 52px) {
+    .sr-card-editor-saves .sr-card-editor-save-label {
+        display: none;
+    }
+
+    .sr-card-editor-saves .sr-card-editor-save-icon {
+        display: flex;
+    }
 }
 
 /* Save & next 2/3 of the height, Save & close 1/3 */
