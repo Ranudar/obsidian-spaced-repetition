@@ -1021,16 +1021,25 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
         const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
         expect(opts.steps).toMatchObject({ prev: false, next: true, preview: false });
 
-        // As the editor steps: save, stepped, closed
+        // As the editor steps: save, then stepped; the service closes it once the next is open
         await opts.save({
             front: text("What is the powerhouse of the eukaryotic cell?"),
             back: unchanged(opts.initial.back),
         });
         // With the preview on, the next editor shows it too
         opts.steps.stepped(1, true);
-        opts.closed();
         for (let i = 0; i < 20 && ModalMock.mock.calls.length < 2; i++) await Promise.resolve();
         expect(ModalMock).toHaveBeenCalledTimes(2);
+        // The first editor is closed only after the second one is open over it: no flash
+        /* eslint-disable @typescript-eslint/unbound-method */
+        const [first, next] = ModalMock.mock.instances;
+        expect(first.close).toHaveBeenCalledTimes(1);
+        expect(jest.mocked(next.open).mock.invocationCallOrder[0]).toBeLessThan(
+            jest.mocked(first.close).mock.invocationCallOrder[0],
+        );
+        /* eslint-enable @typescript-eslint/unbound-method */
+        expect(first.shouldRestoreSelection).toBe(false);
+        opts.closed();
         const second = ModalMock.mock.calls[1][2];
         if (second.kind !== "edit") throw new Error("not opened for editing");
         expect(second.initial.front.text).toEqual("Draw a cell");
@@ -1039,7 +1048,6 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
 
         // Back to the first card, without changes: nothing is written
         second.steps.stepped(-1, false);
-        second.closed();
         for (let i = 0; i < 20 && ModalMock.mock.calls.length < 3; i++) await Promise.resolve();
         const third = ModalMock.mock.calls[2][2];
         if (third.kind !== "edit") throw new Error("not opened for editing");

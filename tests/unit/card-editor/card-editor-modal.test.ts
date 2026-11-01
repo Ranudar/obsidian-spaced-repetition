@@ -905,7 +905,7 @@ describe("CardEditorModal previous / next card", () => {
         expect(next().disabled).toBe(true);
     });
 
-    test("stepping saves the changes first, then closes", async () => {
+    test("stepping saves the changes first, then stays open and locked until handed over", async () => {
         const { cb, stepped } = openStepping(true, true);
         type(1, "A2");
         next().click();
@@ -919,7 +919,9 @@ describe("CardEditorModal previous / next card", () => {
         expect(cb.save.mock.invocationCallOrder[0]).toBeLessThan(
             stepped.mock.invocationCallOrder[0],
         );
-        expect(cb.closed).toHaveBeenCalledTimes(1);
+        // The service closes it once the next card's editor is open over it
+        expect(cb.closed).not.toHaveBeenCalled();
+        expect(next().disabled).toBe(true);
     });
 
     test("a card without changes is not saved", async () => {
@@ -928,7 +930,6 @@ describe("CardEditorModal previous / next card", () => {
         await flush();
         expect(cb.save).not.toHaveBeenCalled();
         expect(stepped).toHaveBeenCalledWith(-1, false);
-        expect(cb.closed).toHaveBeenCalledTimes(1);
     });
 
     test("the preview stays on for the next card", async () => {

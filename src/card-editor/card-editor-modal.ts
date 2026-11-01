@@ -861,7 +861,8 @@ export class CardEditorModal extends Modal {
 
     /**
      * Previous / next card of the note: saves the card like Save, unless nothing was changed, then
-     * closes the editor for the service to open the other card's. A failed save stays on the card.
+     * hands over to the service, which opens the other card's editor over this one and then closes
+     * this one (no flash of the note in between). A failed save stays on the card.
      */
     private async step(direction: -1 | 1) {
         if (this.busy || this.opts.kind !== "edit" || !this.opts.steps) return;
@@ -871,8 +872,11 @@ export class CardEditorModal extends Modal {
             const saved = await this.runSave();
             if (!saved || this.isClosed) return;
         }
+        // Locked until it is closed, so it can't be stepped or saved twice
+        this.busy = true;
+        this.lockSides(true);
+        this.updateButtons();
         steps.stepped(direction, this.preview);
-        this.close();
     }
 
     /** The card type, text or ink of a side was changed since the editor opened */

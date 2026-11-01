@@ -52,6 +52,11 @@ export interface EditQuestionResult {
     step?: -1 | 1;
     /** When stepping: the preview was on, the next editor shows it too */
     preview?: boolean;
+    /**
+     * When stepping: closes the editor stepped from. It stays open (locked) until the next card's
+     * editor is open over it, so the note doesn't show in between.
+     */
+    handOver?: () => void;
 }
 
 /** Whether the editor offers the previous / next card of the note */
@@ -211,6 +216,7 @@ export class CardEditorService {
         writeText: WriteQuestionText,
         deleteQuestion: DeleteQuestion,
         steps?: EditSteps,
+        opened?: () => void,
     ): Promise<EditQuestionResult | null> {
         if (this.destroyed) return null;
         const cardType = question.questionType;
@@ -258,6 +264,12 @@ export class CardEditorService {
                         result ??= { text: original, textChanged: false, changedImages: [] };
                         result.step = direction;
                         result.preview = preview;
+                        result.handOver = () => {
+                            // The next editor has the focus; closing this one mustn't take it
+                            modal.shouldRestoreSelection = false;
+                            modal.close();
+                        };
+                        resolve(result);
                     },
                 },
                 closed: () => {
@@ -268,6 +280,7 @@ export class CardEditorService {
                 },
             });
             this.open(modal);
+            opened?.();
         });
     }
 
@@ -283,21 +296,35 @@ export class CardEditorService {
     ): Promise<EditNoteResult> {
         const total: EditNoteResult = { changedImages: [], textChanged: false, deleted: [] };
         let preview = false;
-        for (let i = index; ;) {
-            const question = questions[i];
-            const { write, delete: del } = writer(question);
-            const result = await this.editQuestion(question, write, del, {
-                prev: i > 0,
-                next: i < questions.length - 1,
-                preview,
-            });
-            if (result === null) break;
-            total.changedImages.push(...result.changedImages);
-            total.textChanged ||= result.textChanged;
-            if (result.deleted) total.deleted.push(question);
-            if (result.step === undefined) break;
-            i += result.step;
-            preview = result.preview ?? false;
+        // The editor stepped from, closed once the next one is open over it
+        let previous: (() => void) | null = null;
+        const closePrevious = () => {
+            previous?.();
+            previous = null;
+        };
+        try {
+            for (let i = index; ;) {
+                const question = questions[i];
+                const { write, delete: del } = writer(question);
+                const result = await this.editQuestion(
+                    question,
+                    write,
+                    del,
+                    { prev: i > 0, next: i < questions.length - 1, preview },
+                    closePrevious,
+                );
+                if (result === null) break;
+                total.changedImages.push(...result.changedImages);
+                total.textChanged ||= result.textChanged;
+                if (result.deleted) total.deleted.push(question);
+                if (result.step === undefined) break;
+                i += result.step;
+                preview = result.preview ?? false;
+                previous = result.handOver ?? null;
+            }
+        } finally {
+            // The next editor didn't open (unloaded, failed to read the card)
+            closePrevious();
         }
         return total;
     }
