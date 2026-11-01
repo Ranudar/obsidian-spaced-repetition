@@ -2,7 +2,7 @@
 
 The card editor lets you add and edit flashcards without typing the card syntax yourself.
 Each side of a card (front and back) can hold **typed** text and **handwriting** at the same time:
-type on the keyboard and write with the pen, no switching needed.
+type on the keyboard and write with the pen, no switching needed. You edit one side at a time.
 
 Handwriting is saved as SVG images in your vault. The image also stores the original pen
 strokes, so you can open a handwritten card later and keep writing, erase or undo.
@@ -12,21 +12,25 @@ strokes, so you can open a handwritten card later and keep writing, erase or und
 1. Open the note the cards should go into.
 2. Run the command **Spaced Repetition: Add card**, from the command palette, the mobile toolbar or
    the mobile pull-down menu. The command is available whenever the active file is a Markdown note.
-3. Fill in the front and the back, typing, writing by hand or both.
-4. Choose how to continue:
+3. Fill in the front, then tap the **Front ⇅ Back** button on the right to fill in the back. Type,
+   write by hand or both.
+4. Choose how to continue, with the buttons on the right below the switch:
 
-| Button       | What it does                                                                                                                                                                                  |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Save & next  | Inserts the card and clears both sides, so you can write the next one right away.                                                                                                             |
-| Save & close | Inserts the card and closes the editor.                                                                                                                                                       |
-| Delete card  | Throws the card away and closes the editor. On an empty card one tap does it; otherwise the first tap changes the button to "Tap again to delete", and a second tap within 3 seconds deletes. |
+| Button       | What it does                                                                      |
+| ------------ | --------------------------------------------------------------------------------- |
+| Save & next  | Inserts the card, clears both sides and shows the front, ready for the next card. |
+| Save & close | Inserts the card and closes the editor.                                           |
 
-The buttons sit in one row at the bottom, **Delete card** on the left and **Save & next** (the main
-button) on the right; they fit on small phone screens too. The save buttons stay disabled, and look
-it, until both sides have content. `Ctrl/Cmd + Enter` does the same as **Save & next**.
+**Save & next** is the large main button; **Save & close** is the smaller one below it. If a side
+is still empty when you save, the editor shows that side, outlines it briefly and says so (for
+example "Back is empty"); nothing is saved yet. `Ctrl/Cmd + Enter` does the same as **Save & next**.
 
-Once you have saved a card, a small badge next to the note's name in the header counts the cards
-added in this session (for example "2 added").
+The bin in the title bar is **Delete card**: it throws the card away and closes the editor. On an
+empty card one tap does it; otherwise the first tap changes the button to "Tap again to delete",
+and a second tap within 3 seconds deletes. The ✕ next to it closes the editor without saving.
+
+Once you have saved a card, a small badge next to the note's name in the title bar counts the
+cards added in this session (for example "2 added").
 
 ### Where the Card Goes
 
@@ -67,71 +71,84 @@ counts and in review.
 
 ### Drafts
 
-Closing the editor with `Esc`, the close button or the back gesture keeps the unsaved card as a
+Closing the editor with `Esc`, ✕ or the back gesture keeps the unsaved card as a
 draft, including any handwriting. The next **Add card** opens with that draft. **Delete card** and an
 empty card leave no draft behind. Drafts are kept until Obsidian is closed or the plugin is reloaded.
 
 ## Typing and Writing by Hand
 
-With **Pen mode** on (see [Settings](#settings)), each side has a text field at the top (about three
-lines; longer text scrolls inside it) and a writing field filling the rest of the side below it.
-Type in the text field with the keyboard or a finger, write in the writing field with the pen. Both
-are always there, so nothing moves while you type or write, and nothing needs to be switched. With
-pen mode off, each side is a text field only.
+The editor shows one side at a time, always in the same places:
 
-- **Nothing moves**: both sides have the same fixed layout. The editor also keeps its height while
-  the soft keyboard is open (it scrolls instead), so the sides don't jump.
-- **Keyboard**: on phones and tablets, no text field is focused when the editor opens (or after
-  **Save & next**), so the soft keyboard only appears once you tap a text field. Writing in a
-  writing field closes it again. On desktop the cursor starts in the front's text field.
+- At the top, the **tool row**: the side's name (**FRONT** or **BACK**) and the pen tools.
+- Below it, the **pen zone**, with a fixed height, for the pen ("Draw on **front**").
+- Below that, the **text zone**, filling the rest of the editor, for the keyboard ("Type the
+  **question**" on the front, "Type the **answer**" on the back). Long text scrolls inside it.
+- On the right, the **Front ⇅ Back** switch, exactly as tall as the pen zone, with the side shown
+  in bold; below it, beside the text zone, the save buttons.
 
-In the text field, `Tab` inserts a tab character, like the old edit dialog, and `Ctrl/Cmd + Z`
+The side shown is also marked by a broad coloured edge on both fields: on the right for the front,
+on the left for the back. Each side keeps its own text and handwriting when you switch.
+
+- **Nothing moves**: the pen zone stays at the top with the same height on both sides. On phones and
+  tablets the editor fills the screen above the soft keyboard; only the text zone and the save
+  buttons get shorter or taller when the keyboard opens or closes.
+- **Keyboard**: the cursor starts in the front's text zone, also on phones and tablets, so the soft
+  keyboard opens with the editor and stays open: writing with the pen and tapping the editor's
+  buttons don't take the cursor away. Switching sides moves the cursor to the other side's text
+  zone; **Save & next** moves it back to the front.
+
+With **Pen mode** off (see [Settings](#settings)), there is no pen zone: the text zone takes its
+place, and the switch and the save buttons share the right column. A side that already has
+handwriting still shows its pen zone, so you can change it.
+
+In the text zone, `Tab` inserts a tab character, like the old edit dialog, and `Ctrl/Cmd + Z`
 undoes typing as usual. Right-to-left text is supported.
 
 ### Pen Tools
 
-The header holds the pen tools. They always stay in the same place and are always enabled.
+The pen tools are in the tool row and act on the side shown.
 
-| Tool       | What it does                                                                                                                                                                                                              |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pen size   | Switches between thin, medium and thick (0.6×, 1× and 1.6× the **Pen thickness** setting). The dot in the icon shows the current size. Applies to new strokes until the editor closes; existing strokes keep their width. |
-| Eraser     | Erases only the ink under the eraser, like a real eraser: a stroke you cross is cut, and the rest of it stays. Holding the pen's side button, or using its eraser end, erases too.                                        |
-| Undo       | Undoes the last pen change, on either side. A whole eraser movement is one step. `Ctrl/Cmd + Z` does the same outside a text field (writing moves you out of it).                                                         |
-| Clear side | Removes the text and all strokes from the side you last used. Undo brings both back in one step.                                                                                                                          |
+| Tool       | What it does                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Size       | Sets the size of the tool in use. For the pen it switches between thin (the default), medium and thick (0.6×, 1× and 1.6× the **Pen thickness** setting), shown as a dot. With the eraser on it switches between a small, medium (the default) and large eraser, shown as a ring exactly as large as the eraser. The pen and the eraser keep their own size until the editor closes; existing strokes keep their width. |
+| Eraser     | Erases only the ink under the eraser, like a real eraser: a stroke you cross is cut, and the rest of it stays. While it is on, the button and the pen zone's border turn red. Pressing the pen's side button while the pen hovers over the pen zone switches the eraser on and off; holding the side button while writing, or using the pen's eraser end, erases too.                                                   |
+| Undo       | Undoes the last pen change on the side shown. A whole eraser movement is one step.                                                                                                                                                                                                                                                                                                                                      |
+| Clear side | Removes the text and all strokes from the side shown. Undo brings both back in one step.                                                                                                                                                                                                                                                                                                                                |
 
-While erasing, a circle shows the eraser's size and position. The eraser grows with the pen size.
+While erasing, a circle shows the eraser's size and position.
 
-Ink only goes where you can see the writing field. If the pen slides off an edge, for example into
-the text field, the stroke ends at the edge; coming back without lifting the pen starts a new
-stroke there. The eraser only erases inside the field, too.
+Ink only goes where you can see the pen zone. If the pen slides off an edge, the stroke ends at the
+edge; coming back without lifting the pen starts a new stroke there. The eraser only erases inside
+the zone, too.
 
-Fingers are ignored on the writing fields, so your hand can rest on the screen; on desktop the mouse
+Fingers are ignored in the pen zone, so your hand can rest on the screen; on desktop the mouse
 writes too. A finger touching one of the editor's buttons while the pen is writing, or just after,
-is ignored too, so a resting palm doesn't save or discard the card.
+is ignored too, so a resting palm doesn't save or delete the card.
 
-On phones the editor fills the screen; on desktop and tablets it opens as a large dialog. In dark
-mode, handwriting is shown in light ink. The images themselves keep dark ink on a transparent
-background, so they look right in both themes.
+On phones the editor fills the screen; on desktop and tablets it opens as a large dialog with the
+same layout. In dark mode, handwriting is shown in light ink. The images themselves keep dark ink
+on a transparent background, so they look right in both themes.
 
 ## Editing Cards
 
 ### During Review
 
 Tap **Edit** in the review toolbar (see [Reviewing](reviewing.md#operation)). The card opens in the
-same editor, with the note's name in the header and both sides, each with its typed text and its
+same editor, with the note's name in the title bar and both sides, each with its typed text and its
 handwriting, ready to change.
 
-- **Save** writes the changes, keeps the card's review schedule and shows the updated card.
-- **Delete card** (two taps) removes the card from its note, with its schedule and its end marker
+- **Save** (the single button on the right) writes the changes, keeps the card's review schedule
+  and shows the updated card.
+- **Delete card** (the bin in the title bar, two taps) removes the card from its note, with its schedule and its end marker
   line, and moves its handwriting images to the trash unless another note still shows them. During
   review, the next card is shown.
-- `Esc`, the close button or the back gesture closes without writing anything.
+- `Esc`, ✕ or the back gesture closes without writing anything.
 
 The note is only written when the card text changed, for example when you edited typed text, wrote
 on a side that had no handwriting yet or erased all of a side's handwriting. If you only changed
 existing handwriting, just the image is rewritten.
 
-[Cloze cards](cloze-cards.md) open as a single text field without a writing field.
+[Cloze cards](cloze-cards.md) open as a single text side, without a pen zone or a switch.
 
 ### From a Note
 

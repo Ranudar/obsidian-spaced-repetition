@@ -1,7 +1,7 @@
 import { App, EventRef, Modal, Notice, Platform, setIcon } from "obsidian";
 
 import { Stroke } from "src/card-editor/core/strokes";
-import { SideEditor, SideState } from "src/card-editor/side-editor";
+import { SideEditor, SideEditorOptions, SideState } from "src/card-editor/side-editor";
 import { CardType } from "src/data/data-structures/card/questions/question";
 import { SRSettings } from "src/data/settings";
 import { t } from "src/lang/helpers";
@@ -48,37 +48,60 @@ export type CardEditorOptions =
           delete(): Promise<void>;
       });
 
-const DISCARD_ARM_MS = 3000;
+const DELETE_ARM_MS = 3000;
 /** Input on the sides that is swallowed while a card is being saved */
 const LOCKED_EVENTS = ["pointerdown", "mousedown", "touchstart", "click", "keydown"];
 /** Pointer events that tell when the pen is used, see onPenActivity() */
 const PEN_EVENTS = ["pointerdown", "pointermove", "pointerup", "pointercancel"] as const;
 /** With pen-only on, finger presses this soon after the pen was used count as the palm */
 const PALM_GUARD_MS = 500;
-/** Pen thickness steps of the toolbar button, as factors of the pen thickness setting */
+/**
+ * Pen thickness steps of the size button, as factors of the pen thickness setting, with the
+ * diameter of the button's dot in pixels
+ */
 const PEN_SIZE_STEPS = [
-    { factor: 0.6, cls: "is-thin", label: "CARD_EDITOR_PEN_THIN" },
-    { factor: 1, cls: "is-medium", label: "CARD_EDITOR_PEN_MEDIUM" },
-    { factor: 1.6, cls: "is-thick", label: "CARD_EDITOR_PEN_THICK" },
+    { factor: 0.6, dot: 6, label: "CARD_EDITOR_PEN_THIN" },
+    { factor: 1, dot: 9, label: "CARD_EDITOR_PEN_MEDIUM" },
+    { factor: 1.6, dot: 13, label: "CARD_EDITOR_PEN_THICK" },
 ] as const;
-const DEFAULT_PEN_SIZE_STEP = 1;
+const DEFAULT_PEN_SIZE_STEP = 0;
+/** Eraser radius steps of the size button, in pixels; the button's ring is exactly that size */
+const ERASER_SIZE_STEPS = [
+    { radius: 5, label: "CARD_EDITOR_ERASER_SMALL" },
+    { radius: 9, label: "CARD_EDITOR_ERASER_MEDIUM" },
+    { radius: 15, label: "CARD_EDITOR_ERASER_LARGE" },
+] as const;
+const DEFAULT_ERASER_SIZE_STEP = 1;
+
+/** An ink change; a cleared side also keeps its text (see clearSide()) */
+interface UndoStep {
+    prev: Stroke[];
+    prevText?: string;
+}
 
 /**
  * The card editor, used to add new cards and to edit existing ones.
  * It only collects the sides; all file and note writes happen in opts.save().
+ *
+ * One side is shown at a time, in fixed zones: the tool row, the pen zone of fixed height and the
+ * text zone filling the rest; on the right the switch to the other side, beside the pen zone,
+ * and the save buttons, beside the text zone. Nothing takes the focus from the text area, so on a
+ * phone the soft keyboard stays open while typing and writing, and nothing moves.
  */
 export class CardEditorModal extends Modal {
     private settings: SRSettings;
     private opts: CardEditorOptions;
     private front!: SideEditor;
     private back: SideEditor | null = null;
-    /** The side Clear acts on: the one last touched or focused */
+    /** The side shown; tools, undo and Clear act on it */
     private activeSide: SideEditor | null = null;
-    /** Ink changes, newest last; a cleared side also keeps its text (see clearSide()) */
-    private undoStack: { side: SideEditor; prev: Stroke[]; prevText?: string }[] = [];
+    /** Ink changes per side, newest last */
+    private undoSteps = new Map<SideEditor, UndoStep[]>();
     private eraser = false;
     /** Index into PEN_SIZE_STEPS; kept for this editor only */
     private penSizeStep = DEFAULT_PEN_SIZE_STEP;
+    /** Index into ERASER_SIZE_STEPS; kept for this editor only */
+    private eraserSizeStep = DEFAULT_ERASER_SIZE_STEP;
     private added = 0;
     private busy = false;
     /** Settles with true when the save in progress succeeded */
@@ -86,25 +109,30 @@ export class CardEditorModal extends Modal {
     private isClosed = false;
     /** Set when the card on screen was saved or deleted: no draft on close */
     private dropDraft = false;
-    private discardArmedAt = 0;
-    private discardTimer: number | null = null;
+    private deleteArmedAt = 0;
+    private deleteTimer: number | null = null;
     private cssChangeRef: EventRef | null = null;
     /** The pen is touching the screen */
     private penDown = false;
     /** When the pen was last used */
     private lastPenAt = 0;
-    /** On mobile, the window size the editor's height was taken from (see keepSteadyHeight()) */
-    private steadySize: { width: number; height: number } | null = null;
+    /** On mobile, the window whose visible height the editor follows (see fitVisibleHeight()) */
+    private fitWindow: Window | null = null;
 
+    private mainEl!: HTMLElement;
     private sidesEl!: HTMLElement;
     private counterEl: HTMLElement | null = null;
-    private penSizeButton!: HTMLButtonElement;
+    private deleteButton!: HTMLButtonElement;
+    private sideLabelEl!: HTMLElement;
+    private sizeButton!: HTMLButtonElement;
     private eraserButton!: HTMLButtonElement;
     private undoButton!: HTMLButtonElement;
     private clearButton!: HTMLButtonElement;
+    private switchButton: HTMLButtonElement | null = null;
+    private switchFrontEl: HTMLElement | null = null;
+    private switchBackEl: HTMLElement | null = null;
     private saveButton!: HTMLButtonElement;
     private saveCloseButton: HTMLButtonElement | null = null;
-    private discardButton!: HTMLButtonElement;
 
     constructor(app: App, settings: SRSettings, opts: CardEditorOptions) {
         super(app);
@@ -116,12 +144,7 @@ export class CardEditorModal extends Modal {
         return this.back ? [this.front, this.back] : [this.front];
     }
 
-    /** Every needed side has text or ink */
-    private get ready(): boolean {
-        return this.sides.every((side) => !side.isEmpty);
-    }
-
-    /** A side has a pen field */
+    /** A side has a pen zone */
     private get hasInk(): boolean {
         return this.sides.some((side) => side.inkEl !== null);
     }
@@ -139,53 +162,62 @@ export class CardEditorModal extends Modal {
         root.addClass("sr-card-editor");
 
         this.buildHeader(root);
+        const main = (this.mainEl = root.createDiv({ cls: "sr-card-editor-main" }));
+        this.buildTools(main);
 
-        const sidesEl = (this.sidesEl = root.createDiv({ cls: "sr-card-editor-sides" }));
+        const sidesEl = (this.sidesEl = main.createDiv({ cls: "sr-card-editor-sides" }));
         // Capturing, so this runs before the sides' own listeners
         for (const type of LOCKED_EVENTS) sidesEl.addEventListener(type, this.onLockedInput, true);
         const initial = this.initialSides();
         const cloze = initial.back === null;
-        // With pen mode off, a side gets a pen field only for the handwriting it already has, so
+        // With pen mode off, a side gets a pen zone only for the handwriting it already has, so
         // saving the card keeps it
         const ink = (side: SideState) => this.settings.cardEditorPenMode || side.strokes.length > 0;
-        this.front = this.createSide(
-            sidesEl,
-            cloze ? t("CARD_EDITOR_CLOZE") : t("CARD_EDITOR_FRONT"),
-            initial.front,
-            !cloze && ink(initial.front),
-        );
+        this.front = this.createSide(sidesEl, {
+            face: "front",
+            label: cloze ? t("CARD_EDITOR_CLOZE") : t("CARD_EDITOR_FRONT"),
+            inkHint: t("CARD_EDITOR_DRAW_FRONT"),
+            textHint: cloze ? t("CARD_EDITOR_TYPE_CLOZE") : t("CARD_EDITOR_TYPE_QUESTION"),
+            initial: initial.front,
+            allowInk: !cloze && ink(initial.front),
+        });
         if (initial.back) {
-            this.back = this.createSide(
-                sidesEl,
-                t("CARD_EDITOR_BACK"),
-                initial.back,
-                ink(initial.back),
-            );
+            this.back = this.createSide(sidesEl, {
+                face: "back",
+                label: t("CARD_EDITOR_BACK"),
+                inkHint: t("CARD_EDITOR_DRAW_BACK"),
+                textHint: t("CARD_EDITOR_TYPE_ANSWER"),
+                initial: initial.back,
+                allowInk: ink(initial.back),
+            });
         }
-        // No pen field anywhere: no pen tools
+        // No pen zone anywhere: the text zone takes its place, the switch and the saves share
+        // the right column
         this.modalEl.toggleClass("sr-card-editor-no-ink", !this.hasInk);
-        this.setActiveSide(this.front);
-        // New strokes follow the toolbar's size, also on a card being edited (whose file has its
+        // Cloze: one side, no switch
+        main.toggleClass("sr-card-editor-one-side", this.back === null);
+        // New strokes follow the size button, also on a card being edited (whose file has its
         // own size) and on a restored draft (saved with the size picked then); every stroke
         // already written keeps its own size
         const penSize = this.penSize;
         this.sides.forEach((side) => side.setPenSize(penSize));
 
-        this.buildFooter(root);
+        this.buildRightColumn(main);
         root.addEventListener("keydown", this.onKeyDown);
         for (const type of PEN_EVENTS) {
             this.modalEl.addEventListener(type, this.onPenActivity, true);
         }
         this.guardBackground();
-        this.keepSteadyHeight();
+        this.fitVisibleHeight();
 
         // A theme change (e.g. to dark mode at night) changes the ink color
         this.cssChangeRef = this.app.workspace.on("css-change", () =>
             this.sides.forEach((side) => side.themeChanged()),
         );
 
-        this.updateButtons();
-        this.focusFront();
+        this.showSide(this.front);
+        // Also on mobile: the soft keyboard is meant to be open, writing doesn't close it
+        this.front.focus();
     }
 
     onClose(): void {
@@ -198,8 +230,11 @@ export class CardEditorModal extends Modal {
             this.sidesEl.removeEventListener(type, this.onLockedInput, true);
         }
         if (this.cssChangeRef !== null) this.app.workspace.offref(this.cssChangeRef);
-        if (this.steadySize !== null) activeWindow.removeEventListener("resize", this.onResize);
-        this.disarmDiscard();
+        if (this.fitWindow !== null) {
+            this.fitWindow.removeEventListener("resize", this.onResize);
+            this.fitWindow.visualViewport?.removeEventListener("resize", this.onResize);
+        }
+        this.disarmDelete();
 
         const opts = this.opts;
         const draft =
@@ -218,6 +253,7 @@ export class CardEditorModal extends Modal {
 
     // MARK: building
 
+    /** The note's title, the "n added" badge, Delete card and, with space between them, ✕ */
     private buildHeader(root: HTMLElement) {
         const header = root.createDiv({ cls: "sr-card-editor-header" });
         const titleEl = header.createDiv({ cls: "sr-card-editor-title-wrap" });
@@ -229,44 +265,62 @@ export class CardEditorModal extends Modal {
             });
             this.counterEl.setAttr("role", "status");
         }
-
-        this.penSizeButton = this.iconButton(header, null, t("CARD_EDITOR_PEN_SIZE"), () =>
-            this.cyclePenSize(),
-        );
-        this.penSizeButton.addClass("sr-card-editor-pen-size");
-        this.penSizeButton.createSpan({ cls: "sr-card-editor-pen-dot" });
-        this.eraserButton = this.iconButton(header, "eraser", t("CARD_EDITOR_ERASER"), () =>
-            this.setEraser(!this.eraser),
-        );
-        this.eraserButton.addClass("sr-card-editor-eraser");
-        this.undoButton = this.iconButton(header, "undo-2", t("CARD_EDITOR_UNDO"), () =>
-            this.undo(),
-        );
-        this.clearButton = this.iconButton(header, "trash-2", t("CARD_EDITOR_CLEAR_SIDE"), () =>
-            this.clearSide(),
-        );
+        this.deleteButton = this.iconButton(header, "trash-2", t("CARD_EDITOR_DISCARD"), () => {
+            void this.deleteCard();
+        });
+        this.deleteButton.addClass("sr-card-editor-delete");
+        // Closing without saving; a new card is kept as a draft
         this.iconButton(header, "x", t("CARD_EDITOR_CLOSE"), () => this.close()).addClass(
             "sr-card-editor-close",
         );
     }
 
-    private buildFooter(root: HTMLElement) {
-        const footer = root.createDiv({ cls: "sr-card-editor-footer" });
-        // Closing without saving is the ✕ in the header
-        this.discardButton = this.textButton(footer, t("CARD_EDITOR_DISCARD"), () => {
-            void this.discard();
-        });
-        this.discardButton.addClass("sr-card-editor-discard");
-        footer.createDiv({ cls: "sr-card-editor-footer-spacer" });
+    /** The side's name, then size, eraser, undo and clear, for the side shown */
+    private buildTools(main: HTMLElement) {
+        const tools = main.createDiv({ cls: "sr-card-editor-tools" });
+        this.sideLabelEl = tools.createDiv({ cls: "sr-card-editor-side-label" });
+        this.sizeButton = this.iconButton(tools, null, t("CARD_EDITOR_PEN_SIZE"), () =>
+            this.cycleSize(),
+        );
+        this.sizeButton.addClass("sr-card-editor-size");
+        this.sizeButton.createSpan({ cls: "sr-card-editor-size-dot" });
+        this.eraserButton = this.iconButton(tools, "eraser", t("CARD_EDITOR_ERASER"), () =>
+            this.setEraser(!this.eraser),
+        );
+        this.eraserButton.addClass("sr-card-editor-eraser");
+        this.undoButton = this.iconButton(tools, "undo-2", t("CARD_EDITOR_UNDO"), () =>
+            this.undo(),
+        );
+        // Not a bin, so it isn't mixed up with Delete card
+        this.clearButton = this.iconButton(tools, "ban", t("CARD_EDITOR_CLEAR_SIDE"), () =>
+            this.clearSide(),
+        );
+    }
+
+    /** The switch beside the pen zone (not for cloze), the save buttons beside the text zone */
+    private buildRightColumn(main: HTMLElement) {
+        if (this.back !== null) {
+            const sw = (this.switchButton = this.textButton(main, "", () => this.switchSide()));
+            sw.addClass("sr-card-editor-switch");
+            sw.setAttr("aria-label", t("CARD_EDITOR_SWITCH_SIDE"));
+            const label = (text: string) =>
+                sw.createSpan({ cls: "sr-card-editor-switch-side", text });
+            this.switchFrontEl = label(t("CARD_EDITOR_FRONT"));
+            sw.createSpan({ cls: "sr-card-editor-switch-arrow", text: "⇅" });
+            this.switchBackEl = label(t("CARD_EDITOR_BACK"));
+        }
+        const saves = main.createDiv({ cls: "sr-card-editor-saves" });
         if (this.opts.kind === "add") {
-            this.saveCloseButton = this.textButton(footer, t("CARD_EDITOR_SAVE_CLOSE"), () => {
-                void this.saveAdd(true);
-            });
-            this.saveButton = this.textButton(footer, t("CARD_EDITOR_SAVE_NEXT"), () => {
+            this.saveButton = this.textButton(saves, t("CARD_EDITOR_SAVE_NEXT"), () => {
                 void this.saveAdd(false);
             });
+            this.saveButton.addClass("sr-card-editor-save-next");
+            this.saveCloseButton = this.textButton(saves, t("CARD_EDITOR_SAVE_CLOSE"), () => {
+                void this.saveAdd(true);
+            });
+            this.saveCloseButton.addClass("sr-card-editor-save-close");
         } else {
-            this.saveButton = this.textButton(footer, t("SAVE"), () => {
+            this.saveButton = this.textButton(saves, t("SAVE"), () => {
                 void this.saveEdit();
             });
         }
@@ -285,45 +339,43 @@ export class CardEditorModal extends Modal {
         return { text: "", strokes: [], penSize: this.penSize };
     }
 
-    /** Pen thickness for new ink: the setting, scaled by the toolbar's thin / medium / thick */
+    /** Pen thickness for new ink: the setting, scaled by the size button's thin / medium / thick */
     private get penSize(): number {
         const size = this.settings.cardEditorPenSize * PEN_SIZE_STEPS[this.penSizeStep].factor;
         return Math.round(size * 10) / 10;
     }
 
+    private get eraserRadius(): number {
+        return ERASER_SIZE_STEPS[this.eraserSizeStep].radius;
+    }
+
     private createSide(
         parent: HTMLElement,
-        label: string,
-        initial: SideState,
-        allowInk: boolean,
+        o: Pick<
+            SideEditorOptions,
+            "face" | "label" | "inkHint" | "textHint" | "initial" | "allowInk"
+        >,
     ): SideEditor {
         const side: SideEditor = new SideEditor(parent, {
-            label,
-            initial,
-            allowInk,
+            ...o,
             settings: this.settings,
             textDirection: this.opts.textDirection ?? TextDirection.Ltr,
             onChange: () => this.updateButtons(),
-            onInkCommit: (prev, prevText) => {
-                this.undoStack.push({ side, prev, prevText });
-                this.setActiveSide(side);
-            },
+            onInkCommit: (prev, prevText) => this.stepsOf(side).push({ prev, prevText }),
             isPalm: (evt) => this.isPalm(evt),
+            eraserRadius: () => this.eraserRadius,
+            onSideButton: () => {
+                if (!this.busy) this.setEraser(!this.eraser);
+            },
         });
         side.setEraser(this.eraser);
-        side.el.addEventListener("pointerdown", (evt) => {
-            // A finger can't draw in the pen field: such a touch is the hand resting on the
-            // screen, not a choice of side
-            const inInk = side.inkEl?.contains(evt.target as Node) ?? false;
-            const ignored = this.isPalm(evt) || (evt.pointerType === "touch" && inInk);
-            if (ignored) return;
-            this.setActiveSide(side);
-            // The ink field takes the focus off the text area: the soft keyboard closes before
-            // the pen writes, and Ctrl/Cmd+Z undoes the ink, not the typing
-            if (inInk) side.focusInk();
-        });
-        side.el.addEventListener("focusin", () => this.setActiveSide(side));
         return side;
+    }
+
+    private stepsOf(side: SideEditor): UndoStep[] {
+        let steps = this.undoSteps.get(side);
+        if (steps === undefined) this.undoSteps.set(side, (steps = []));
+        return steps;
     }
 
     /**
@@ -365,41 +417,45 @@ export class CardEditorModal extends Modal {
     }
 
     /**
-     * On phones and tablets the soft keyboard makes the window lower while it is open: tapping a
-     * text area opens it, writing in an ink field closes it. An editor sized to the window
-     * would then grow and shrink, and both sides with it. Instead it keeps the height of the
-     * window without keyboard, and scrolls while the keyboard covers its lower part.
-     * A window that gets wider or narrower (rotation, split screen) or higher starts over.
+     * On phones and tablets the editor fills the visible part of the window, above the soft
+     * keyboard, which stays open while typing and writing. The pen zone sits at the top with a
+     * fixed height, so it doesn't move when the keyboard opens or closes; only the text zone and
+     * the save buttons beside it change height.
      */
-    private keepSteadyHeight() {
+    private fitVisibleHeight() {
         if (!Platform.isMobile) return;
         this.containerEl.addClass("sr-card-editor-container");
-        this.steadySize = { width: 0, height: 0 };
+        const win = (this.fitWindow = activeWindow);
         this.onResize();
-        activeWindow.addEventListener("resize", this.onResize);
+        win.addEventListener("resize", this.onResize);
+        win.visualViewport?.addEventListener("resize", this.onResize);
     }
 
     private onResize = () => {
-        const size = this.steadySize;
-        if (size === null) return;
-        const { innerWidth: width, innerHeight: height } = activeWindow;
-        // Only lower: the keyboard opened
-        if (width === size.width && height <= size.height) return;
-        this.steadySize = { width, height };
+        const win = this.fitWindow;
+        if (win === null) return;
+        const height = Math.round(win.visualViewport?.height ?? win.innerHeight);
         this.modalEl.setCssProps({ "--sr-card-editor-height": `${height}px` });
+        // The browser may have scrolled the editor to bring the focused text area into view
+        this.containerEl.scrollTop = 0;
     };
 
     // MARK: actions
 
     /**
-     * Medium → thick → thin. Applies to the strokes written from now on; every stroke keeps the
-     * thickness it was written with.
+     * Cycles the size of the tool in use: the pen thin → medium → thick, the eraser small →
+     * medium → large. The pen size applies to the strokes written from now on; every stroke keeps
+     * the thickness it was written with.
      */
-    private cyclePenSize() {
+    private cycleSize() {
         if (this.busy) return;
-        this.penSizeStep = (this.penSizeStep + 1) % PEN_SIZE_STEPS.length;
-        const size = this.penSize;
-        this.sides.forEach((side) => side.setPenSize(size));
+        if (this.eraser) {
+            this.eraserSizeStep = (this.eraserSizeStep + 1) % ERASER_SIZE_STEPS.length;
+        } else {
+            this.penSizeStep = (this.penSizeStep + 1) % PEN_SIZE_STEPS.length;
+            const size = this.penSize;
+            this.sides.forEach((side) => side.setPenSize(size));
+        }
         this.updateButtons();
     }
 
@@ -410,46 +466,55 @@ export class CardEditorModal extends Modal {
     }
 
     /**
-     * Undoes the last ink change, on whichever side it was. Undoing "Clear side" restores the
-     * side's text as well, unless something was typed since; typing is undone by the text area
-     * itself.
+     * Undoes the last ink change of the side shown. Undoing "Clear side" restores the side's text
+     * as well, unless something was typed since; typing is undone by the text area itself.
      */
     private undo() {
-        if (this.busy) return;
-        const step = this.undoStack.pop();
+        const side = this.activeSide;
+        if (this.busy || side === null) return;
+        const step = this.stepsOf(side).pop();
         if (!step) return;
-        step.side.setStrokes(step.prev);
+        side.setStrokes(step.prev);
         // Not over text typed since the clear: setText would lose it for good
-        if (step.prevText !== undefined && step.side.text === "") step.side.setText(step.prevText);
-        this.setActiveSide(step.side);
+        if (step.prevText !== undefined && side.text === "") side.setText(step.prevText);
     }
 
-    /** Clears text and ink of the active side, as one undo step */
+    /** Clears text and ink of the side shown, as one undo step */
     private clearSide() {
         if (this.busy) return;
         this.activeSide?.clear();
     }
 
-    private setActiveSide(side: SideEditor) {
-        if (side === this.activeSide) return;
+    /** Shows one side, hiding the other; text and strokes are kept per side */
+    private showSide(side: SideEditor) {
         this.activeSide = side;
+        this.sides.forEach((s) => s.show(s === side));
+        this.mainEl.toggleClass("is-back", side === this.back);
         this.updateButtons();
     }
 
+    /** Front ⇅ back, with the focus in the side's text area */
+    private switchSide() {
+        if (this.busy || this.back === null) return;
+        const side = this.activeSide === this.front ? this.back : this.front;
+        this.showSide(side);
+        side.focus();
+    }
+
     /**
-     * The first tap arms the Delete button, a second one within 3 s deletes the card: a new one is
-     * dropped, an existing one removed from its note
+     * Delete card. A new card with nothing on it closes at once; otherwise the first tap arms the
+     * button, a second one within 3 s deletes the card: a new one is dropped, an existing one
+     * removed from its note.
      */
-    private async discard() {
+    private async deleteCard() {
         if (this.busy) return;
-        // A new card with nothing on it: nothing to lose, no second tap
         if (this.opts.kind === "add" && this.allEmpty) {
             this.dropDraft = true;
             this.close();
             return;
         }
-        if (Date.now() - this.discardArmedAt < DISCARD_ARM_MS) {
-            this.disarmDiscard();
+        if (Date.now() - this.deleteArmedAt < DELETE_ARM_MS) {
+            this.disarmDelete();
             if (this.opts.kind === "edit") {
                 const opts = this.opts;
                 this.busy = true;
@@ -469,20 +534,22 @@ export class CardEditorModal extends Modal {
             if (!this.isClosed) this.close();
             return;
         }
-        this.disarmDiscard();
-        this.discardArmedAt = Date.now();
-        this.discardButton.setText(t("CARD_EDITOR_DISCARD_CONFIRM"));
-        this.discardButton.addClass("is-armed");
-        this.discardTimer = activeWindow.setTimeout(() => this.disarmDiscard(), DISCARD_ARM_MS);
+        this.disarmDelete();
+        this.deleteArmedAt = Date.now();
+        this.deleteButton.setText(t("CARD_EDITOR_DISCARD_CONFIRM"));
+        this.deleteButton.addClass("is-armed");
+        this.deleteTimer = activeWindow.setTimeout(() => this.disarmDelete(), DELETE_ARM_MS);
     }
 
-    /** Back to an unarmed Delete button: after the timeout and for every new card */
-    private disarmDiscard() {
-        if (this.discardTimer !== null) activeWindow.clearTimeout(this.discardTimer);
-        this.discardTimer = null;
-        this.discardArmedAt = 0;
-        this.discardButton.setText(t("CARD_EDITOR_DISCARD"));
-        this.discardButton.removeClass("is-armed");
+    /** Back to the unarmed bin: after the timeout and for every new card */
+    private disarmDelete() {
+        if (this.deleteTimer !== null) activeWindow.clearTimeout(this.deleteTimer);
+        this.deleteTimer = null;
+        this.deleteArmedAt = 0;
+        if (!this.deleteButton.hasClass("is-armed")) return;
+        this.deleteButton.removeClass("is-armed");
+        this.deleteButton.empty();
+        setIcon(this.deleteButton, "trash-2");
     }
 
     private async saveAdd(close: boolean) {
@@ -495,28 +562,11 @@ export class CardEditorModal extends Modal {
             this.close();
             return;
         }
-        this.undoStack = [];
-        this.disarmDiscard();
+        this.undoSteps.clear();
+        this.disarmDelete();
         this.sides.forEach((side) => side.reset(this.blankSide()));
-        this.setActiveSide(this.front);
-        this.updateButtons();
-        this.focusFront();
-    }
-
-    /**
-     * Focuses the front text area. Not on mobile: the soft keyboard would open, and close again
-     * under the pen when the user writes by hand. There a text area that still has the focus
-     * (e.g. typed in before "Save & next") loses it instead, closing the keyboard.
-     */
-    private focusFront() {
-        if (!Platform.isMobile) {
-            this.front.focus();
-            return;
-        }
-        const focused = this.sidesEl.ownerDocument.activeElement;
-        if (focused?.instanceOf(HTMLTextAreaElement) && this.sidesEl.contains(focused)) {
-            focused.blur();
-        }
+        this.showSide(this.front);
+        this.front.focus();
     }
 
     private async saveEdit() {
@@ -525,10 +575,14 @@ export class CardEditorModal extends Modal {
         if (saved && !this.isClosed) this.close();
     }
 
-    /** Calls opts.save() once at a time; resolves to whether it succeeded */
+    /**
+     * Calls opts.save() once at a time; resolves to whether it succeeded. A needed side that is
+     * empty is shown instead, outlined, with a notice; nothing is saved then.
+     */
     private async runSave(): Promise<boolean> {
-        if (!this.ready) {
-            new Notice(t("CARD_EDITOR_SIDES_EMPTY"));
+        const empty = this.sides.find((side) => side.isEmpty);
+        if (empty !== undefined) {
+            this.showEmptySide(empty);
             return false;
         }
         this.busy = true;
@@ -551,6 +605,21 @@ export class CardEditorModal extends Modal {
             this.updateButtons();
         }
         return ok;
+    }
+
+    private showEmptySide(side: SideEditor) {
+        if (side !== this.activeSide) {
+            this.showSide(side);
+            side.focus();
+        }
+        side.flash();
+        const message =
+            this.back === null
+                ? t("CARD_EDITOR_CARD_EMPTY")
+                : side === this.front
+                  ? t("CARD_EDITOR_FRONT_EMPTY")
+                  : t("CARD_EDITOR_BACK_EMPTY");
+        new Notice(message, 2000);
     }
 
     /**
@@ -605,22 +674,43 @@ export class CardEditorModal extends Modal {
     }
 
     private updateButtons() {
-        const step = PEN_SIZE_STEPS[this.penSizeStep];
-        this.penSizeButton.disabled = this.busy || !this.hasInk;
-        for (const s of PEN_SIZE_STEPS) this.penSizeButton.toggleClass(s.cls, s === step);
-        this.penSizeButton.setAttr("aria-label", `${t("CARD_EDITOR_PEN_SIZE")}: ${t(step.label)}`);
-        this.eraserButton.disabled = !this.hasInk;
+        // Callbacks from the sides can arrive while the editor is still being built
+        const side = this.activeSide;
+        if (side === null) return;
+        const ink = side.inkEl !== null;
+        this.sideLabelEl.setText(side.label);
+
+        // The size button shows the size of the tool in use: a dot for the pen, for the eraser a
+        // ring exactly as large as its circle in the pen zone
+        this.sizeButton.toggleClass("sr-is-hidden", !ink);
+        this.sizeButton.disabled = this.busy;
+        this.sizeButton.toggleClass("is-eraser", this.eraser);
+        const pen = PEN_SIZE_STEPS[this.penSizeStep];
+        const eraser = ERASER_SIZE_STEPS[this.eraserSizeStep];
+        const dot = this.eraser ? 2 * eraser.radius : pen.dot;
+        this.sizeButton.setCssProps({ "--sr-card-editor-dot-size": `${dot}px` });
+        this.sizeButton.setAttr(
+            "aria-label",
+            this.eraser
+                ? `${t("CARD_EDITOR_ERASER_SIZE")}: ${t(eraser.label)}`
+                : `${t("CARD_EDITOR_PEN_SIZE")}: ${t(pen.label)}`,
+        );
+        this.eraserButton.toggleClass("sr-is-hidden", !ink);
         this.eraserButton.toggleClass("is-active", this.eraser);
         this.eraserButton.setAttr("aria-pressed", this.eraser);
-        this.undoButton.disabled = this.busy || this.undoStack.length === 0;
-        this.clearButton.disabled = this.busy || (this.activeSide?.isEmpty ?? true);
+        this.mainEl.toggleClass("is-erasing", this.eraser);
+        this.undoButton.disabled = this.busy || this.stepsOf(side).length === 0;
+        this.clearButton.disabled = this.busy || side.isEmpty;
+        this.deleteButton.disabled = this.busy;
 
-        // Callbacks from the sides can arrive while the footer is still being built
-        if (!this.saveButton) return;
-        this.saveButton.disabled = this.busy || !this.ready;
-        // An empty card is closed with ✕, Esc or Delete, not with a button that looks like saving
-        if (this.saveCloseButton) this.saveCloseButton.disabled = this.busy || !this.ready;
-        this.discardButton.disabled = this.busy;
+        if (this.switchButton) {
+            this.switchButton.disabled = this.busy;
+            this.switchFrontEl?.toggleClass("is-active", side === this.front);
+            this.switchBackEl?.toggleClass("is-active", side === this.back);
+        }
+        // Not disabled for an empty side: saving shows the side to fill in (see runSave())
+        this.saveButton.disabled = this.busy;
+        if (this.saveCloseButton) this.saveCloseButton.disabled = this.busy;
         if (this.counterEl) {
             this.counterEl.setText(
                 this.added > 0 ? t("CARD_EDITOR_ADDED_BADGE", { count: this.added }) : "",
@@ -661,11 +751,13 @@ export class CardEditorModal extends Modal {
 
     /**
      * Records pen use anywhere in the editor, for isPalm(). Only contact counts: a pen hovering
-     * over the screen also sends pointermove events, and would block finger taps all along.
+     * over the screen also sends pointermove events (with the side button pressed, with buttons
+     * 1 and no pressure), and would block finger taps all along.
      */
     private onPenActivity = (evt: PointerEvent) => {
         if (evt.pointerType !== "pen") return;
-        if (evt.type === "pointermove" && !this.penDown && evt.buttons === 0) return;
+        const hovering = evt.buttons === 0 || !(evt.pressure > 0);
+        if (evt.type === "pointermove" && !this.penDown && hovering) return;
         this.penDown = evt.type === "pointerdown" || (this.penDown && evt.type === "pointermove");
         this.lastPenAt = Date.now();
     };
@@ -681,10 +773,16 @@ export class CardEditorModal extends Modal {
         );
     }
 
-    /** Returns whether the button's current click comes from a palm press (see isPalm()) */
+    /**
+     * Returns whether the button's current click comes from a palm press (see isPalm()). A
+     * button never takes the focus, so the text area keeps it and the soft keyboard stays open.
+     */
     private palmGuard(button: HTMLButtonElement): () => boolean {
         let palm = false;
-        button.addEventListener("pointerdown", (evt) => (palm = this.isPalm(evt)));
+        button.addEventListener("pointerdown", (evt) => {
+            evt.preventDefault();
+            palm = this.isPalm(evt);
+        });
         return () => {
             const result = palm;
             // A click from the keyboard has no pointerdown before it

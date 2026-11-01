@@ -376,11 +376,19 @@ export interface IBaseLocale {
     CARD_EDITOR_FRONT: string;
     CARD_EDITOR_BACK: string;
     CARD_EDITOR_CLOZE: string;
-    CARD_EDITOR_TEXT_PLACEHOLDER: string;
-    CARD_EDITOR_INK_PLACEHOLDER: string;
+    CARD_EDITOR_DRAW_FRONT: string;
+    CARD_EDITOR_DRAW_BACK: string;
+    CARD_EDITOR_TYPE_QUESTION: string;
+    CARD_EDITOR_TYPE_ANSWER: string;
+    CARD_EDITOR_TYPE_CLOZE: string;
+    CARD_EDITOR_SWITCH_SIDE: string;
     CARD_EDITOR_PEN_THIN: string;
     CARD_EDITOR_PEN_MEDIUM: string;
     CARD_EDITOR_PEN_THICK: string;
+    CARD_EDITOR_ERASER_SIZE: string;
+    CARD_EDITOR_ERASER_SMALL: string;
+    CARD_EDITOR_ERASER_MEDIUM: string;
+    CARD_EDITOR_ERASER_LARGE: string;
     CARD_EDITOR_ERASER: string;
     CARD_EDITOR_UNDO: string;
     CARD_EDITOR_CLEAR_SIDE: string;
@@ -397,6 +405,9 @@ export interface IBaseLocale {
     // Card editor > notices
     CARD_EDITOR_NO_FLASHCARD_TAG: string;
     CARD_EDITOR_SIDES_EMPTY: string;
+    CARD_EDITOR_FRONT_EMPTY: string;
+    CARD_EDITOR_BACK_EMPTY: string;
+    CARD_EDITOR_CARD_EMPTY: string;
     CARD_EDITOR_SIDE_HAS_MARKER: string;
     CARD_EDITOR_SIDE_HAS_CARD_SYNTAX: string;
     CARD_EDITOR_PLUGIN_UNLOADED: string;

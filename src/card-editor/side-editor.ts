@@ -1,9 +1,8 @@
 import "src/card-editor/card-editor.css";
 
 import { Stroke } from "src/card-editor/core/strokes";
-import { InkField } from "src/card-editor/ink-field";
+import { InkField, renderHint } from "src/card-editor/ink-field";
 import { SRSettings } from "src/data/settings";
-import { t } from "src/lang/helpers";
 import { TextDirection } from "src/utils/strings";
 
 /** Content of one side: typed text and handwriting, both saved */
@@ -16,8 +15,14 @@ export interface SideState {
 
 export interface SideEditorOptions {
     label: string;
+    /** Which side this is; it is marked on the right edge of its fields (front) or the left (back) */
+    face: "front" | "back";
+    /** Shown in the pen zone while it is empty; a **word** is bold */
+    inkHint: string;
+    /** Shown in the text zone while it is empty; a **word** is bold */
+    textHint: string;
     initial: SideState;
-    /** false for cloze cards: text only, no ink field */
+    /** false for cloze cards and with pen mode off: text only, no pen zone */
     allowInk: boolean;
     settings: SRSettings;
     textDirection: TextDirection;
@@ -30,56 +35,71 @@ export interface SideEditorOptions {
     onInkCommit(prev: Stroke[], prevText?: string): void;
     /** Whether a press is the palm resting on the screen (pen-only on); it is then ignored */
     isPalm?(evt: PointerEvent): boolean;
+    /** Returns the eraser's radius, in pixels */
+    eraserRadius?: () => number;
+    /** The pen's side button was pressed while the pen hovers over the pen zone */
+    onSideButton?: () => void;
 }
 
+/** How long a side is outlined when saving needs it filled in */
+const FLASH_MS = 900;
+
 /**
- * One side of a card: a text area of a few lines on top, for typing, and an ink field filling the
- * rest of the box, for the pen. Both are saved. The text area has a fixed height and scrolls
- * inside itself, so nothing moves while typing or writing.
+ * One side of a card: a pen zone of fixed height and, below it, a text zone. Both are saved.
+ * The side's element doesn't take part in the layout (display: contents): the two zones are
+ * placed in the editor's grid, so both sides take exactly the same place and only the side
+ * shown is laid out.
  */
 export class SideEditor {
     readonly el: HTMLDivElement;
+    readonly label: string;
 
     private opts: SideEditorOptions;
     private initial: SideState;
     private penSize: number;
     private eraser = false;
+    private inkHost: HTMLElement | null = null;
+    private textWrap: HTMLElement;
     private textArea: HTMLTextAreaElement;
     private ink: InkField | null = null;
+    private flashTimer: number | null = null;
 
     constructor(parent: HTMLElement, opts: SideEditorOptions) {
         this.opts = opts;
+        this.label = opts.label;
         this.initial = withOwnSizes(opts.initial);
         this.penSize = opts.initial.penSize;
 
-        this.el = parent.createDiv({ cls: "sr-card-editor-side" });
+        this.el = parent.createDiv({ cls: ["sr-card-editor-side", `is-${opts.face}`] });
         this.el.toggleClass("is-text-only", !opts.allowInk);
-        const header = this.el.createDiv({ cls: "sr-card-editor-side-header" });
-        header.createDiv({ cls: "sr-card-editor-side-label", text: opts.label });
 
-        const body = this.el.createDiv({ cls: "sr-card-editor-side-body" });
-        this.textArea = body.createEl("textarea", { cls: "sr-card-editor-text" });
-        this.textArea.placeholder = t("CARD_EDITOR_TEXT_PLACEHOLDER");
+        if (opts.allowInk) {
+            const s = opts.settings;
+            this.inkHost = this.el.createDiv({ cls: "sr-card-editor-ink" });
+            this.ink = new InkField(this.inkHost, {
+                placeholder: opts.inkHint,
+                style: { size: this.penSize },
+                guide: s.cardEditorGuide,
+                guideSpacing: s.cardEditorGuideSpacing,
+                eraserActive: () => this.eraser,
+                eraserRadius: opts.eraserRadius,
+                onSideButton: opts.onSideButton,
+                onChange: (prev) => this.onInkChange(prev),
+            });
+            this.ink.setStrokes(this.initial.strokes);
+        }
+
+        // The hint is an element over the text area, not its placeholder, which can't be bold
+        this.textWrap = this.el.createDiv({ cls: "sr-card-editor-text-wrap" });
+        this.textArea = this.textWrap.createEl("textarea", { cls: "sr-card-editor-text" });
         this.textArea.value = opts.initial.text;
         this.textArea.setAttr("aria-label", opts.label);
         if (opts.textDirection === TextDirection.Rtl) this.textArea.setAttr("dir", "rtl");
         this.textArea.addEventListener("input", this.onTextInput);
         this.textArea.addEventListener("keydown", this.onTextKeyDown);
         this.textArea.addEventListener("pointerdown", this.onTextPointerDown);
-
-        if (opts.allowInk) {
-            const s = opts.settings;
-            const inkHost = body.createDiv({ cls: "sr-card-editor-ink" });
-            this.ink = new InkField(inkHost, {
-                placeholder: t("CARD_EDITOR_INK_PLACEHOLDER"),
-                style: { size: this.penSize },
-                guide: s.cardEditorGuide,
-                guideSpacing: s.cardEditorGuideSpacing,
-                eraserActive: () => this.eraser,
-                onChange: (prev) => this.onInkChange(prev),
-            });
-            this.ink.setStrokes(this.initial.strokes);
-        }
+        renderHint(this.textWrap.createDiv({ cls: "sr-card-editor-text-hint" }), opts.textHint);
+        this.updateTextEmpty();
     }
 
     get strokes(): Stroke[] {
@@ -104,7 +124,7 @@ export class SideEditor {
         return !sameStrokes(this.strokes, this.initial.strokes);
     }
 
-    /** The element ink is written on, null without ink (cloze) */
+    /** The element ink is written on, null without ink (cloze, pen mode off) */
     get inkEl(): HTMLElement | null {
         return this.ink?.el ?? null;
     }
@@ -119,6 +139,7 @@ export class SideEditor {
     setText(text: string): void {
         if (text === this.text) return;
         this.textArea.value = text;
+        this.updateTextEmpty();
         this.opts.onChange();
     }
 
@@ -135,6 +156,7 @@ export class SideEditor {
         const prevStrokes = this.strokes;
         const prevText = this.text;
         this.textArea.value = "";
+        this.updateTextEmpty();
         // Not ink.clear(): that would report the ink alone
         this.ink?.setStrokes([]);
         this.opts.onInkCommit(prevStrokes, prevText);
@@ -147,6 +169,7 @@ export class SideEditor {
         this.initial = state;
         this.penSize = state.penSize;
         this.textArea.value = state.text;
+        this.updateTextEmpty();
         if (this.ink) {
             this.ink.setStyle({ size: state.penSize });
             this.ink.setStrokes(state.strokes);
@@ -158,22 +181,36 @@ export class SideEditor {
         this.eraser = on;
     }
 
+    /** Only one side is shown at a time; a hidden pen zone doesn't draw */
+    show(shown: boolean): void {
+        this.el.toggleClass("sr-is-hidden", !shown);
+    }
+
+    /** Outlines the side's fields for a moment, e.g. when saving needs it filled in */
+    flash(): void {
+        if (this.flashTimer !== null) activeWindow.clearTimeout(this.flashTimer);
+        this.el.removeClass("is-flashing");
+        // Read the layout, so the animation starts over when the class comes back
+        this.textWrap.getBoundingClientRect();
+        this.el.addClass("is-flashing");
+        this.flashTimer = activeWindow.setTimeout(() => {
+            this.flashTimer = null;
+            this.el.removeClass("is-flashing");
+        }, FLASH_MS);
+    }
+
     /** Re-reads the theme's colors, e.g. after switching to dark mode */
     themeChanged(): void {
         this.ink?.themeChanged();
     }
 
-    /** Focuses the text area (on mobile this opens the soft keyboard) */
+    /** Focuses the text area (on mobile this opens the soft keyboard, which then stays open) */
     focus(): void {
-        this.textArea.focus();
-    }
-
-    /** Focuses the ink field, moving the focus off the text area without scrolling */
-    focusInk(): void {
-        this.ink?.el.focus({ preventScroll: true });
+        this.textArea.focus({ preventScroll: true });
     }
 
     destroy(): void {
+        if (this.flashTimer !== null) activeWindow.clearTimeout(this.flashTimer);
         this.textArea.removeEventListener("input", this.onTextInput);
         this.textArea.removeEventListener("keydown", this.onTextKeyDown);
         this.textArea.removeEventListener("pointerdown", this.onTextPointerDown);
@@ -183,12 +220,17 @@ export class SideEditor {
 
     // MARK: helpers
 
+    private updateTextEmpty() {
+        this.textWrap.toggleClass("is-empty", this.textArea.value === "");
+    }
+
     private onInkChange(prev: Stroke[]) {
         this.opts.onInkCommit(prev);
         this.opts.onChange();
     }
 
     private onTextInput = () => {
+        this.updateTextEmpty();
         this.opts.onChange();
     };
 

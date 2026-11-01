@@ -21,38 +21,49 @@ Already done on `main` (not part of this work): the edit dialog splits cards wit
 
 ## The editor in one picture
 
+Since the fixed-zones redesign ([card-editor-fixed-zones.md](card-editor-fixed-zones.md), prototype
+[card-editor-fixed-zones.html](card-editor-fixed-zones.html)) one side is edited at a time, in
+zones that never move:
+
 ```
-┌──────────────────────────────────────────────────────────┐
-│ Biology › Cells (2 added)          ●  ⌫  ↶  🗑          ✕ │  header: note, counter, pen tools, close
-├──────────────────────────────────────────────────────────┤
-│ Front                                                    │
-│ ┌──────────────────────────────────────────────────────┐ │
-│ │  text area (about 3 lines, scrolls inside)           │ │
-│ ├──────────────────────────────────────────────────────┤ │
-│ │  ink field with guide lines (rest of the side)       │ │
-│ └──────────────────────────────────────────────────────┘ │
-│ Back                                                     │
-│ ┌──────────────────────────────────────────────────────┐ │
-│ │  text area                                           │ │
-│ ├──────────────────────────────────────────────────────┤ │
-│ │  ink field                                           │ │
-│ └──────────────────────────────────────────────────────┘ │
-├──────────────────────────────────────────────────────────┤
-│ Delete card                    Save & close   Save & next │  add mode
-│ Delete card                                        Save   │  edit mode
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│ Biology · 2 added               🗑    ✕   │  title bar: note, counter, Delete card, close
+├──────────────────────────────────┬───────┤
+│ FRONT     ●   ⌫   ↶   ⊘          │       │  tool row: side, size, eraser, undo, clear side
+│┌────────────────────────────────┐│┌─────┐│
+││ pen zone, fixed height (245 px)│││Front││  switch: as tall as the pen zone
+││ "Draw on front"                │││ ⇅   ││
+││                                │││Back ││
+│└────────────────────────────────┘│└─────┘│
+│┌────────────────────────────────┐│ Save  │
+││ text zone: fills the rest      ││ & next│  2/3
+││ "Type the question" (scrolls)  │├───────┤
+│└────────────────────────────────┘│ Save &│  1/3 (edit mode: one Save)
+└──────────────────────────────────┴ close ┘
+              (soft keyboard below)
 ```
 
 - **Every side holds typed text and handwriting at once** (no input modes, see "Device test
-  round 1b"): a fixed-height text area on top, the ink field below it. Keyboard and fingers type,
-  the pen writes. No auto-detection, no switch.
-- **Pen tools** (pen size, eraser toggle, undo, clear side) are always enabled. The S Pen side
-  button erases too. Only the pen draws, fingers are ignored (setting). Clear side clears text and
-  ink of the active side, one undo step.
+  round 1b"): the pen zone on top, the text zone below. Keyboard and fingers type, the pen writes.
+- **One side at a time**: the switch shows the other side and moves the focus to its text area.
+  The side shown is marked by a broad accent edge on both fields: right for the front, left for
+  the back.
+- **The keyboard stays open**: writing and the buttons never take the focus from the text area;
+  the editor opens with the front's text area focused (on mobile too) and on mobile fills the
+  visible height above the keyboard. Only the text zone and the save buttons change height.
+- **Pen tools** act on the side shown: the size button cycles the pen (thin, the default, medium,
+  thick) or, with the eraser on, the eraser (radius 5, 9, 15 px; its ring is the eraser's real
+  size); the eraser turns the pen zone's border red; undo; clear side (text and ink, one undo
+  step). Pressing the S Pen side button while hovering toggles the eraser; holding it while
+  writing erases. Only the pen draws, fingers are ignored.
+- **Delete card** is the bin in the title bar: an empty new card closes at once, otherwise two
+  taps within 3 s.
+- **Save on an empty side** shows that side, outlines it and says "Back is empty"; nothing is
+  saved. The save buttons are only disabled while saving.
 - **Text area** keeps the existing textarea behaviour: Tab inserts a tab, Ctrl/Cmd+Enter saves
   (in add mode: Save & next), native undo for typing.
-- **Cloze cards**: one text field, no ink field, no back side.
-- **Save is disabled** while a needed side is empty (front and back; front only for cloze).
+- **Pen mode off**: the text zone takes the pen zone's place too, the switch and the save buttons
+  share the right column. **Cloze cards**: one text side, no pen zone, no switch.
 - Fullscreen on mobile, a large dialog on desktop. Exactly one close button, top right.
 
 ## User flows
@@ -66,10 +77,10 @@ Already done on `main` (not part of this work): the edit dialog splits cards wit
 4. Fill front and back, typing, writing or both.
 5. **Save & next**: the card is inserted below the cursor, after the block the cursor is in
    (frontmatter, card with its schedule comment, code block, paragraph), or at the end of the note in
-   reading view / when no editor is open; the fields clear, the counter goes up, focus returns to the
-   front side's text area on desktop (on mobile nothing is focused, so no soft keyboard). Consecutive cards are inserted one after the other.
-   **Save & close**: insert and close. **Delete card**: first tap arms it ("Tap again to delete"),
-   second tap within 3 s clears the card and closes.
+   reading view / when no editor is open; the fields clear, the counter goes up, the front is shown and its text area focused (the
+   keyboard stays up). Consecutive cards are inserted one after the other.
+   **Save & close**: insert and close. **Delete card** (🗑 in the title bar): first tap arms it
+   ("Tap again to delete"), second tap within 3 s clears the card and closes.
 6. Closing with the back gesture / Esc / ✕ keeps the unsaved card as a draft (text and strokes);
    the next **Add card** restores it. An empty card leaves no draft.
 7. After closing, SR rescans that note, so the deck counts and review queue include the new cards.

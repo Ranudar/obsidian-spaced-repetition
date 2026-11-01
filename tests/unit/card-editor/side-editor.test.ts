@@ -49,6 +49,9 @@ function setup(
     const onInkCommit = jest.fn();
     const side = new SideEditor(parent, {
         label: "Front",
+        face: "front",
+        inkHint: "Draw on **front**",
+        textHint: "Type the **question**",
         initial,
         allowInk: true,
         settings: { ...DEFAULT_SETTINGS, ...settings },
@@ -97,6 +100,19 @@ describe("SideEditor", () => {
         expect(side.state.text).toBe("typed");
         expect(side.state.strokes).toHaveLength(2);
         expect(onChange).toHaveBeenCalledTimes(2);
+    });
+
+    test("the side shows as one pen zone and one text zone with their hints", () => {
+        const { side, parent } = setup(state());
+        expect(side.el.hasClass("is-front")).toBe(true);
+        expect(parent.querySelector(".sr-card-editor-ink .sr-ink-field")).not.toBeNull();
+        expect(parent.querySelector(".sr-card-editor-text-hint").innerHTML).toBe(
+            "Type the <b>question</b>",
+        );
+        side.show(false);
+        expect(side.el.hasClass("sr-is-hidden")).toBe(true);
+        side.show(true);
+        expect(side.el.hasClass("sr-is-hidden")).toBe(false);
     });
 
     test("without ink (cloze) there is only the text area", () => {
