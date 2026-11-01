@@ -48,6 +48,7 @@ export class CommandManager {
         this.plugin.removeCommand("srs-card-review-show-answer");
         this.plugin.removeCommand("srs-card-review-reset");
         this.plugin.removeCommand("srs-card-review-skip");
+        this.plugin.removeCommand("srs-card-review-open-in-background");
     }
 
     /**
@@ -266,7 +267,7 @@ export class CommandManager {
         });
 
         this.plugin.addCommand({
-            id: "srs-card-review-reset",
+            id: "srs-card-review-open-in-background",
             name: t("OPEN_IN_BACKGROUND"),
             repeatable: false,
             checkCallback: (checking: boolean) => {
