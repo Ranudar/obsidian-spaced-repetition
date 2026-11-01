@@ -50,7 +50,8 @@ write by hand and type; one side is edited at a time.
    modal content; scrolls when long. Hint "Type the **question**" / "Type the **answer**"
    (bold word) while empty — rendered as an overlay element (placeholder can't be bold).
 5. **Side marker**: both fields get a broad accent-coloured border (5 px, `--interactive-accent`)
-   on their **right** edge on the front and on their **left** edge on the back, following the
+   on their **left** edge on the front and on their **right** edge on the back (working from
+   left to right), following the
    fields' rounded corners, only as tall as the fields. No tint, no dots.
 6. **Right column** (~12% width, min ~48 px): the **switch** button (exactly the pen zone's
    height, aligned with it) reads `Front` / `⇅` / `Back`, the active side **bold**, the other
@@ -110,8 +111,8 @@ left-handed mirror, making the pen zone height a setting.
   only while pen mode is on; label "Buttons on the left", description "For writing with the left
   hand: the Front ⇄ Back and save buttons move to the left of the writing fields."
 - On: the right column (switch + saves) moves to the left of the fields; the empty cell moves
-  with it (it sits left of the tool row). The side marker keeps its meaning: front = right edge,
-  back = left edge.
+  with it (it sits left of the tool row). The side marker keeps its meaning: front = left edge,
+  back = right edge.
 
 ### Previous / next card when editing
 

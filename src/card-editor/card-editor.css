@@ -11,7 +11,7 @@ img[src*="sr-ink-"] {
 }
 
 /* A handwritten card image in a note or the review window: the image in a frame, the pencil
-   outside the frame to its right, with a clear gap, so it never sits on or next to the ink.
+   outside the frame at its bottom right, with a clear gap, so it never sits on or next to the ink.
    (The frame is drawn by ::after, not on the image, so the dark mode filter doesn't change it.) */
 .sr-pencil-host {
     --sr-pencil-size: 28px;
@@ -58,9 +58,10 @@ img[src*="sr-ink-"] {
     max-width: 100%;
 }
 
+/* At the bottom: Obsidian puts its own "edit block" button at an embed's top right */
 .sr-pencil-button {
     position: absolute;
-    top: 0;
+    bottom: 0;
     right: 0;
     z-index: 2;
     width: var(--sr-pencil-size);
@@ -422,15 +423,15 @@ img[src*="sr-ink-"] {
     right: calc(var(--size-4-3) + 1px);
 }
 
-/* Clear of the side's edge where the text starts: the back's on the left, the front's on the
+/* Clear of the side's edge where the text starts: the front's on the left, the back's on the
    right */
-.sr-card-editor-side.is-back
+.sr-card-editor-side.is-front
     .sr-card-editor-text-wrap:not([dir="rtl"])
     > .sr-card-editor-text-hint {
     left: calc(var(--size-4-3) + var(--sr-card-editor-edge));
 }
 
-.sr-card-editor-side.is-front .sr-card-editor-text-wrap[dir="rtl"] > .sr-card-editor-text-hint {
+.sr-card-editor-side.is-back .sr-card-editor-text-wrap[dir="rtl"] > .sr-card-editor-text-hint {
     right: calc(var(--size-4-3) + var(--sr-card-editor-edge));
 }
 
@@ -444,16 +445,16 @@ img[src*="sr-ink-"] {
     border-color: var(--text-error);
 }
 
-/* The side shown: a broad edge on both fields, on the right for the front, on the left for the
-   back */
+/* The side shown: a broad edge on both fields, on the left for the front, on the right for the
+   back (working from left to right) */
 .sr-card-editor-side.is-front .sr-card-editor-ink,
 .sr-card-editor-side.is-front .sr-card-editor-text-wrap > .sr-card-editor-text {
-    border-right: var(--sr-card-editor-edge) solid var(--interactive-accent);
+    border-left: var(--sr-card-editor-edge) solid var(--interactive-accent);
 }
 
 .sr-card-editor-side.is-back .sr-card-editor-ink,
 .sr-card-editor-side.is-back .sr-card-editor-text-wrap > .sr-card-editor-text {
-    border-left: var(--sr-card-editor-edge) solid var(--interactive-accent);
+    border-right: var(--sr-card-editor-edge) solid var(--interactive-accent);
 }
 
 /* Saving needs this side filled in */

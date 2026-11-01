@@ -44,7 +44,7 @@ img[src*="sr-ink-"] {
 }
 .sr-pencil-button {
   position: absolute;
-  top: 0;
+  bottom: 0;
   right: 0;
   z-index: 2;
   width: var(--sr-pencil-size);
@@ -318,12 +318,12 @@ img[src*="sr-ink-"] {
   left: auto;
   right: calc(var(--size-4-3) + 1px);
 }
-.sr-card-editor-side.is-back
+.sr-card-editor-side.is-front
   .sr-card-editor-text-wrap:not([dir="rtl"])
   > .sr-card-editor-text-hint {
   left: calc(var(--size-4-3) + var(--sr-card-editor-edge));
 }
-.sr-card-editor-side.is-front
+.sr-card-editor-side.is-back
   .sr-card-editor-text-wrap[dir="rtl"]
   > .sr-card-editor-text-hint {
   right: calc(var(--size-4-3) + var(--sr-card-editor-edge));
@@ -337,11 +337,11 @@ img[src*="sr-ink-"] {
 }
 .sr-card-editor-side.is-front .sr-card-editor-ink,
 .sr-card-editor-side.is-front .sr-card-editor-text-wrap > .sr-card-editor-text {
-  border-right: var(--sr-card-editor-edge) solid var(--interactive-accent);
+  border-left: var(--sr-card-editor-edge) solid var(--interactive-accent);
 }
 .sr-card-editor-side.is-back .sr-card-editor-ink,
 .sr-card-editor-side.is-back .sr-card-editor-text-wrap > .sr-card-editor-text {
-  border-left: var(--sr-card-editor-edge) solid var(--interactive-accent);
+  border-right: var(--sr-card-editor-edge) solid var(--interactive-accent);
 }
 @keyframes sr-card-editor-flash {
   0%,

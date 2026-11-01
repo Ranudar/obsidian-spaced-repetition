@@ -87,8 +87,8 @@ The editor shows one side at a time, always in the same places:
   in bold; below it, beside the text zone, the save buttons. With **Buttons on the left** (see
   [Settings](#settings)) this column is on the left instead.
 
-The side shown is also marked by a broad coloured edge on both fields: on the right for the front,
-on the left for the back. Each side keeps its own text and handwriting when you switch.
+The side shown is also marked by a broad coloured edge on both fields: on the left for the front,
+on the right for the back, so you work from left to right. Each side keeps its own text and handwriting when you switch.
 
 - **Nothing moves**: the pen zone stays at the top with the same height on both sides. On phones and
   tablets the editor fills the screen above the soft keyboard; only the text zone and the save
@@ -162,7 +162,7 @@ existing handwriting, just the image is rewritten.
 ### From a Note
 
 In reading view and live preview, every handwritten card image is shown in a frame with a small
-pencil button just outside its top-right corner, so it never covers the handwriting. Tap the pencil on the front or the back to open the **whole card** in the
+pencil button just outside its bottom-right corner (clear of Obsidian's own "edit block" button at the top right), so it never covers the handwriting. Tap the pencil on the front or the back to open the **whole card** in the
 editor, exactly as during review. This also works for mixed cards, for example a typed front with a
 handwritten back.
 
