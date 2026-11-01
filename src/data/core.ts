@@ -18,10 +18,6 @@ import { FlashcardReviewMode } from "src/scheduling/flashcard-review-sequencer";
 import { DateUtil, globalDateProvider, IDayBoundary } from "src/utils/dates";
 import { TextDirection } from "src/utils/strings";
 
-export interface IOsrVaultEvents {
-    dataChanged: () => void;
-}
-
 /**
  * Manages the processing of notes and scheduling data in the Obsidian vault.
  *
@@ -224,8 +220,7 @@ export class OsrCore {
         if (SettingsUtil.isAnyTagIgnoredForNotes(this.settings, tags)) {
             return;
         }
-        const noteSchedule: RepItemScheduleInfo | null = await this.readNoteSchedule(noteFile);
-        this._noteReviewQueue.addNoteToQueue(noteFile, noteSchedule, matchedNoteTags);
+        this._noteReviewQueue.addNoteToQueue(noteFile, schedule, matchedNoteTags);
     }
 
     /**
@@ -265,9 +260,7 @@ export class OsrCore {
         if (this.fullDeckTree === null) {
             return;
         }
-        this._reviewableDeckTree = this.fullDeckTree
-            ? this.fullDeckTree.clone()
-            : new Deck("root", null);
+        this._reviewableDeckTree = this.fullDeckTree.clone();
 
         // sort the deck names
         this._reviewableDeckTree.sortSubdecksList();
