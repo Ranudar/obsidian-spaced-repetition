@@ -142,6 +142,11 @@ export class SideEditor {
     }
 
     /** The element ink is written on, null without ink (cloze, pen mode off) */
+    /** The text zone (text area, hint, preview), e.g. for a button in its corner */
+    get textZoneEl(): HTMLElement {
+        return this.textWrap;
+    }
+
     get inkEl(): HTMLElement | null {
         return this.ink?.el ?? null;
     }

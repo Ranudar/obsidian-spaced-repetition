@@ -181,7 +181,8 @@ export class CardEditorModal extends Modal {
     private eraserButton!: HTMLButtonElement;
     private undoButton!: HTMLButtonElement;
     private clearButton!: HTMLButtonElement;
-    private previewButton!: HTMLButtonElement;
+    /** The preview toggle in each side's text zone */
+    private previewButtons: HTMLButtonElement[] = [];
     private typeButton!: HTMLButtonElement;
     /** The open list of card types under the chip, see openTypeList() */
     private typeList: { el: HTMLElement; remove: () => void } | null = null;
@@ -395,6 +396,14 @@ export class CardEditorModal extends Modal {
             });
         }
         this.sides.forEach((side) => this.initialText.set(side, side.text));
+        // The preview belongs to the text: its toggle sits in the text zone's corner
+        this.previewButtons = this.sides.map((side) => {
+            const button = this.iconButton(side.textZoneEl, "eye", t("CARD_EDITOR_PREVIEW"), () =>
+                this.setPreview(!this.preview),
+            );
+            button.addClass("sr-card-editor-preview-toggle");
+            return button;
+        });
         // No pen zone anywhere: the text zone takes its place, the switch and the saves share
         // the right column
         this.modalEl.toggleClass("sr-card-editor-no-ink", !this.hasInk);
@@ -443,10 +452,6 @@ export class CardEditorModal extends Modal {
         this.clearButton = this.iconButton(tools, "ban", t("CARD_EDITOR_CLEAR_SIDE"), () =>
             this.clearSide(),
         );
-        this.previewButton = this.iconButton(tools, "eye", t("CARD_EDITOR_PREVIEW"), () =>
-            this.setPreview(!this.preview),
-        );
-        this.previewButton.addClass("sr-card-editor-preview-toggle");
     }
 
     /** The switch beside the pen zone (not for cloze), the save buttons beside the text zone */
@@ -1084,9 +1089,11 @@ export class CardEditorModal extends Modal {
         this.mainEl.toggleClass("is-erasing", this.eraser);
         this.undoButton.disabled = this.busy || this.stepsOf(side).length === 0;
         this.clearButton.disabled = this.busy || side.isEmpty;
-        this.previewButton.disabled = this.busy;
-        this.previewButton.toggleClass("is-active", this.preview);
-        this.previewButton.setAttr("aria-pressed", this.preview);
+        for (const button of this.previewButtons) {
+            button.disabled = this.busy;
+            button.toggleClass("is-active", this.preview);
+            button.setAttr("aria-pressed", this.preview);
+        }
         // Cloze cards (editing) can't change type: no menu, no ▾
         const fixedType = this.typeButton.hasClass("is-fixed");
         this.typeButton.setText(cardTypeName(this.cardType) + (fixedType ? "" : " ▾"));

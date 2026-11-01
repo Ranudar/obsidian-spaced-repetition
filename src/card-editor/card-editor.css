@@ -160,7 +160,8 @@ img[src*="sr-ink-"] {
     display: flex;
     align-items: center;
     gap: var(--size-4-1);
-    height: 44px;
+    min-height: 52px;
+    padding-block: var(--size-4-2);
     padding-inline-start: var(--size-4-1);
 }
 
@@ -171,6 +172,7 @@ img[src*="sr-ink-"] {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    gap: var(--size-4-1);
 }
 
 .sr-card-editor-title-row {
@@ -357,7 +359,8 @@ img[src*="sr-ink-"] {
     display: contents;
 }
 
-/* Up to five 40 px buttons after the side's name: the gaps shrink on a narrow phone */
+/* The side's name, then its tools packed to the left: the corner under Delete and Close stays
+   free. The gaps shrink on a narrow phone */
 .sr-card-editor-tools {
     grid-area: tools;
     min-width: 0;
@@ -369,7 +372,7 @@ img[src*="sr-ink-"] {
 /* Shrinks first when the row is narrow */
 .sr-card-editor-side-label {
     flex: 0 1 auto;
-    margin-inline-end: auto;
+    margin-inline-end: var(--size-4-2);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -396,7 +399,18 @@ img[src*="sr-ink-"] {
     border: 1.5px solid currentColor;
 }
 
-.sr-card-editor-tools .sr-card-editor-preview-toggle.is-active {
+/* The preview toggle in the text zone's top corner, clear of the side's edge */
+.sr-card-editor-text-wrap > .sr-card-editor-preview-toggle {
+    position: absolute;
+    z-index: 2;
+    top: var(--size-4-1);
+    inset-inline-end: calc(var(--size-4-1) + var(--sr-card-editor-edge));
+    width: 32px;
+    height: 32px;
+    color: var(--text-faint);
+}
+
+.sr-card-editor-text-wrap > .sr-card-editor-preview-toggle.is-active {
     background-color: var(--interactive-accent);
     color: var(--text-on-accent);
 }
@@ -450,6 +464,8 @@ img[src*="sr-ink-"] {
     box-sizing: border-box;
     margin: 0;
     padding: var(--size-4-2) var(--size-4-3);
+    /* Clear of the preview toggle in the corner */
+    padding-inline-end: 44px;
     resize: none;
     overflow-y: auto;
     border: 1px solid var(--background-modifier-border);
@@ -489,6 +505,7 @@ img[src*="sr-ink-"] {
     inset: 0;
     box-sizing: border-box;
     padding: var(--size-4-2) var(--size-4-3);
+    padding-inline-end: 44px;
     overflow-y: auto;
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--radius-l);

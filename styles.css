@@ -124,7 +124,8 @@ img[src*="sr-ink-"] {
   display: flex;
   align-items: center;
   gap: var(--size-4-1);
-  height: 44px;
+  min-height: 52px;
+  padding-block: var(--size-4-2);
   padding-inline-start: var(--size-4-1);
 }
 .sr-card-editor-title-wrap {
@@ -133,6 +134,7 @@ img[src*="sr-ink-"] {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: var(--size-4-1);
 }
 .sr-card-editor-title-row {
   min-width: 0;
@@ -269,7 +271,7 @@ img[src*="sr-ink-"] {
 }
 .sr-card-editor-side-label {
   flex: 0 1 auto;
-  margin-inline-end: auto;
+  margin-inline-end: var(--size-4-2);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -292,7 +294,16 @@ img[src*="sr-ink-"] {
   background-color: transparent;
   border: 1.5px solid currentColor;
 }
-.sr-card-editor-tools .sr-card-editor-preview-toggle.is-active {
+.sr-card-editor-text-wrap > .sr-card-editor-preview-toggle {
+  position: absolute;
+  z-index: 2;
+  top: var(--size-4-1);
+  inset-inline-end: calc(var(--size-4-1) + var(--sr-card-editor-edge));
+  width: 32px;
+  height: 32px;
+  color: var(--text-faint);
+}
+.sr-card-editor-text-wrap > .sr-card-editor-preview-toggle.is-active {
   background-color: var(--interactive-accent);
   color: var(--text-on-accent);
 }
@@ -336,6 +347,7 @@ img[src*="sr-ink-"] {
   box-sizing: border-box;
   margin: 0;
   padding: var(--size-4-2) var(--size-4-3);
+  padding-inline-end: 44px;
   resize: none;
   overflow-y: auto;
   border: 1px solid var(--background-modifier-border);
@@ -369,6 +381,7 @@ img[src*="sr-ink-"] {
   inset: 0;
   box-sizing: border-box;
   padding: var(--size-4-2) var(--size-4-3);
+  padding-inline-end: 44px;
   overflow-y: auto;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-l);
