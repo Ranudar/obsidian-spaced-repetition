@@ -465,20 +465,21 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
         if (typeChanged) {
             // Changed to basic: the reverse direction is no longer reviewed in this session (the
             // current card is left to skipCurrentCardIfDropped(), once the editor has closed).
-            // Changed to reversed: the reverse direction is a new card once the note is read again
             for (const card of cards) {
                 if (question.cards.includes(card)) continue;
                 this._originalDeckTree.deleteCardFromAllDecks(card, false);
+                this.removePendingCards([card]);
                 if (card !== this.currentCard) this.cardSequencer.deleteRepItemFromAllDecks(card);
             }
-            question.cards.forEach((card, i) => {
-                card.front = cardFrontBackList[i].front;
-                card.back = cardFrontBackList[i].back;
-            });
-            return true;
         }
 
-        if (cardFrontBackList.length !== question.cards.length) {
+        // Changed to reversed (now or earlier in this session): the reverse direction is a new
+        // card once the note is read again; until then only the first direction is updated
+        const reverseAwaitsRescan =
+            (cardType === CardType.SingleLineReversed || cardType === CardType.MultiLineReversed) &&
+            question.cards.length === 1 &&
+            cardFrontBackList.length === 2;
+        if (!reverseAwaitsRescan && cardFrontBackList.length !== question.cards.length) {
             console.warn("SR: Cards count does not match question text. Skipping redraw.");
             new Notice("Cards count does not match cards from question text. Skipping redraw.");
             return true;
@@ -491,6 +492,11 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
         return true;
     }
 
+    /** So cards no longer reviewed don't come back when their short-term repeat is due */
+    private removePendingCards(cards: Card[]): void {
+        this.pendingCards = this.pendingCards.filter((pending) => !cards.includes(pending.card));
+    }
+
     skipCurrentCardIfDropped(): boolean {
         const card = this.currentCard;
         if (card === null || card.question.cards.includes(card)) return false;
@@ -499,16 +505,26 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
     }
 
     async deleteCurrentCardFromNote(): Promise<void> {
+        const card = this.currentCard;
         const question = this.currentQuestion;
         await DataStore.getInstance().delete(question);
         this._originalDeckTree.deleteQuestionFromAllDecks(question, false);
-        this.cardSequencer.deleteCurrentQuestionFromAllDecks();
+        this.removePendingCards(question.cards);
+        if (question.cards.includes(card)) {
+            this.cardSequencer.deleteCurrentQuestionFromAllDecks();
+        } else {
+            // The reverse direction of a card changed to basic in this session, no longer one of
+            // the question's cards: it goes too
+            this.cardSequencer.deleteQuestionFromAllDecks(question);
+            this.cardSequencer.deleteCurrentRepItemFromAllDecks();
+        }
         FlashcardReviewSequencer.removeFromNote(question);
     }
 
     async deleteQuestionFromNote(question: Question): Promise<boolean> {
         if (!(await DataStore.getInstance().delete(question))) return false;
         this._originalDeckTree.deleteQuestionFromAllDecks(question, false);
+        this.removePendingCards(question.cards);
         this.cardSequencer.deleteQuestionFromAllDecks(question);
         FlashcardReviewSequencer.removeFromNote(question);
         return true;

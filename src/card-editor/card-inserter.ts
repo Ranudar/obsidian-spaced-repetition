@@ -64,6 +64,20 @@ export class CardInserter {
         this.editorUsed = true;
     }
 
+    /**
+     * The note's text and the line (0-based) the first card would start on: below the cursor
+     * (see insertionLine()), or after the end of the note
+     */
+    async firstCardLine(): Promise<{ text: string; line: number }> {
+        const view = this.usableView();
+        if (view === null) {
+            const text = await this.app.vault.cachedRead(this.file);
+            return { text, line: splitTextIntoLineArray(text).length };
+        }
+        const text = view.editor.getValue();
+        return { text, line: insertionLine(text, view.editor.getCursor().line, this.settings) + 1 };
+    }
+
     /** Writes the editor's pending changes to disk, so a rescan sees the new cards */
     async flush(): Promise<void> {
         const view = this.view;

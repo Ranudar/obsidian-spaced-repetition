@@ -376,8 +376,14 @@ export function clozeMarkers(pattern: string | undefined): { open: string; close
     return { open: bare.substring(0, at), close: bare.substring(at + "answer".length) };
 }
 
-/** Whether a line of the text has a cloze deletion, by the cloze patterns SR's parser reads */
+/**
+ * Whether a line of the text has a cloze deletion, by the cloze patterns SR's parser reads, and
+ * the text gives at least one card (a deletion inside an HTML comment gives none)
+ */
 export function hasCloze(text: string, settings: SRSettings): boolean {
     const crafter = new ClozeCrafter(settings.clozePatterns);
-    return text.split("\n").some((line) => crafter.isClozeNote(line));
+    return (
+        text.split("\n").some((line) => crafter.isClozeNote(line)) &&
+        CardFrontBackUtil.expand(CardType.Cloze, text, settings).length > 0
+    );
 }

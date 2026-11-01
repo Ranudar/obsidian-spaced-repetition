@@ -850,6 +850,24 @@ describe("CardEditorModal while saving", () => {
     });
 });
 
+describe("CardEditorModal preview while saving", () => {
+    test("a failed save leaves the text read-only while the preview shows; Tab types nothing", async () => {
+        jest.spyOn(console, "error").mockImplementation(() => {});
+        const { cb } = openAdd();
+        type(0, "Q");
+        type(1, "A");
+        iconButton("Preview").click();
+        cb.save.mockRejectedValueOnce(new Error("x"));
+        saveClose().click();
+        await flush();
+        const ta = $<HTMLTextAreaElement>(".sr-card-editor-text-wrap.is-preview textarea");
+        expect(ta.readOnly).toBe(true);
+        const value = ta.value;
+        keyDown(ta, "Tab");
+        expect(ta.value).toBe(value);
+    });
+});
+
 describe("CardEditorModal buttons on the left", () => {
     const moved = () => $(".sr-card-editor-main").hasClass("sr-card-editor-buttons-left");
 
@@ -1092,6 +1110,16 @@ describe("CardEditorModal card types", () => {
         expect(Notice).toHaveBeenCalledWith("Mark at least one part as cloze", 2000);
     });
 
+    test("a cloze only inside an HTML comment gives no card and is refused", async () => {
+        const { cb } = openAdd();
+        pick("Cloze");
+        type(0, "Text <!-- ==answer== -->");
+        saveClose().click();
+        await flush();
+        expect(cb.save).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith("Mark at least one part as cloze", 2000);
+    });
+
     test("editing offers the other one of basic and reversed, with a notice", async () => {
         const { cb } = openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
         expect(typeMenu().items.map((i) => i.title)).toEqual(["Basic", "Reversed"]);
@@ -1226,6 +1254,17 @@ describe("CardEditorModal decks", () => {
         document.body.replaceChildren();
         open(["medicine", "biology/cells"]);
         expect(deckLine().textContent).toBe("Decks: medicine, biology/cells");
+    });
+
+    test("the card type is on the deck line, before the decks, far from Delete card", () => {
+        open(["medicine"]);
+        const meta = $(".sr-card-editor-meta");
+        expect(meta.parentElement.hasClass("sr-card-editor-title-wrap")).toBe(true);
+        expect([...meta.children].map((el) => el.className)).toEqual([
+            expect.stringContaining("sr-card-editor-type"),
+            "sr-card-editor-decks",
+        ]);
+        expect(meta.querySelector("button").textContent).toBe("Basic ▾");
     });
 
     test("no deck: says the note is no flashcard note", () => {

@@ -69,6 +69,8 @@ export class SideEditor {
     private previewEl: HTMLElement;
     /** The press on the preview is the palm (see SideEditorOptions.isPalm) */
     private previewPalm = false;
+    /** Locked while the card is saved (see setLocked()) */
+    private locked = false;
     private ink: InkField | null = null;
     private flashTimer: number | null = null;
 
@@ -258,8 +260,14 @@ export class SideEditor {
     setPreview(render: ((el: HTMLElement) => void) | null): void {
         this.previewEl.empty();
         this.textWrap.toggleClass("is-preview", render !== null);
-        this.textArea.readOnly = render !== null;
+        this.updateReadOnly();
         if (render !== null) render(this.previewEl);
+    }
+
+    /** While the card is saved its text can't be changed; the preview keeps it read-only too */
+    setLocked(locked: boolean): void {
+        this.locked = locked;
+        this.updateReadOnly();
     }
 
     destroy(): void {
@@ -274,6 +282,10 @@ export class SideEditor {
     }
 
     // MARK: helpers
+
+    private updateReadOnly() {
+        this.textArea.readOnly = this.locked || this.textWrap.hasClass("is-preview");
+    }
 
     private updateTextEmpty() {
         this.textWrap.toggleClass("is-empty", this.textArea.value === "");
@@ -293,6 +305,8 @@ export class SideEditor {
     private onTextKeyDown = (evt: KeyboardEvent) => {
         if (evt.key === "Tab" && !evt.ctrlKey && !evt.metaKey && !evt.altKey) {
             evt.preventDefault();
+            // Read-only (preview, saving): nothing is typed into the text, not even a tab
+            if (this.textArea.readOnly) return;
             insertText(this.textArea, "\t");
             this.onTextInput();
         }

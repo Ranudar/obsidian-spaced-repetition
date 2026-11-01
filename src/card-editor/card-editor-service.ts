@@ -156,11 +156,15 @@ export class CardEditorService {
      * (or at the end of the note when it isn't open in an editor), and the note is rescanned
      * once the editor has closed.
      */
-    openAdd(file: TFile, view: MarkdownView | null): void {
+    async openAdd(file: TFile, view: MarkdownView | null): Promise<void> {
         if (this.destroyed) return;
-        const decks = noteDecks(this.plugin.dataManager.createSRNoteTFile(file), this.settings);
-
         const inserter = new CardInserter(this.plugin.app, file, view, this.settings);
+        // The decks the card gets where it is inserted
+        const { text, line } = await inserter.firstCardLine();
+        if (this.destroyed) return;
+        const note = this.plugin.dataManager.createSRNoteTFile(file);
+        const decks = noteDecks(note, text, line, this.settings);
+
         let added = 0;
         const modal = new CardEditorModal(this.plugin.app, this.settings, {
             kind: "add",

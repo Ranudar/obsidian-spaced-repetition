@@ -445,7 +445,7 @@ export class CommandManager {
                 if (openFile === null || openFile.extension !== "md") return false;
 
                 if (!checking) {
-                    this.plugin.cardEditorService.openAdd(openFile, view);
+                    void this.plugin.cardEditorService.openAdd(openFile, view);
                 }
                 return true;
             },

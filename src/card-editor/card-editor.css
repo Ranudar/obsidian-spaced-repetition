@@ -164,7 +164,7 @@ img[src*="sr-ink-"] {
     padding-inline-start: var(--size-4-1);
 }
 
-/* The title with the badge, the decks below */
+/* The title with the badge; the card type and the decks below */
 .sr-card-editor-title-wrap {
     flex: 1;
     min-width: 0;
@@ -195,16 +195,28 @@ img[src*="sr-ink-"] {
     color: var(--text-warning);
 }
 
-/* The card type, with ▾ for its menu; may shrink, so ✕ stays on a narrow phone */
-.sr-card-editor-header > button.sr-card-editor-type {
-    flex: 0 1 auto;
+/* Below the title: the card type, then the decks */
+.sr-card-editor-meta {
     min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--size-4-1);
+}
+
+.sr-card-editor-meta > .sr-card-editor-decks::before {
+    content: "·";
+    margin-inline-end: var(--size-4-1);
+}
+
+/* The card type, with ▾ for its menu: compact; on a narrow phone the decks shrink, not it */
+.sr-card-editor-meta > button.sr-card-editor-type {
+    flex: none;
     /* A block, not Obsidian's flex button, so the text can end in an ellipsis */
     display: block;
-    height: 30px;
-    line-height: 30px;
+    height: 20px;
+    line-height: 20px;
     padding: 0 var(--size-4-2);
-    border-radius: var(--radius-l);
+    border-radius: var(--radius-s);
     font-size: var(--font-ui-smaller);
     white-space: nowrap;
     overflow: hidden;
@@ -212,7 +224,7 @@ img[src*="sr-ink-"] {
 }
 
 /* A cloze card being edited: its type, nothing to pick */
-.sr-card-editor-header > button.sr-card-editor-type.is-fixed:disabled {
+.sr-card-editor-meta > button.sr-card-editor-type.is-fixed:disabled {
     opacity: 1;
     cursor: default;
     color: var(--text-muted);

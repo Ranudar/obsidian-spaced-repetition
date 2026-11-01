@@ -45,6 +45,9 @@ export class NoteQuestionParser {
 
     questionList: Question[];
 
+    // Where the questions are in the note, for telling question specific tags from note-level ones
+    private parsedQuestionInfoList: ParsedQuestionInfo[] = [];
+
     constructor(settings: SRSettings) {
         this.settings = settings;
     }
@@ -102,6 +105,25 @@ export class NoteQuestionParser {
         return this.questionList;
     }
 
+    /**
+     * The flashcard tags a new question without a tag of its own would get, if it started on
+     * lineNum (0-based) of noteText: by the same rules as the questions of createQuestionList().
+     * null when the note has no flashcard tag. Tags only, not folders as decks.
+     */
+    topicPathListAtLine(
+        noteFile: ISRNoteTFile,
+        noteText: string,
+        lineNum: number,
+    ): TopicPathList | null {
+        this.noteFile = noteFile;
+        [this.frontmatterText, this.contentText] = splitNoteIntoFrontmatterAndContent(noteText);
+        this.parsedQuestionInfoList = this.parseQuestions();
+        [this.frontmatterTopicPathList, this.contentTopicPathInfo] = this.analyseTagCacheList(
+            noteFile.getAllTagsFromText(),
+        );
+        return this.noteTopicPathListBefore(lineNum);
+    }
+
     private doCreateQuestionList(
         noteText: string,
         textDirection: TextDirection,
@@ -114,8 +136,8 @@ export class NoteQuestionParser {
         this.tagCacheList = tagCacheList;
 
         const result: Question[] = [];
-        const parsedQuestionInfoList: ParsedQuestionInfo[] = this.parseQuestions();
-        for (const parsedQuestionInfo of parsedQuestionInfoList) {
+        this.parsedQuestionInfoList = this.parseQuestions();
+        for (const parsedQuestionInfo of this.parsedQuestionInfoList) {
             const question: Question = this.createQuestionObject(parsedQuestionInfo, textDirection);
 
             // Each rawCardText can turn into multiple CardFrontBack's (e.g. CardType.Cloze, CardType.SingleLineReversed)
@@ -310,8 +332,8 @@ export class NoteQuestionParser {
         const tagLineNum: number = tagItem.position.start.line;
 
         // Check that the tag is not question specific (determined by line number)
-        const isQuestionSpecific: boolean = this.questionList.some((q) =>
-            q.parsedQuestionInfo.isQuestionLineNum(tagLineNum),
+        const isQuestionSpecific: boolean = this.parsedQuestionInfoList.some((info) =>
+            info.isQuestionLineNum(tagLineNum),
         );
         return !isQuestionSpecific;
     }
@@ -347,26 +369,7 @@ export class NoteQuestionParser {
                     [questionText.topicPathWithWs.topicPath],
                     question.parsedQuestionInfo.firstLineNum,
                 );
-            else {
-                // By default we start off with any TopicPathList present in the frontmatter
-                result = this.frontmatterTopicPathList;
-
-                // Find the last TopicPathList prior to the question (in the order present in the file)
-                for (let i = this.contentTopicPathInfo.length - 1; i >= 0; i--) {
-                    const topicPathList: TopicPathList = this.contentTopicPathInfo[i];
-                    if (topicPathList.lineNum < question.parsedQuestionInfo.firstLineNum) {
-                        result = topicPathList;
-                        break;
-                    }
-                }
-
-                // For backward compatibility with functionality pre https://github.com/st3v3nmw/obsidian-spaced-repetition/issues/495:
-                // if nothing matched, then use the first one
-                // This could occur if the only topic tags present are question specific
-                if (!result && this.flashcardTagList.length > 0) {
-                    result = this.createTopicPathListFromSingleTag(this.flashcardTagList[0]);
-                }
-            }
+            else result = this.noteTopicPathListBefore(question.parsedQuestionInfo.firstLineNum);
         }
 
         if (result === null) {
@@ -376,6 +379,29 @@ export class NoteQuestionParser {
             );
         }
 
+        return result;
+    }
+
+    // The note-level TopicPathList for a question starting on lineNum, without its own topic tag
+    private noteTopicPathListBefore(lineNum: number): TopicPathList | null {
+        // By default we start off with any TopicPathList present in the frontmatter
+        let result: TopicPathList | null = this.frontmatterTopicPathList;
+
+        // Find the last TopicPathList prior to the question (in the order present in the file)
+        for (let i = this.contentTopicPathInfo.length - 1; i >= 0; i--) {
+            const topicPathList: TopicPathList = this.contentTopicPathInfo[i];
+            if (topicPathList.lineNum < lineNum) {
+                result = topicPathList;
+                break;
+            }
+        }
+
+        // For backward compatibility with functionality pre https://github.com/st3v3nmw/obsidian-spaced-repetition/issues/495:
+        // if nothing matched, then use the first one
+        // This could occur if the only topic tags present are question specific
+        if (!result && this.flashcardTagList.length > 0) {
+            result = this.createTopicPathListFromSingleTag(this.flashcardTagList[0]);
+        }
         return result;
     }
 }

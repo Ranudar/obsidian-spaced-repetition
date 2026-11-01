@@ -279,18 +279,26 @@ export class CardEditorModal extends Modal {
     // MARK: building
 
     /**
-     * The note's title with the "n added" badge and, below, the card's decks; the card type,
-     * previous / next card (editing a card of a note), Delete card and, with space between them, ✕
+     * The note's title with the "n added" badge and, below, the card type and the card's decks;
+     * previous / next card (editing a card of a note), Delete card and, with space between them, ✕.
+     * The card type sits on the left, far from Delete card and ✕.
      */
     private buildHeader(root: HTMLElement) {
         const header = root.createDiv({ cls: "sr-card-editor-header" });
         const titleWrap = header.createDiv({ cls: "sr-card-editor-title-wrap" });
         const titleEl = titleWrap.createDiv({ cls: "sr-card-editor-title-row" });
         titleEl.createDiv({ cls: "sr-card-editor-title", text: this.opts.title });
+        const metaEl = titleWrap.createDiv({ cls: "sr-card-editor-meta" });
+        // Cloze cards can't be changed to another type
+        const fixedType = this.opts.kind === "edit" && this.opts.cardType === CardType.Cloze;
+        this.typeButton = this.textButton(metaEl, "", () => this.showTypeMenu());
+        this.typeButton.addClass("sr-card-editor-type");
+        this.typeButton.disabled = fixedType;
+        this.typeButton.toggleClass("is-fixed", fixedType);
         // Not a flashcard note: the warning takes the decks' place
         const decks = this.opts.decks;
         if (decks !== undefined) {
-            const deckEl = titleWrap.createDiv({ cls: "sr-card-editor-decks" });
+            const deckEl = metaEl.createDiv({ cls: "sr-card-editor-decks" });
             deckEl.toggleClass("is-warning", decks.length === 0);
             deckEl.setText(
                 decks.length === 0
@@ -311,12 +319,6 @@ export class CardEditorModal extends Modal {
             });
             this.counterEl.setAttr("role", "status");
         }
-        // Cloze cards can't be changed to another type
-        const fixedType = this.opts.kind === "edit" && this.opts.cardType === CardType.Cloze;
-        this.typeButton = this.textButton(header, "", () => this.showTypeMenu());
-        this.typeButton.addClass("sr-card-editor-type");
-        this.typeButton.disabled = fixedType;
-        this.typeButton.toggleClass("is-fixed", fixedType);
         if (this.opts.kind === "edit" && this.opts.steps) {
             this.prevButton = this.iconButton(
                 header,
@@ -947,7 +949,7 @@ export class CardEditorModal extends Modal {
     private lockSides(locked: boolean) {
         this.sidesEl.toggleClass("is-locked", locked);
         this.sidesEl.setAttr("aria-busy", locked);
-        this.sidesEl.querySelectorAll("textarea").forEach((ta) => (ta.readOnly = locked));
+        this.sides.forEach((side) => side.setLocked(locked));
     }
 
     /** Swallows input on the sides while they are locked (see lockSides()) */
