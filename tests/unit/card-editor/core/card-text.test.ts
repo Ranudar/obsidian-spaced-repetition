@@ -318,11 +318,42 @@ describe("Adding a card", () => {
         }
     });
 
+    test("With an end marker, blank lines before the card's type is known are protected", () => {
+        // The parser still ends a card at a blank line while it doesn't know the card's type
+        expect(protectBlankLines("a\n\nb", END_MARKER_SETTINGS, "front")).toEqual("a\n<br>\nb");
+        const cloze = protectBlankLines(
+            "Intro\n\nThe ==answer== is\n\nmore",
+            END_MARKER_SETTINGS,
+            "cloze",
+        );
+        expect(cloze).toEqual("Intro\n<br>\nThe ==answer== is\n\nmore");
+        expect(
+            parsesAsCard(
+                newCardBody(cloze, null, END_MARKER_SETTINGS, CardType.Cloze),
+                CardType.Cloze,
+                cloze,
+                null,
+                END_MARKER_SETTINGS,
+            ),
+        ).toBe(true);
+        const front = protectBlankLines("Q\n\nmore Q", END_MARKER_SETTINGS, "front");
+        const back = protectBlankLines("A\n\nmore A", END_MARKER_SETTINGS, "back");
+        expect(
+            parsesAsCard(
+                newCardBody(front, back, END_MARKER_SETTINGS),
+                CardType.MultiLineBasic,
+                front,
+                back,
+                END_MARKER_SETTINGS,
+            ),
+        ).toBe(true);
+    });
+
     test("A typed blank line is protected so the card stays one card", async () => {
         expect(protectBlankLines("```\ncode\n\nmore\n```\n\nx", DEFAULT_SETTINGS)).toEqual(
             "```\ncode\n\nmore\n```\n<br>\nx",
         );
-        expect(protectBlankLines("a\n\nb", END_MARKER_SETTINGS)).toEqual("a\n\nb");
+        expect(protectBlankLines("a\n\nb", END_MARKER_SETTINGS, "back")).toEqual("a\n\nb");
 
         const card = newCardBody(
             protectBlankLines("Q\n\nmore Q", DEFAULT_SETTINGS),

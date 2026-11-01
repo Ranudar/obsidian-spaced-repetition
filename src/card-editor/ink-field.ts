@@ -13,24 +13,40 @@ import {
 import { CardEditorGuide } from "src/data/settings";
 
 export interface InkFieldOptions {
-    /** Shown inside the field while it is empty */
+    /** Shown inside the field while it is empty; a **word** is bold */
     placeholder: string;
     style: StrokeStyle;
     guide: CardEditorGuide;
     guideSpacing: number;
     /** Returns true while the toolbar eraser is switched on */
     eraserActive: () => boolean;
+    /** Returns the eraser's radius in pixels; without it, the eraser grows with the pen size */
+    eraserRadius?: () => number;
+    /**
+     * Called once per press of the pen's side button while the pen hovers over the field (see
+     * sideButton()); pressed while the pen writes, the button erases instead
+     */
+    onSideButton?: () => void;
+    /**
+     * Returns when the pen last touched or left the screen anywhere, e.g. on a button
+     * (Date.now()); the field's own contacts count without it
+     */
+    lastPenContact?: () => number;
     /** Called after every change with the strokes before the change (for undo) */
     onChange: (previous: Stroke[]) => void;
 }
 
 const MIN_GUIDE_SPACING = 8;
+/** A side button press this soon after the tip touched or lifted is the tip, not the button */
+const SIDE_BUTTON_QUIET_MS = 250;
 
 /**
  * A writing area with guide lines. No Obsidian runtime dependency besides the DOM helpers.
- * Pen draws; the pen's side button (or the eraser end of a stylus, or the toolbar eraser) erases
- * the ink under it (pixel eraser: strokes are cut, not removed whole), shown by a circle cursor
- * (an element over the canvas, so a hovering pen doesn't repaint the strokes).
+ * Pen draws; the pen's side button held while writing (or the eraser end of a stylus, or the
+ * toolbar eraser) erases the ink under it (pixel eraser: strokes are cut, not removed whole),
+ * shown by a circle cursor (an element over the canvas, so a hovering pen doesn't repaint the
+ * strokes). Pressing the side button while hovering is reported to onSideButton. Writing never
+ * takes the focus, so a text area keeps it and the soft keyboard stays open.
  *
  * Ink is only taken where the field can be seen: inside the canvas, every ancestor that clips it
  * and the (visual) viewport. Pointer capture keeps sending the pen's moves after it left that
@@ -94,15 +110,19 @@ export class InkField {
     private paths = new WeakMap<Stroke, { size: number; path: Path2D }>();
     private inkColor: string | null = null;
     private resizeObserver: ResizeObserver | null = null;
+    /** When the tip last touched or left the screen (Date.now()) */
+    private lastContactAt = -Infinity;
+    /** Hover samples in a row with the side button pressed */
+    private sideButtonSamples = 0;
+    /** The side button press in progress has been reported */
+    private sideButtonReported = false;
 
     constructor(
         parent: HTMLElement,
         private opts: InkFieldOptions,
     ) {
         this.el = parent.createDiv({ cls: "sr-ink-field" });
-        // Focusable, so writing in it can move the focus off the text area (see SideEditor)
-        this.el.setAttr("tabindex", 0);
-        this.el.createDiv({ cls: "sr-ink-placeholder", text: opts.placeholder });
+        renderHint(this.el.createDiv({ cls: "sr-ink-placeholder" }), opts.placeholder);
         this.canvas = this.el.createEl("canvas", { cls: "sr-ink-canvas" });
         this.cursorEl = this.el.createDiv({ cls: "sr-ink-eraser-cursor" });
         const ctx = this.canvas.getContext("2d");
@@ -114,7 +134,9 @@ export class InkField {
         this.canvas.addEventListener("pointerdown", this.onDown);
         this.canvas.addEventListener("pointermove", this.onMove);
         this.canvas.addEventListener("pointerup", this.onUp);
-        this.canvas.addEventListener("pointercancel", this.onCancel);
+        // A cancelled gesture keeps what was drawn: Android may cancel the pen in the middle of a
+        // stroke and go on with a new one, which would otherwise leave only the stroke's last piece
+        this.canvas.addEventListener("pointercancel", this.onUp);
         this.canvas.addEventListener("pointerleave", this.onLeave);
         this.canvas.addEventListener("pointerenter", this.onEnter);
         // Long-press with the pen must not open a context menu
@@ -170,7 +192,7 @@ export class InkField {
         this.canvas.removeEventListener("pointerdown", this.onDown);
         this.canvas.removeEventListener("pointermove", this.onMove);
         this.canvas.removeEventListener("pointerup", this.onUp);
-        this.canvas.removeEventListener("pointercancel", this.onCancel);
+        this.canvas.removeEventListener("pointercancel", this.onUp);
         this.canvas.removeEventListener("pointerleave", this.onLeave);
         this.canvas.removeEventListener("pointerenter", this.onEnter);
         this.canvas.removeEventListener("contextmenu", this.onContextMenu);
@@ -271,14 +293,15 @@ export class InkField {
     private onContextMenu = (e: Event) => e.preventDefault();
 
     private onDown = (e: PointerEvent) => {
+        // The focus stays where it is, also for a finger: a text area keeps it, and the soft
+        // keyboard stays open while the pen writes
+        e.preventDefault();
+        this.lastContactAt = Date.now();
+        this.sideButtonSamples = 0;
         // Pen or mouse; a finger on the screen is the hand resting on it
         if (e.pointerType === "touch") return;
         if (this.activePointer !== null) return;
-        e.preventDefault();
         this.activePointer = e.pointerId;
-        // A text area that still has the focus keeps the soft keyboard open: closing it moves the
-        // field, so it closes now, before the field is measured, not while the pen writes
-        this.releaseTextFocus();
         // The field may have moved since the last gesture (e.g. the soft keyboard closed)
         this.view = null;
         this.viewChangedAt = -Infinity;
@@ -309,17 +332,6 @@ export class InkField {
         this.watchView();
         this.schedule();
     };
-
-    /**
-     * Takes the focus off a text field (closing the soft keyboard) and gives it to the ink field,
-     * without scrolling, so Ctrl/Cmd+Z undoes the ink.
-     */
-    private releaseTextFocus() {
-        const focused = this.el.ownerDocument.activeElement;
-        if (!focused?.instanceOf(HTMLElement) || !isTextInput(focused)) return;
-        focused.blur();
-        this.el.focus({ preventScroll: true });
-    }
 
     private onMove = (e: PointerEvent) => {
         if (this.activePointer === null) return this.hover(e);
@@ -404,6 +416,7 @@ export class InkField {
      */
     private hover(e: PointerEvent) {
         if (e.pointerType === "touch") return;
+        this.sideButton(e);
         if (this.wantsErase(e)) {
             const p = this.point(e);
             if (this.visible(p)) this.showCursor(p[0], p[1]);
@@ -413,8 +426,35 @@ export class InkField {
         }
     }
 
-    private onEnter = () => {
+    /**
+     * The S Pen's side button, pressed while the pen hovers: Chrome reports it as buttons going
+     * from 0 to 1 with no pressure, without any pointerdown or pointerup. Reported once per press,
+     * and only after two hover samples in a row with the button pressed, not while the pen writes
+     * and not right after the tip touched or lifted (Chrome may report buttons 1 then).
+     */
+    private sideButton(e: PointerEvent) {
+        if (!this.opts.onSideButton) return;
+        const contact = Math.max(this.lastContactAt, this.opts.lastPenContact?.() ?? -Infinity);
+        const quiet = Date.now() - contact >= SIDE_BUTTON_QUIET_MS;
+        if (e.pointerType !== "pen" || this.activePointer !== null || !quiet) {
+            this.sideButtonSamples = 0;
+            return;
+        }
+        const pressed = (e.buttons & 1) !== 0 && !(e.pressure > 0);
+        if (!pressed) {
+            this.sideButtonSamples = 0;
+            this.sideButtonReported = false;
+            return;
+        }
+        if (++this.sideButtonSamples >= 2 && !this.sideButtonReported) {
+            this.sideButtonReported = true;
+            this.opts.onSideButton();
+        }
+    }
+
+    private onEnter = (e: PointerEvent) => {
         this.view = null;
+        if (this.activePointer === null) this.sideButton(e);
     };
 
     private onLeave = (e: PointerEvent) => {
@@ -426,6 +466,7 @@ export class InkField {
     private onUp = (e: PointerEvent) => {
         if (e.pointerId !== this.activePointer) return;
         this.activePointer = null;
+        this.lastContactAt = Date.now();
         this.stopRecheck();
         if (this.erasing) {
             this.erasing = false;
@@ -450,18 +491,6 @@ export class InkField {
         this.schedule();
     };
 
-    /** The browser took the pointer over (e.g. to scroll): the unfinished stroke is dropped */
-    private onCancel = (e: PointerEvent) => {
-        if (e.pointerId !== this.activePointer) return;
-        // What was erased so far was already shown gone, so it stays erased
-        if (this.erasing) return this.onUp(e);
-        this.activePointer = null;
-        this.stopRecheck();
-        this.resetGesture();
-        this.updateEmpty();
-        this.schedule();
-    };
-
     private resetGesture() {
         this.current = null;
         this.parts = [];
@@ -477,7 +506,7 @@ export class InkField {
         else this.hideCursor();
         if (seg === null) return;
         const size = this.opts.style.size;
-        const kept = eraseStrokes(this.strokes, seg[0], seg[1], eraserRadius(size), size);
+        const kept = eraseStrokes(this.strokes, seg[0], seg[1], this.eraserRadius, size);
         if (kept !== this.strokes) {
             this.strokes = kept;
             this.updateEmpty();
@@ -485,8 +514,12 @@ export class InkField {
         }
     }
 
+    private get eraserRadius(): number {
+        return this.opts.eraserRadius?.() ?? eraserRadius(this.opts.style.size);
+    }
+
     private showCursor(x: number, y: number) {
-        const r = eraserRadius(this.opts.style.size);
+        const r = this.eraserRadius;
         this.cursorEl.setCssProps({
             "--sr-ink-eraser-size": `${2 * r}px`,
             "--sr-ink-eraser-x": `${x - r}px`,
@@ -585,24 +618,12 @@ interface View {
     box: Box | null;
 }
 
-/** Whether focusing the element (may have) opened the soft keyboard */
-function isTextInput(el: HTMLElement): boolean {
-    if (el.isContentEditable) return true;
-    const tag = el.tagName;
-    if (tag === "TEXTAREA") return true;
-    if (tag !== "INPUT") return false;
-    const type = (el as HTMLInputElement).type;
-    return ![
-        "button",
-        "checkbox",
-        "radio",
-        "range",
-        "color",
-        "file",
-        "submit",
-        "reset",
-        "image",
-    ].includes(type);
+/** Fills el with a hint such as "Draw on **front**": the word between ** is bold */
+export function renderHint(el: HTMLElement, hint: string): void {
+    hint.split(/\*\*(.+?)\*\*/).forEach((part, i) => {
+        if (i % 2 === 1) el.createEl("b", { text: part });
+        else if (part !== "") el.append(part);
+    });
 }
 
 const SCROLL_OPTIONS: AddEventListenerOptions = { capture: true, passive: true };

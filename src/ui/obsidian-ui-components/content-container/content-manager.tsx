@@ -1,7 +1,7 @@
 import { now } from "moment";
 import { App, MarkdownView, Notice, Platform } from "obsidian";
 
-import { EditQuestionResult } from "src/card-editor/card-editor-service";
+import { EditNoteResult } from "src/card-editor/card-editor-service";
 import { DataManager } from "src/data/data-manager";
 import { Card } from "src/data/data-structures/card/card";
 import { Question } from "src/data/data-structures/card/questions/question";
@@ -390,17 +390,32 @@ export default class ContentManager {
 
         const currentUIState = this.uiManager.uiState;
         this.uiManager.setUIState(UIState.EditModal);
-        let result: EditQuestionResult | null = null;
+        let result: EditNoteResult | null = null;
         try {
-            // Only called when the text changed: ink-only changes leave the note (and its
+            // The editor's arrows step through the cards of the card's note, not the review queue
+            // A copy: deleting a card removes it from the note's list
+            const questions = [...currentQ.note.questionList];
+            const index = questions.indexOf(currentQ);
+            // Write only called when the text changed: ink-only changes leave the note (and its
             // schedule) untouched
-            result = await service.editQuestion(
-                currentQ,
-                (text) => sequencer.updateCurrentQuestionTextAndCards(text),
-                async () => {
-                    await sequencer.deleteCurrentCardFromNote();
-                    return true;
-                },
+            result = await service.editNoteQuestions(
+                index === -1 ? [currentQ] : questions,
+                Math.max(index, 0),
+                (question) =>
+                    question === currentQ
+                        ? {
+                              write: (text, cardType) =>
+                                  sequencer.updateCurrentQuestionTextAndCards(text, cardType),
+                              delete: async () => {
+                                  await sequencer.deleteCurrentCardFromNote();
+                                  return true;
+                              },
+                          }
+                        : {
+                              write: (text, cardType) =>
+                                  sequencer.updateQuestionTextAndCards(question, text, cardType),
+                              delete: () => sequencer.deleteQuestionFromNote(question),
+                          },
             );
         } catch (error) {
             console.error("SR: editing the card failed", error);
@@ -408,7 +423,9 @@ export default class ContentManager {
         }
         this.uiManager.setUIState(currentUIState);
         if (result === null || this.reviewSequencer === null) return;
-        if (result.deleted) {
+        // Also when the card shown was the reverse direction of a card changed to basic
+        if (result.deleted.includes(currentQ) || this.reviewSequencer.skipCurrentCardIfDropped()) {
+            service.refreshImages(result.changedImages);
             await this._showNextCard();
             return;
         }

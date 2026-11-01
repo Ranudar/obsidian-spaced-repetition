@@ -368,6 +368,8 @@ export interface IBaseLocale {
     CARD_EDITOR_GUIDE_SPACING: string;
     CARD_EDITOR_GUIDE_SPACING_DESC: string;
     CARD_EDITOR_PEN_SIZE: string;
+    CARD_EDITOR_BUTTONS_LEFT: string;
+    CARD_EDITOR_BUTTONS_LEFT_DESC: string;
 
     // Card editor > command
     ADD_CARD: string;
@@ -376,15 +378,33 @@ export interface IBaseLocale {
     CARD_EDITOR_FRONT: string;
     CARD_EDITOR_BACK: string;
     CARD_EDITOR_CLOZE: string;
-    CARD_EDITOR_TEXT_PLACEHOLDER: string;
-    CARD_EDITOR_INK_PLACEHOLDER: string;
+    CARD_EDITOR_DRAW_FRONT: string;
+    CARD_EDITOR_DRAW_BACK: string;
+    CARD_EDITOR_TYPE_QUESTION: string;
+    CARD_EDITOR_TYPE_ANSWER: string;
+    CARD_EDITOR_TYPE_CLOZE: string;
+    CARD_EDITOR_SWITCH_SIDE: string;
     CARD_EDITOR_PEN_THIN: string;
     CARD_EDITOR_PEN_MEDIUM: string;
     CARD_EDITOR_PEN_THICK: string;
+    CARD_EDITOR_ERASER_SIZE: string;
+    CARD_EDITOR_ERASER_SMALL: string;
+    CARD_EDITOR_ERASER_MEDIUM: string;
+    CARD_EDITOR_ERASER_LARGE: string;
     CARD_EDITOR_ERASER: string;
     CARD_EDITOR_UNDO: string;
     CARD_EDITOR_CLEAR_SIDE: string;
+    CARD_EDITOR_MARK_CLOZE: string;
+    CARD_EDITOR_PREVIEW: string;
+    CARD_EDITOR_CARD_TYPE: string;
+    CARD_EDITOR_CARD_BASIC: string;
+    CARD_EDITOR_CARD_REVERSED: string;
+    CARD_EDITOR_CARD_CLOZE: string;
+    CARD_EDITOR_DECK: string;
+    CARD_EDITOR_DECKS: string;
     CARD_EDITOR_CLOSE: string;
+    CARD_EDITOR_PREVIOUS_CARD: string;
+    CARD_EDITOR_NEXT_CARD: string;
     CARD_EDITOR_DISCARD: string;
     CARD_EDITOR_DISCARD_CONFIRM: string;
     CARD_EDITOR_INK_TRASHED: string;
@@ -396,7 +416,16 @@ export interface IBaseLocale {
 
     // Card editor > notices
     CARD_EDITOR_NO_FLASHCARD_TAG: string;
+    CARD_EDITOR_NO_DECK_FOLDER: string;
     CARD_EDITOR_SIDES_EMPTY: string;
+    CARD_EDITOR_FRONT_EMPTY: string;
+    CARD_EDITOR_BACK_EMPTY: string;
+    CARD_EDITOR_CARD_EMPTY: string;
+    CARD_EDITOR_NO_CLOZE: string;
+    CARD_EDITOR_CLOZE_NO_INK: string;
+    CARD_EDITOR_CLOZE_ONE_LINE: string;
+    CARD_EDITOR_TO_REVERSED: string;
+    CARD_EDITOR_TO_BASIC: string;
     CARD_EDITOR_SIDE_HAS_MARKER: string;
     CARD_EDITOR_SIDE_HAS_CARD_SYNTAX: string;
     CARD_EDITOR_PLUGIN_UNLOADED: string;

@@ -1,3 +1,5 @@
+import { ClozeCrafter } from "clozecraft";
+
 import {
     CardType,
     isMultiLine,
@@ -218,17 +220,30 @@ export function composeCardText(
 /**
  * Without an end marker, a blank line ends a multi-line or cloze card. Blank lines typed in a side
  * are therefore kept as a "<br>" line, which shows as an empty line too.
+ * With an end marker, a blank line still ends a card while the parser doesn't know its type yet:
+ * in the front of a basic or reversed card (before the separator) and in a cloze text before its
+ * first line with a cloze. Only those are protected then, the back's blank lines are kept.
  * Blank lines inside code blocks are left alone, the parser reads code blocks as a whole.
  */
-export function protectBlankLines(text: string, settings: SRSettings): string {
-    if (settings.multilineCardEndMarker) return text;
+export function protectBlankLines(
+    text: string,
+    settings: SRSettings,
+    part: "front" | "back" | "cloze" = "front",
+): string {
+    if (settings.multilineCardEndMarker && part === "back") return text;
+    const crafter = part === "cloze" ? new ClozeCrafter(settings.clozePatterns) : null;
+    // Only with an end marker: whether a line so far told the parser the card's type
+    let typeKnown = false;
     let fence: string | null = null;
     return text
         .split("\n")
         .map((line) => {
             const inCode = fence !== null;
             fence = parserFenceAfter(fence, line);
-            return !inCode && line.trim() === "" ? "<br>" : line;
+            const protect = !settings.multilineCardEndMarker || !typeKnown;
+            // The parser knows a cloze card from its first line with a cloze, outside code blocks
+            if (crafter && !inCode && fence === null && crafter.isClozeNote(line)) typeKnown = true;
+            return protect && !inCode && line.trim() === "" ? "<br>" : line;
         })
         .join("\n");
 }
@@ -312,9 +327,18 @@ export function misreadSide(
     return parses(front, PLAIN_SIDE) ? "back" : "front";
 }
 
-/** New multi-line basic card body, without surrounding blank lines. */
-export function newCardBody(front: string, back: string, settings: SRSettings): string {
-    const lines = [front, settings.multilineCardSeparator, back];
+/**
+ * New card body, without surrounding blank lines: a multi-line basic or reversed card, or a cloze
+ * card (back null), which is just its text.
+ */
+export function newCardBody(
+    front: string,
+    back: string | null,
+    settings: SRSettings,
+    cardType = CardType.MultiLineBasic,
+): string {
+    const separator = cardSeparator(cardType, settings);
+    const lines = separator === null ? [front] : [front, separator, back ?? ""];
     // A blank line before the end marker stops "---" from turning the previous line into a heading.
     // With an end marker set, the parser keeps that blank line inside the card and trims it,
     // so it is harmless.
@@ -339,4 +363,27 @@ export function cardInsertion(before: string, body: string, after = ""): string 
     else if (after.startsWith("\n") || after.length === 0) suffix = "\n";
     else suffix = "\n\n";
     return prefix + body + suffix;
+}
+
+/**
+ * What "Mark as cloze" puts around the selection: the cloze pattern (e.g. "==[123;;]answer[;;hint]==")
+ * without its optional parts, split at "answer". "==" … "==" for a pattern without "answer".
+ */
+export function clozeMarkers(pattern: string | undefined): { open: string; close: string } {
+    const bare = (pattern ?? "").replace(/\[[^\]]*\]/g, "");
+    const at = bare.indexOf("answer");
+    if (at <= 0) return { open: "==", close: "==" };
+    return { open: bare.substring(0, at), close: bare.substring(at + "answer".length) };
+}
+
+/**
+ * Whether a line of the text has a cloze deletion, by the cloze patterns SR's parser reads, and
+ * the text gives at least one card (a deletion inside an HTML comment gives none)
+ */
+export function hasCloze(text: string, settings: SRSettings): boolean {
+    const crafter = new ClozeCrafter(settings.clozePatterns);
+    return (
+        text.split("\n").some((line) => crafter.isClozeNote(line)) &&
+        CardFrontBackUtil.expand(CardType.Cloze, text, settings).length > 0
+    );
 }

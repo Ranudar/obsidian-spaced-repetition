@@ -3,7 +3,7 @@ import { Notice } from "obsidian";
 import { TICKS_PER_DAY } from "src/data/constants";
 import { DataStore } from "src/data/data-store/base/data-store";
 import { Card } from "src/data/data-structures/card/card";
-import { Question } from "src/data/data-structures/card/questions/question";
+import { CardType, Question } from "src/data/data-structures/card/questions/question";
 import { IQuestionPostponementList } from "src/data/data-structures/card/questions/question-postponement-list";
 import {
     CardFrontBack,
@@ -38,9 +38,24 @@ export interface IFlashcardReviewSequencer {
     skipCurrentCard(): void;
     determineCardSchedule(response: ReviewResponse, card: Card): RepItemScheduleInfo;
     processReview(response: ReviewResponse): Promise<void>;
-    /** false, with nothing changed, when the question's text is no longer in its note */
-    updateCurrentQuestionTextAndCards(text: string): Promise<boolean>;
+    /**
+     * false, with nothing changed, when the question's text is no longer in its note. cardType:
+     * the type the text is written as, when the card editor changed it (basic ⇄ reversed).
+     */
+    updateCurrentQuestionTextAndCards(text: string, cardType?: CardType): Promise<boolean>;
+    updateQuestionTextAndCards(
+        question: Question,
+        text: string,
+        cardType?: CardType,
+    ): Promise<boolean>;
+    /**
+     * When the current card is no longer one of its question's cards (the reverse direction of a
+     * card changed to basic), moves on to the next card and returns true
+     */
+    skipCurrentCardIfDropped(): boolean;
     deleteCurrentCardFromNote(): Promise<void>;
+    /** For a question other than the current one; false, with nothing changed, as for updates */
+    deleteQuestionFromNote(question: Question): Promise<boolean>;
 }
 
 /**
@@ -426,19 +441,45 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
         return result;
     }
 
-    async updateCurrentQuestionTextAndCards(text: string): Promise<boolean> {
-        const question = this.currentQuestion;
+    async updateCurrentQuestionTextAndCards(text: string, cardType?: CardType): Promise<boolean> {
+        return this.updateQuestionTextAndCards(this.currentQuestion, text, cardType);
+    }
 
+    /** Like updateCurrentQuestionTextAndCards, for any question, e.g. another one of the note */
+    async updateQuestionTextAndCards(
+        question: Question,
+        text: string,
+        cardType: CardType = question.questionType,
+    ): Promise<boolean> {
+        const typeChanged = cardType !== question.questionType;
         // Update front/back properties of all cards which question is linked to
         const cardFrontBackList: CardFrontBack[] = CardFrontBackUtil.expand(
-            question.questionType,
+            cardType,
             text,
             this.settings,
         );
 
-        if (!(await question.writeActualQuestion(text, this.settings))) return false;
+        const cards = question.cards;
+        if (!(await question.writeActualQuestion(text, this.settings, cardType))) return false;
 
-        if (cardFrontBackList.length !== question.cards.length) {
+        if (typeChanged) {
+            // Changed to basic: the reverse direction is no longer reviewed in this session (the
+            // current card is left to skipCurrentCardIfDropped(), once the editor has closed).
+            for (const card of cards) {
+                if (question.cards.includes(card)) continue;
+                this._originalDeckTree.deleteCardFromAllDecks(card, false);
+                this.removePendingCards([card]);
+                if (card !== this.currentCard) this.cardSequencer.deleteRepItemFromAllDecks(card);
+            }
+        }
+
+        // Changed to reversed (now or earlier in this session): the reverse direction is a new
+        // card once the note is read again; until then only the first direction is updated
+        const reverseAwaitsRescan =
+            (cardType === CardType.SingleLineReversed || cardType === CardType.MultiLineReversed) &&
+            question.cards.length === 1 &&
+            cardFrontBackList.length === 2;
+        if (!reverseAwaitsRescan && cardFrontBackList.length !== question.cards.length) {
             console.warn("SR: Cards count does not match question text. Skipping redraw.");
             new Notice("Cards count does not match cards from question text. Skipping redraw.");
             return true;
@@ -451,10 +492,48 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
         return true;
     }
 
+    /** So cards no longer reviewed don't come back when their short-term repeat is due */
+    private removePendingCards(cards: Card[]): void {
+        this.pendingCards = this.pendingCards.filter((pending) => !cards.includes(pending.card));
+    }
+
+    skipCurrentCardIfDropped(): boolean {
+        const card = this.currentCard;
+        if (card === null || card.question.cards.includes(card)) return false;
+        this.cardSequencer.deleteCurrentRepItemFromAllDecks();
+        return true;
+    }
+
     async deleteCurrentCardFromNote(): Promise<void> {
+        const card = this.currentCard;
         const question = this.currentQuestion;
         await DataStore.getInstance().delete(question);
         this._originalDeckTree.deleteQuestionFromAllDecks(question, false);
-        this.cardSequencer.deleteCurrentQuestionFromAllDecks();
+        this.removePendingCards(question.cards);
+        if (question.cards.includes(card)) {
+            this.cardSequencer.deleteCurrentQuestionFromAllDecks();
+        } else {
+            // The reverse direction of a card changed to basic in this session, no longer one of
+            // the question's cards: it goes too
+            this.cardSequencer.deleteQuestionFromAllDecks(question);
+            this.cardSequencer.deleteCurrentRepItemFromAllDecks();
+        }
+        FlashcardReviewSequencer.removeFromNote(question);
+    }
+
+    async deleteQuestionFromNote(question: Question): Promise<boolean> {
+        if (!(await DataStore.getInstance().delete(question))) return false;
+        this._originalDeckTree.deleteQuestionFromAllDecks(question, false);
+        this.removePendingCards(question.cards);
+        this.cardSequencer.deleteQuestionFromAllDecks(question);
+        FlashcardReviewSequencer.removeFromNote(question);
+        return true;
+    }
+
+    // So the card editor's arrows, which step through the note's questions, skip deleted ones
+    private static removeFromNote(question: Question): void {
+        const list = question.note.questionList;
+        const index = list.indexOf(question);
+        if (index !== -1) list.splice(index, 1);
     }
 }

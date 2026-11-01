@@ -147,21 +147,21 @@ describe("InkField pixel eraser", () => {
 });
 
 describe("InkField cancelled stroke", () => {
-    test("a pen touch the browser cancels leaves no stroke and no stuck pen", () => {
+    test("a stroke the browser cancels keeps what was drawn, and the pen isn't stuck", () => {
         const { field, canvas, onChange } = setup();
         pointer(canvas, "pointerdown", 10, 10);
         pointer(canvas, "pointermove", 30, 10);
         pointer(canvas, "pointercancel", 30, 10);
-        expect(field.strokes).toEqual([]);
-        expect(onChange).not.toHaveBeenCalled();
+        expect(field.strokes).toHaveLength(1);
+        expect(onChange).toHaveBeenCalledTimes(1);
 
         // The pointer was let go: the next touch draws normally
         draw(canvas, [
             [0, 0],
             [20, 0],
         ]);
-        expect(field.strokes).toHaveLength(1);
-        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(field.strokes).toHaveLength(2);
+        expect(onChange).toHaveBeenCalledTimes(2);
     });
 });
 
@@ -398,24 +398,16 @@ describe("InkField visible area", () => {
 });
 
 describe("InkField focus", () => {
-    test("the pen takes the focus off a text area before it measures the field", () => {
+    test("the pen writes without taking the focus from a text area", () => {
         const { field, canvas } = setup();
         const textArea = document.body.createEl("textarea");
         textArea.focus();
-        const blur = jest.fn();
-        textArea.addEventListener("blur", blur);
-        const measured = jest.spyOn(canvas, "getBoundingClientRect");
-        measured.mockImplementation(() => {
-            // Measured with the keyboard already asked to close
-            expect(document.activeElement).not.toBe(textArea);
-            return new DOMRect(0, 0, 200, 100);
-        });
-
-        pointer(canvas, "pointerdown", 10, 10);
-        expect(blur).toHaveBeenCalledTimes(1);
-        expect(document.activeElement).toBe(field.el);
-        expect(measured).toHaveBeenCalled();
-        pointer(canvas, "pointerup", 10, 10);
+        const down = pointer(canvas, "pointerdown", 10, 10);
+        expect(down.defaultPrevented).toBe(true);
+        pointer(canvas, "pointermove", 30, 10);
+        pointer(canvas, "pointerup", 30, 10);
+        expect(field.strokes).toHaveLength(1);
+        expect(document.activeElement).toBe(textArea);
     });
 
     test("pen-only: a finger draws nothing and leaves the text area focused", () => {
@@ -423,7 +415,7 @@ describe("InkField focus", () => {
         const textArea = document.body.createEl("textarea");
         textArea.focus();
         const touch = { pointerType: "touch" };
-        pointer(canvas, "pointerdown", 10, 10, touch);
+        expect(pointer(canvas, "pointerdown", 10, 10, touch).defaultPrevented).toBe(true);
         pointer(canvas, "pointermove", 50, 10, touch);
         pointer(canvas, "pointerup", 50, 10, touch);
         expect(field.strokes).toEqual([]);
@@ -435,5 +427,31 @@ describe("InkField focus", () => {
             [20, 0],
         ]);
         expect(field.strokes).toHaveLength(1);
+    });
+});
+
+describe("InkField eraser size", () => {
+    test("the eraser cuts with the radius it is given", () => {
+        const line = {
+            points: [[0, 50, 0.5] as Point, [200, 50, 0.5] as Point],
+            pressure: false,
+        };
+        for (const [radius, cut] of [
+            [5, false],
+            [15, true],
+        ] as const) {
+            const { field, canvas, setEraser } = setup({ eraserRadius: () => radius });
+            jest.spyOn(canvas, "getBoundingClientRect").mockReturnValue(
+                new DOMRect(0, 0, 200, 100),
+            );
+            field.setStrokes([line]);
+            setEraser(true);
+            // 12 px off the line, with a stroke of width 2
+            draw(canvas, [
+                [100, 62],
+                [101, 62],
+            ]);
+            expect(field.strokes[0] !== line).toBe(cut);
+        }
     });
 });

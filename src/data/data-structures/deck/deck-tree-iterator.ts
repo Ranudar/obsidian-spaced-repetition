@@ -60,6 +60,19 @@ export interface IDeckTreeIterator {
      */
     deleteCurrentQuestionFromAllDecks(): boolean;
     /**
+     * Deletes a question other than the current one from all decks; the current card stays current.
+     *
+     * @param {Question} question - The question.
+     */
+    deleteQuestionFromAllDecks(question: Question): void;
+    /**
+     * Deletes a repetition item other than the current one from all decks; the current card stays
+     * current.
+     *
+     * @param {Card} card - The card.
+     */
+    deleteRepItemFromAllDecks(card: Card): void;
+    /**
      * Moves the current repetition item to the end of the list.
      */
     moveCurrentRepItemToEndOfList(): void;
@@ -195,6 +208,12 @@ class SingleDeckIterator {
 
     setNoCurrentCard() {
         this.cardIdx = null;
+    }
+
+    /** Re-finds the current card's index, e.g. after other cards were removed from its list */
+    relocateCurrentCard(card: Card): void {
+        const index = this.deck.getRepItemListForRepItemState(this.cardListType).indexOf(card);
+        this.cardIdx = index === -1 ? null : index;
     }
 
     ensureCurrentCard() {
@@ -401,6 +420,18 @@ export class DeckTreeIterator implements IDeckTreeIterator {
         this.baseDeckTree.deleteQuestionFromAllDecks(this.currentQuestion, false);
         this.singleDeckIterator.setNoCurrentCard();
         return this.nextRepItem();
+    }
+
+    deleteQuestionFromAllDecks(question: Question): void {
+        const current = this.currentRepItem;
+        this.baseDeckTree.deleteQuestionFromAllDecks(question, false);
+        if (current !== null) this.singleDeckIterator.relocateCurrentCard(current);
+    }
+
+    deleteRepItemFromAllDecks(card: Card): void {
+        const current = this.currentRepItem;
+        this.baseDeckTree.deleteCardFromAllDecks(card, false);
+        if (current !== null) this.singleDeckIterator.relocateCurrentCard(current);
     }
 
     deleteCurrentRepItemFromAllDecks(): boolean {

@@ -81,6 +81,8 @@ export interface SRSettings {
     cardEditorGuide: CardEditorGuide;
     cardEditorGuideSpacing: number;
     cardEditorPenSize: number;
+    // Left-handed: the switch and the save buttons left of the writing fields
+    cardEditorButtonsLeft: boolean;
 
     // algorithm
     algorithm: SRAlgorithmType;
@@ -178,6 +180,7 @@ export const DEFAULT_SETTINGS: SRSettings = {
     cardEditorGuide: "lined",
     cardEditorGuideSpacing: 44,
     cardEditorPenSize: 2.5,
+    cardEditorButtonsLeft: false,
 
     // algorithm
     algorithm: SRAlgorithmType.SM_2_OSR,

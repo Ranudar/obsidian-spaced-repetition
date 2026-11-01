@@ -1,6 +1,7 @@
 import moment from "moment";
 import { State } from "ts-fsrs";
 
+import { CardType } from "src/data/data-structures/card/questions/question";
 import { QuestionPostponementList } from "src/data/data-structures/card/questions/question-postponement-list";
 import { Deck, DeckTreeFilter } from "src/data/data-structures/deck/deck";
 import {
@@ -1352,6 +1353,155 @@ ${updatedStr}
 
         await c.reviewSequencer.processReview(ReviewResponse.Hard);
         expect(await c.file.read()).toEqual("#flashcards Q2::A2\n<!--SR:!2023-09-07,1,230-->\n");
+    });
+});
+
+describe("Changing the card type (card editor, basic ⇄ reversed)", () => {
+    async function setup(text: string): Promise<TestContext> {
+        const c: TestContext = TestContext.Create(
+            orderDueFirstSequential,
+            FlashcardReviewMode.Review,
+            DEFAULT_SETTINGS,
+            text,
+        );
+        await c.setSequencerDeckTreeFromOriginalText();
+        return c;
+    }
+
+    /** The fronts of the current card and the ones after it, skipping through the queue */
+    function remainingFronts(c: TestContext): string[] {
+        const fronts: string[] = [];
+        while (c.reviewSequencer.hasCurrentCard) {
+            fronts.push(c.reviewSequencer.currentCard.front);
+            c.reviewSequencer.skipCurrentCard();
+        }
+        return fronts;
+    }
+
+    test("to basic while reviewing the reverse card: it is dropped, the review moves on", async () => {
+        // The forward card is not due yet, the reverse card is
+        const c = await setup(
+            "#flashcards Q1:::A1\n<!--SR:!2023-09-17,11,270!2023-09-05,4,270-->\n\n#flashcards Q2::A2\n",
+        );
+        expect(c.reviewSequencer.currentCard.front.trim()).toEqual("A1");
+
+        expect(
+            await c.reviewSequencer.updateCurrentQuestionTextAndCards(
+                "Q1::A1",
+                CardType.SingleLineBasic,
+            ),
+        ).toBe(true);
+        // The forward card's schedule stays
+        expect(await c.file.read()).toEqual(
+            "#flashcards Q1::A1\n<!--SR:!2023-09-17,11,270-->\n\n#flashcards Q2::A2\n",
+        );
+        expect(c.reviewSequencer.skipCurrentCardIfDropped()).toBe(true);
+        expect(c.reviewSequencer.skipCurrentCardIfDropped()).toBe(false);
+        expect(remainingFronts(c)).toEqual(["Q2"]);
+    });
+
+    test("to basic while reviewing the forward card: the reverse card leaves the queue", async () => {
+        const c = await setup("#flashcards Q1:::A1\n\n#flashcards Q2::A2\n");
+        await c.reviewSequencer.updateCurrentQuestionTextAndCards(
+            "Q1::A1",
+            CardType.SingleLineBasic,
+        );
+        expect(c.reviewSequencer.skipCurrentCardIfDropped()).toBe(false);
+        expect(c.reviewSequencer.currentQuestion.cards).toHaveLength(1);
+        expect(remainingFronts(c)).toEqual(["Q1", "Q2"]);
+    });
+
+    test("multi-line to reversed keeps the schedule; the review then updates it", async () => {
+        const c = await setup("#flashcards\nQ1\n?\nA1\n<!--SR:!2023-09-05,4,270-->\n");
+        expect(c.reviewSequencer.currentCard.front).toEqual("Q1");
+        await c.reviewSequencer.updateCurrentQuestionTextAndCards(
+            "Q1\n??\nA1",
+            CardType.MultiLineReversed,
+        );
+        expect(await c.file.read()).toEqual(
+            "#flashcards\nQ1\n??\nA1\n<!--SR:!2023-09-05,4,270-->\n",
+        );
+        expect(c.reviewSequencer.skipCurrentCardIfDropped()).toBe(false);
+        expect(c.reviewSequencer.currentCard.front).toEqual("Q1");
+
+        await c.reviewSequencer.processReview(ReviewResponse.Good);
+        const text = await c.file.read();
+        expect(text).toMatch(/^#flashcards\nQ1\n\?\?\nA1\n<!--SR:!\d{4}-\d\d-\d\d,\d+,\d+/);
+        expect(text).not.toContain("2023-09-05,4,270");
+    });
+
+    test("to basic: a reverse card waiting for its short-term repeat doesn't come back", async () => {
+        const c = await setup(
+            "#flashcards Q1:::A1\n<!--SR:!2023-09-17,11,270!2023-09-05,4,270-->\n\n#flashcards Q2::A2\n",
+        );
+        const sequencer = c.reviewSequencer as FlashcardReviewSequencer;
+        const question = sequencer.currentQuestion;
+        jest.spyOn(sequencer, "determineCardSchedule").mockReturnValue(
+            new RepItemScheduleInfoFsrs(
+                moment("2023-09-06T00:10:00.000Z"),
+                0,
+                5.5,
+                0.4,
+                State.Learning,
+                1,
+                0,
+                1,
+                moment("2023-09-06T00:00:00.000Z"),
+            ),
+        );
+        await sequencer.processReview(ReviewResponse.Good);
+        expect(sequencer.hasPendingCards).toBe(true);
+
+        await sequencer.updateQuestionTextAndCards(question, "Q1::A1", CardType.SingleLineBasic);
+        expect(sequencer.hasPendingCards).toBe(false);
+        setupStaticDateProviderOriginDatePlusDays(1);
+        sequencer.refreshCurrentDeck();
+        expect(remainingFronts(c)).toEqual(["Q2"]);
+    });
+
+    test("to reversed, then edited again: the first direction shows the new text", async () => {
+        const c = await setup("#flashcards Q1::A1\n");
+        await c.reviewSequencer.updateCurrentQuestionTextAndCards(
+            "Q1:::A1",
+            CardType.SingleLineReversed,
+        );
+        await c.reviewSequencer.updateCurrentQuestionTextAndCards("UPDATED:::A1");
+        expect(await c.file.read()).toEqual("#flashcards UPDATED:::A1\n");
+        expect(c.reviewSequencer.currentCard.front).toEqual("UPDATED");
+    });
+
+    test("to basic while reviewing the reverse card, then deleted: the reverse card goes too", async () => {
+        const c = await setup(
+            "#flashcards Q1:::A1\n<!--SR:!2023-09-17,11,270!2023-09-05,4,270-->\n\n#flashcards Q2::A2\n",
+        );
+        await c.reviewSequencer.updateCurrentQuestionTextAndCards(
+            "Q1::A1",
+            CardType.SingleLineBasic,
+        );
+        await c.reviewSequencer.deleteCurrentCardFromNote();
+        expect(await c.file.read()).toEqual("#flashcards Q2::A2\n");
+        expect(remainingFronts(c)).toEqual(["Q2"]);
+    });
+
+    test("another question of the note: written as its new type, the review goes on", async () => {
+        const c = await setup("#flashcards Q1::A1\n\n#flashcards Q2::A2\n");
+        const other = c.reviewSequencer.currentQuestion.note.questionList[1];
+        expect(
+            await c.reviewSequencer.updateQuestionTextAndCards(
+                other,
+                "Q2:::A2",
+                CardType.SingleLineReversed,
+            ),
+        ).toBe(true);
+        expect(await c.file.read()).toEqual("#flashcards Q1::A1\n\n#flashcards Q2:::A2\n");
+        expect(c.reviewSequencer.skipCurrentCardIfDropped()).toBe(false);
+        expect(c.reviewSequencer.currentCard.front).toEqual("Q1");
+
+        await c.reviewSequencer.processReview(ReviewResponse.Hard);
+        expect(await c.file.read()).toEqual(
+            "#flashcards Q1::A1\n<!--SR:!2023-09-07,1,230-->\n\n#flashcards Q2:::A2\n",
+        );
+        expect(c.reviewSequencer.currentCard.front).toEqual("Q2");
     });
 });
 

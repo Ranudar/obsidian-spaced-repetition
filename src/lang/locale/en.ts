@@ -437,6 +437,9 @@ const en: IBaseLocale = {
     CARD_EDITOR_GUIDE_SPACING: "Line spacing",
     CARD_EDITOR_GUIDE_SPACING_DESC: "Distance between guide lines, in pixels.",
     CARD_EDITOR_PEN_SIZE: "Pen thickness",
+    CARD_EDITOR_BUTTONS_LEFT: "Buttons on the left",
+    CARD_EDITOR_BUTTONS_LEFT_DESC:
+        "For writing with the left hand: the Front ⇅ Back and save buttons move to the left of the writing fields.",
 
     // Card editor > command
     ADD_CARD: "Add card",
@@ -444,16 +447,34 @@ const en: IBaseLocale = {
     // Card editor > editor
     CARD_EDITOR_FRONT: "Front",
     CARD_EDITOR_BACK: "Back",
-    CARD_EDITOR_CLOZE: "Card",
-    CARD_EDITOR_TEXT_PLACEHOLDER: "Type…",
-    CARD_EDITOR_INK_PLACEHOLDER: "Write here with the pen",
+    CARD_EDITOR_CLOZE: "Cloze",
+    CARD_EDITOR_DRAW_FRONT: "Draw on **front**",
+    CARD_EDITOR_DRAW_BACK: "Draw on **back**",
+    CARD_EDITOR_TYPE_QUESTION: "Type the **question**",
+    CARD_EDITOR_TYPE_ANSWER: "Type the **answer**",
+    CARD_EDITOR_TYPE_CLOZE: "Type the **text**, then mark the parts to ask for",
+    CARD_EDITOR_SWITCH_SIDE: "Front ⇅ Back",
     CARD_EDITOR_PEN_THIN: "Thin",
     CARD_EDITOR_PEN_MEDIUM: "Medium",
     CARD_EDITOR_PEN_THICK: "Thick",
-    CARD_EDITOR_ERASER: "Eraser (or hold the pen button)",
+    CARD_EDITOR_ERASER_SIZE: "Eraser size",
+    CARD_EDITOR_ERASER_SMALL: "Small",
+    CARD_EDITOR_ERASER_MEDIUM: "Medium",
+    CARD_EDITOR_ERASER_LARGE: "Large",
+    CARD_EDITOR_ERASER: "Eraser (or press the pen button)",
     CARD_EDITOR_UNDO: "Undo",
     CARD_EDITOR_CLEAR_SIDE: "Clear side",
+    CARD_EDITOR_MARK_CLOZE: "Mark as cloze",
+    CARD_EDITOR_PREVIEW: "Preview",
+    CARD_EDITOR_CARD_TYPE: "Card type",
+    CARD_EDITOR_CARD_BASIC: "Basic",
+    CARD_EDITOR_CARD_REVERSED: "Reversed",
+    CARD_EDITOR_CARD_CLOZE: "Cloze",
+    CARD_EDITOR_DECK: "Deck: ${deck}",
+    CARD_EDITOR_DECKS: "Decks: ${decks}",
     CARD_EDITOR_CLOSE: "Close",
+    CARD_EDITOR_PREVIOUS_CARD: "Previous card",
+    CARD_EDITOR_NEXT_CARD: "Next card",
     CARD_EDITOR_DISCARD: "Delete card",
     CARD_EDITOR_DISCARD_CONFIRM: "Tap again to delete",
     CARD_EDITOR_DELETE_FAILED: "Deleting the card failed: ${error}",
@@ -466,7 +487,18 @@ const en: IBaseLocale = {
     // Card editor > notices
     CARD_EDITOR_NO_FLASHCARD_TAG:
         "This note has no ${tag} tag yet. Add it so the new cards are picked up for review.",
+    CARD_EDITOR_NO_DECK_FOLDER:
+        "Notes at the vault root are in no deck. Move the note into a folder so its cards are picked up for review.",
     CARD_EDITOR_SIDES_EMPTY: "Fill in both sides of the card first.",
+    CARD_EDITOR_FRONT_EMPTY: "Front is empty",
+    CARD_EDITOR_BACK_EMPTY: "Back is empty",
+    CARD_EDITOR_CARD_EMPTY: "The card is empty",
+    CARD_EDITOR_NO_CLOZE: "Mark at least one part as cloze",
+    CARD_EDITOR_CLOZE_NO_INK:
+        "Handwriting can't go into a cloze card. Clear the handwriting first, or keep the card basic.",
+    CARD_EDITOR_CLOZE_ONE_LINE: "A cloze can't span lines. Mark the parts line by line.",
+    CARD_EDITOR_TO_REVERSED: "The reverse direction becomes a new card",
+    CARD_EDITOR_TO_BASIC: "The reverse direction's schedule is dropped",
     CARD_EDITOR_SIDE_HAS_MARKER:
         'A side can\'t have a line that is only "${line}": that line separates or ends cards. Change it, e.g. add a word to it.',
     CARD_EDITOR_SIDE_HAS_CARD_SYNTAX:

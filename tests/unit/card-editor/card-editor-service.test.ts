@@ -12,7 +12,7 @@ import { inkEmbedPath } from "src/card-editor/core/card-text";
 import { parseInkFileName, strokesToSvg, svgToStrokes } from "src/card-editor/core/ink-svg";
 import { Stroke } from "src/card-editor/core/strokes";
 import { SideState } from "src/card-editor/side-editor";
-import { Question } from "src/data/data-structures/card/questions/question";
+import { CardType, Question } from "src/data/data-structures/card/questions/question";
 import { TopicPath } from "src/data/data-structures/deck/topic-path";
 import { DEFAULT_SETTINGS, SRSettings } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
@@ -22,6 +22,7 @@ import { setupStaticDateProvider20230906 } from "src/utils/dates";
 import { TextDirection } from "src/utils/strings";
 
 import { UnitTestSRFile } from "../helpers/unit-test-file";
+import { unitTestGetAllTagsFromTextEx } from "../helpers/unit-test-helper";
 import { unitTestSetupStandardDataStoreAlgorithm } from "../helpers/unit-test-setup";
 import { createTestNoteQuestionParser } from "../sample-items";
 
@@ -163,7 +164,11 @@ beforeEach(() => {
         isInitialized: true,
         getObsidianRtlSetting: () => TextDirection.Ltr,
         dataManager: {
-            createSRNoteTFile: () => ({ getAllTagsFromCache: () => noteTags }),
+            createSRNoteTFile: (file: TFile) => ({
+                path: file.path,
+                getAllTagsFromCache: () => noteTags,
+                getAllTagsFromText: () => unitTestGetAllTagsFromTextEx(vault.content(file.path)),
+            }),
             sync,
             loadNote: jest.fn(() => Promise.resolve(loadedNote)),
         },
@@ -362,7 +367,7 @@ describe("saving a card", () => {
         expect(result.text).toEqual(
             question.questionText.actualQuestion.replace("true positive", "TRUE POSITIVE"),
         );
-        expect(writeText).toHaveBeenCalledWith(result.text);
+        expect(writeText).toHaveBeenCalledWith(result.text, CardType.MultiLineBasic);
     });
 
     test("cancel resolves to null and writes nothing", async () => {
@@ -700,8 +705,8 @@ describe("adding cards", () => {
     });
 
     /** Opens the add editor on the note (no editor open, so cards are appended) */
-    function openAdd(): AddOptions {
-        service.openAdd(note, null);
+    async function openAdd(): Promise<AddOptions> {
+        await service.openAdd(note, null);
         const calls = ModalMock.mock.calls;
         const opts = calls[calls.length - 1][2];
         if (opts.kind !== "add") throw new Error("not opened for adding");
@@ -713,7 +718,7 @@ describe("adding cards", () => {
     }
 
     test("typed cards are appended to the note, one after the other", async () => {
-        const opts = openAdd();
+        const opts = await openAdd();
         expect(opts.title).toEqual("bio");
         expect(opts.draft).toBeNull();
 
@@ -726,7 +731,7 @@ describe("adding cards", () => {
 
     test("a typed line that would end the card is rejected, the SVGs made for it are removed", async () => {
         settings.multilineCardEndMarker = "---";
-        const opts = openAdd();
+        const opts = await openAdd();
         await expect(
             opts.save({ front: ink([stroke(0)]), back: text("Answer\n---\nMore detail") }),
         ).rejects.toThrow('only "---"');
@@ -735,7 +740,7 @@ describe("adding cards", () => {
     });
 
     test("a typed side the parser would read as other card syntax is rejected, naming the side", async () => {
-        const opts = openAdd();
+        const opts = await openAdd();
         await expect(
             opts.save({ front: text("What does std::vector do?"), back: text("A dynamic array") }),
         ).rejects.toThrow("Front");
@@ -754,13 +759,13 @@ describe("adding cards", () => {
 
     test("the end marker follows a blank line", async () => {
         settings.multilineCardEndMarker = "---";
-        const opts = openAdd();
+        const opts = await openAdd();
         await opts.save({ front: text("Q"), back: text("A") });
         expect(vault.content(NOTE_PATH)).toEqual("#flashcards\n\nQ\n?\nA\n\n---\n");
     });
 
     test("handwritten sides become SVGs sharing one stem, embedded in the card", async () => {
-        const opts = openAdd();
+        const opts = await openAdd();
         await opts.save({ front: ink([stroke(0)]), back: ink([stroke(5), stroke(9)]) });
 
         const cardText = vault.content(NOTE_PATH).slice(NOTE.length).trim();
@@ -777,7 +782,7 @@ describe("adding cards", () => {
     });
 
     test("a mixed card has a typed front and a handwritten back", async () => {
-        const opts = openAdd();
+        const opts = await openAdd();
         await opts.save({
             front: text("What is the powerhouse of the cell?"),
             back: ink([stroke(0)]),
@@ -791,7 +796,7 @@ describe("adding cards", () => {
 
     test("a failed insert rejects the save and removes the new SVGs", async () => {
         vault.app.vault.process.mockRejectedValueOnce(new Error("disk full"));
-        const opts = openAdd();
+        const opts = await openAdd();
 
         await expect(
             opts.save({ front: ink([stroke(0)]), back: ink([stroke(5)]) }),
@@ -801,13 +806,13 @@ describe("adding cards", () => {
     });
 
     test("the note is rescanned after closing, if cards were added", async () => {
-        let opts = openAdd();
+        let opts = await openAdd();
         opts.keepDraft(null);
         opts.closed();
         await flush();
         expect(sync).not.toHaveBeenCalled();
 
-        opts = openAdd();
+        opts = await openAdd();
         await opts.save({ front: text("Q"), back: text("A") });
         expect(sync).not.toHaveBeenCalled();
         opts.keepDraft(null);
@@ -816,17 +821,80 @@ describe("adding cards", () => {
         expect(sync).toHaveBeenCalledTimes(1);
     });
 
-    test("an unsaved card is restored the next time", () => {
+    test("the card type decides what is written: ?, ?? or a cloze card", async () => {
+        const opts = await openAdd();
+        await opts.save({
+            cardType: CardType.MultiLineBasic,
+            front: text("Q1"),
+            back: text("A1"),
+        });
+        await opts.save({
+            cardType: CardType.MultiLineReversed,
+            front: text("Q2"),
+            back: text("A2"),
+        });
+        await opts.save({
+            cardType: CardType.Cloze,
+            front: text("The ==heart== pumps"),
+            back: null,
+        });
+        expect(vault.content(NOTE_PATH)).toEqual(
+            "#flashcards\n\nQ1\n?\nA1\n\nQ2\n??\nA2\n\nThe ==heart== pumps\n",
+        );
+    });
+
+    test("a cloze card gets the end marker; it must be read back as a cloze card", async () => {
+        settings.multilineCardEndMarker = "---";
+        const opts = await openAdd();
+        await opts.save({
+            cardType: CardType.Cloze,
+            front: text("The ==heart==\n\npumps"),
+            back: null,
+        });
+        expect(vault.content(NOTE_PATH)).toEqual("#flashcards\n\nThe ==heart==\n\npumps\n\n---\n");
+        await expect(
+            opts.save({ cardType: CardType.Cloze, front: text("No cloze ? here"), back: null }),
+        ).rejects.toThrow("Cloze");
+    });
+
+    test("the decks of the note go to the editor; none: an empty list, no notice", async () => {
+        note = vault.add(NOTE_PATH, "#flashcards/medicine #other #flashcards/biology/cells\n");
+        expect((await openAdd()).decks).toEqual(["medicine", "biology/cells"]);
+        note = vault.add(NOTE_PATH, "#other\n");
+        expect((await openAdd()).decks).toEqual([]);
+        expect(Notice).not.toHaveBeenCalled();
+    });
+
+    test("the decks are the tags that apply where the card goes, as SR's parser reads them", async () => {
+        // Appended at the end: under the last tag line only
+        note = vault.add(NOTE_PATH, "#flashcards/a\n\nQ::A\n\n#flashcards/b\n");
+        expect((await openAdd()).decks).toEqual(["b"]);
+        // Below the cursor in the first section
+        const editor = {
+            getValue: () => vault.content(NOTE_PATH),
+            getCursor: () => ({ line: 2, ch: 0 }),
+        };
+        const view = Object.assign(Object.create(MarkdownView.prototype) as MarkdownView, {
+            file: note,
+            editor,
+            getMode: () => "source",
+        });
+        await service.openAdd(note, view);
+        const calls = ModalMock.mock.calls;
+        expect(calls[calls.length - 1][2].decks).toEqual(["a"]);
+    });
+
+    test("an unsaved card is restored the next time", async () => {
         const draft: CardEditorSides = {
             front: { text: "Q", strokes: [], penSize: 5 },
             back: { text: "A", strokes: [stroke(0)], penSize: 5 },
         };
-        openAdd().keepDraft(draft);
-        const opts = openAdd();
+        (await openAdd()).keepDraft(draft);
+        const opts = await openAdd();
         expect(opts.draft).toBe(draft);
 
         opts.keepDraft(null);
-        expect(openAdd().draft).toBeNull();
+        expect((await openAdd()).draft).toBeNull();
     });
 });
 
@@ -894,6 +962,29 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
         expect(sync).toHaveBeenCalledTimes(1);
     });
 
+    test("basic ⇄ reversed writes the other separator and keeps the schedule", async () => {
+        const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
+        await opts.save({
+            cardType: CardType.MultiLineReversed,
+            front: unchanged(opts.initial.front),
+            back: unchanged(opts.initial.back),
+        });
+        opts.closed();
+        await done;
+        expect(noteFile.content).toEqual(pencilNote.replace("cell?\n?\n", "cell?\n??\n"));
+
+        ModalMock.mockClear();
+        const second = await tapPencil("sr-ink-xyz-back.svg");
+        await second.opts.save({
+            cardType: CardType.SingleLineReversed,
+            front: unchanged(second.opts.initial.front),
+            back: unchanged(second.opts.initial.back),
+        });
+        second.opts.closed();
+        await second.done;
+        expect(noteFile.content).toContain("Draw a cell:::![](sr-ink/sr-ink-xyz-back.svg)");
+    });
+
     test("changed ink rewrites only the image, and its copies are reloaded", async () => {
         const refresh = jest.spyOn(service.inkFiles, "refresh");
         const { done, opts } = await tapPencil("sr-ink-xyz-back.svg");
@@ -950,6 +1041,64 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
         await done;
     });
 
+    test("next card saves the changes, opens the next card's editor; rescanned once at the end", async () => {
+        const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
+        expect(opts.steps).toMatchObject({ prev: false, next: true, preview: false });
+
+        // As the editor steps: save, then stepped; the service closes it once the next is open
+        await opts.save({
+            front: text("What is the powerhouse of the eukaryotic cell?"),
+            back: unchanged(opts.initial.back),
+        });
+        // With the preview on, the next editor shows it too
+        opts.steps.stepped(1, true);
+        for (let i = 0; i < 20 && ModalMock.mock.calls.length < 2; i++) await Promise.resolve();
+        expect(ModalMock).toHaveBeenCalledTimes(2);
+        // The first editor is closed only after the second one is open over it: no flash
+        /* eslint-disable @typescript-eslint/unbound-method */
+        const [first, next] = ModalMock.mock.instances;
+        expect(first.close).toHaveBeenCalledTimes(1);
+        expect(jest.mocked(next.open).mock.invocationCallOrder[0]).toBeLessThan(
+            jest.mocked(first.close).mock.invocationCallOrder[0],
+        );
+        /* eslint-enable @typescript-eslint/unbound-method */
+        expect(first.shouldRestoreSelection).toBe(false);
+        opts.closed();
+        const second = ModalMock.mock.calls[1][2];
+        if (second.kind !== "edit") throw new Error("not opened for editing");
+        expect(second.initial.front.text).toEqual("Draw a cell");
+        expect(second.steps).toMatchObject({ prev: true, next: false, preview: true });
+        expect(sync).not.toHaveBeenCalled();
+
+        // Back to the first card, without changes: nothing is written
+        second.steps.stepped(-1, false);
+        for (let i = 0; i < 20 && ModalMock.mock.calls.length < 3; i++) await Promise.resolve();
+        const third = ModalMock.mock.calls[2][2];
+        if (third.kind !== "edit") throw new Error("not opened for editing");
+        expect(third.initial.front.text).toEqual("What is the powerhouse of the eukaryotic cell?");
+        expect(third.steps.preview).toBe(false);
+        third.closed();
+        await done;
+
+        expect(noteFile.content).toEqual(
+            pencilNote.replace("of the cell?", "of the eukaryotic cell?"),
+        );
+        expect(sync).toHaveBeenCalledTimes(1);
+    });
+
+    test("a failed save doesn't step", async () => {
+        const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
+        noteFile.content = pencilNote.replace("powerhouse", "power plant");
+        await expect(
+            opts.save({ front: text("Typed"), back: unchanged(opts.initial.back) }),
+        ).rejects.toThrow();
+        // The editor stays open; closed later with ✕
+        opts.closed();
+        await done;
+        expect(ModalMock).toHaveBeenCalledTimes(1);
+        expect(sync).not.toHaveBeenCalled();
+    });
+
     test("an image that is not part of a card opens no editor", async () => {
         const { done, opts } = await tapPencil("sr-ink-other-back.svg");
         await done;
@@ -969,7 +1118,7 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
 describe("unloading the plugin", () => {
     test("closes the open editors, which then write nothing; no editor opens any more", async () => {
         const note = vault.add(NOTE_PATH, "#flashcards\n");
-        service.openAdd(note, null);
+        await service.openAdd(note, null);
         const addOpts = ModalMock.mock.calls[0][2];
         const question = await parseQuestion(mixedNote);
         const session = await edit2(question);
@@ -992,7 +1141,7 @@ describe("unloading the plugin", () => {
         expect(sync).not.toHaveBeenCalled();
 
         ModalMock.mockClear();
-        service.openAdd(note, null);
+        await service.openAdd(note, null);
         await expect(service.editQuestion(question, writeText, deleteQuestion)).resolves.toBeNull();
         expect(ModalMock).not.toHaveBeenCalled();
     });

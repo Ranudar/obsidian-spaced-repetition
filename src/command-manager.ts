@@ -445,7 +445,9 @@ export class CommandManager {
                 if (openFile === null || openFile.extension !== "md") return false;
 
                 if (!checking) {
-                    this.plugin.cardEditorService.openAdd(openFile, view);
+                    this.plugin.cardEditorService
+                        .openAdd(openFile, view)
+                        .catch((err) => console.error("SR: opening the card editor failed", err));
                 }
                 return true;
             },
