@@ -573,8 +573,9 @@ export class CardEditorService {
 
         // Both sides of a card share the stem of their file names
         let stem: string | null = null;
-        for (const file of this.inkFilesIn(card.original, sourcePath)) {
-            const parsed = parseInkFileName(file.name);
+        // Only the card's own drawn sides: typed text may embed another card's ink
+        for (const side of [front, back]) {
+            const parsed = side?.file ? parseInkFileName(side.file.name) : null;
             if (parsed) {
                 stem = parsed.stem;
                 break;

@@ -577,6 +577,8 @@ export class CardEditorModal extends Modal {
             settings: this.settings,
             textDirection: this.opts.textDirection ?? TextDirection.Ltr,
             onChange: () => {
+                // The question is about content that just changed
+                this.closeConfirm();
                 // E.g. undo of "Clear side" while the preview is shown
                 if (this.preview && side === this.activeSide && side.text !== this.previewText)
                     this.renderPreview(side);
@@ -726,6 +728,8 @@ export class CardEditorModal extends Modal {
         const tools = this.sideLabelEl.parentElement;
         const el = tools.createDiv({ cls: "sr-card-editor-confirm" });
         el.setAttr("role", "alertdialog");
+        // Keeps the focus (and the soft keyboard) in the text area
+        el.addEventListener("pointerdown", (e) => e.preventDefault());
         renderHint(
             el.createDiv({ cls: "sr-card-editor-confirm-question" }),
             t(input === "text" ? "CARD_EDITOR_TO_TEXT_CONFIRM" : "CARD_EDITOR_TO_PEN_CONFIRM", {
@@ -741,11 +745,18 @@ export class CardEditorModal extends Modal {
         const outside = (e: Event) => {
             if (!el.contains(e.target as Node)) this.closeConfirm();
         };
+        const escape = (e: KeyboardEvent) => {
+            if (e.key !== "Escape") return;
+            e.stopPropagation();
+            this.closeConfirm();
+        };
         this.modalEl.addEventListener("pointerdown", outside, true);
+        this.modalEl.addEventListener("keydown", escape, true);
         this.confirm = {
             el,
             remove: () => {
                 this.modalEl.removeEventListener("pointerdown", outside, true);
+                this.modalEl.removeEventListener("keydown", escape, true);
                 el.remove();
             },
         };
@@ -1190,22 +1201,24 @@ export class CardEditorModal extends Modal {
         // pen, for the eraser a ring exactly as large as its circle in the pen zone
         this.sizeButton.toggleClass("sr-is-hidden", !this.hasInk);
         this.sizeButton.disabled = this.busy || !drawing;
-        this.sizeButton.toggleClass("is-eraser", this.eraser);
+        // The eraser only counts on a drawn side
+        const erasing = this.eraser && drawing;
+        this.sizeButton.toggleClass("is-eraser", erasing);
         const pen = PEN_SIZE_STEPS[this.penSizeStep];
         const eraser = ERASER_SIZE_STEPS[this.eraserSizeStep];
-        const dot = this.eraser ? 2 * eraser.radius : pen.dot;
+        const dot = erasing ? 2 * eraser.radius : pen.dot;
         this.sizeButton.setCssProps({ "--sr-card-editor-dot-size": `${dot}px` });
         this.sizeButton.setAttr(
             "aria-label",
-            this.eraser
+            erasing
                 ? `${t("CARD_EDITOR_ERASER_SIZE")}: ${t(eraser.label)}`
                 : `${t("CARD_EDITOR_PEN_SIZE")}: ${t(pen.label)}`,
         );
         this.eraserButton.toggleClass("sr-is-hidden", !this.hasInk);
         this.eraserButton.disabled = this.busy || !drawing;
-        this.eraserButton.toggleClass("is-active", this.eraser && drawing);
-        this.eraserButton.setAttr("aria-pressed", this.eraser && drawing);
-        this.mainEl.toggleClass("is-erasing", this.eraser);
+        this.eraserButton.toggleClass("is-active", erasing);
+        this.eraserButton.setAttr("aria-pressed", erasing);
+        this.mainEl.toggleClass("is-erasing", erasing);
         this.undoButton.disabled = this.busy || this.stepsOf(side).length === 0;
         this.clearButton.disabled = this.busy || side.isEmpty;
         for (const button of this.previewButtons) {
