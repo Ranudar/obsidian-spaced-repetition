@@ -264,6 +264,30 @@ img[src*="sr-ink-"] {
         "text saves";
 }
 
+/* Buttons on the left, for writing with the left hand: the right column moves to the left of the
+   fields, the empty cell with it; the side marker stays on its edge */
+.sr-card-editor-main.sr-card-editor-buttons-left {
+    grid-template-columns: max(48px, 12%) minmax(0, 1fr);
+    grid-template-areas:
+        ". tools"
+        "switch pen"
+        "saves text";
+}
+
+.sr-card-editor-no-ink .sr-card-editor-main.sr-card-editor-buttons-left {
+    grid-template-areas:
+        ". tools"
+        "switch text"
+        "saves text";
+}
+
+.sr-card-editor-main.sr-card-editor-one-side.sr-card-editor-buttons-left {
+    grid-template-areas:
+        ". tools"
+        "saves text"
+        "saves text";
+}
+
 .sr-card-editor-sides,
 .sr-card-editor-side {
     display: contents;

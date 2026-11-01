@@ -46,6 +46,30 @@ export interface EditQuestionResult {
     changedImages: TFile[];
     /** The card was deleted from its note */
     deleted?: true;
+    /** The editor closed to step to the previous (-1) or next (1) card of the note */
+    step?: -1 | 1;
+}
+
+/** Whether the editor offers the previous / next card of the note */
+export interface EditSteps {
+    prev: boolean;
+    next: boolean;
+}
+
+/** Writes and deletes one question of a note, see editQuestion() */
+export interface QuestionWriter {
+    write: WriteQuestionText;
+    delete: DeleteQuestion;
+}
+
+/** The outcome of editing a note's cards, stepping from one to the next */
+export interface EditNoteResult {
+    /** Ink files overwritten in place; images showing them need a refresh */
+    changedImages: TFile[];
+    /** A card's text was written to the note, or a card deleted from it */
+    textChanged: boolean;
+    /** The questions deleted from the note */
+    deleted: Question[];
 }
 
 /**
@@ -175,12 +199,15 @@ export class CardEditorService {
      * Opens the editor for a question. On save, writes its ink files and, if the text changed,
      * the note through writeText. Writing the note is the commit point: if it fails, new ink files
      * are removed, rewritten ones restored, and the editor stays open with a notice.
-     * Resolves to the result, or null when the editor was closed without saving.
+     * With steps, the editor offers the previous / next card; stepping saves the card first and
+     * sets the result's step. Resolves to the result, or null when the editor was closed without
+     * saving.
      */
     async editQuestion(
         question: Question,
         writeText: WriteQuestionText,
         deleteQuestion: DeleteQuestion,
+        steps?: EditSteps,
     ): Promise<EditQuestionResult | null> {
         if (this.destroyed) return null;
         const cardType = question.questionType;
@@ -219,8 +246,18 @@ export class CardEditorService {
                     await this.deleteCard(card, deleteQuestion);
                     result = { text: "", textChanged: true, changedImages: [], deleted: true };
                 },
+                steps: steps && {
+                    ...steps,
+                    stepped: (direction) => {
+                        // Without changes the card was not saved
+                        result ??= { text: original, textChanged: false, changedImages: [] };
+                        result.step = direction;
+                    },
+                },
                 closed: () => {
                     this.modals.delete(modal);
+                    // Unloaded meanwhile: no next editor
+                    if (this.destroyed && result !== null) delete result.step;
                     resolve(result);
                 },
             });
@@ -229,8 +266,37 @@ export class CardEditorService {
     }
 
     /**
-     * Opens the editor for the card in the note that shows the ink image (pencil button in a note).
-     * Writes the card's text back to the note if it changed, then rescans the vault.
+     * Opens the editor for questions[index]; its arrows step through the note's questions (in note
+     * order), each saved before the next one opens. writer: how a question is written and deleted.
+     * Resolves once the last editor has closed.
+     */
+    async editNoteQuestions(
+        questions: Question[],
+        index: number,
+        writer: (question: Question) => QuestionWriter,
+    ): Promise<EditNoteResult> {
+        const total: EditNoteResult = { changedImages: [], textChanged: false, deleted: [] };
+        for (let i = index; ;) {
+            const question = questions[i];
+            const { write, delete: del } = writer(question);
+            const result = await this.editQuestion(question, write, del, {
+                prev: i > 0,
+                next: i < questions.length - 1,
+            });
+            if (result === null) break;
+            total.changedImages.push(...result.changedImages);
+            total.textChanged ||= result.textChanged;
+            if (result.deleted) total.deleted.push(question);
+            if (result.step === undefined) break;
+            i += result.step;
+        }
+        return total;
+    }
+
+    /**
+     * Opens the editor for the card in the note that shows the ink image (pencil button in a note);
+     * its arrows step through the note's other cards. Writes each card's text back to the note if
+     * it changed, then, once the editor has closed, rescans the vault.
      */
     async editInNote(noteFile: TFile, image: TFile): Promise<void> {
         if (this.editingInNote || this.destroyed) return;
@@ -253,13 +319,16 @@ export class CardEditorService {
                 return;
             }
 
-            const result = await this.editQuestion(
-                question,
-                // Replaces just the question's text, so its schedule comment stays
-                (text) => question.writeActualQuestion(text, this.settings),
-                () => DataStore.getInstance().delete(question),
+            const questions = note.questionList;
+            const result = await this.editNoteQuestions(
+                questions,
+                questions.indexOf(question),
+                (q) => ({
+                    // Replaces just the question's text, so its schedule comment stays
+                    write: (text) => q.writeActualQuestion(text, this.settings),
+                    delete: () => DataStore.getInstance().delete(q),
+                }),
             );
-            if (result === null) return;
             this.refreshImages(result.changedImages);
             if (result.textChanged && this.plugin.isInitialized && !this.destroyed)
                 await this.plugin.dataManager.sync();

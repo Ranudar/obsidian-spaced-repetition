@@ -437,6 +437,9 @@ const en: IBaseLocale = {
     CARD_EDITOR_GUIDE_SPACING: "Line spacing",
     CARD_EDITOR_GUIDE_SPACING_DESC: "Distance between guide lines, in pixels.",
     CARD_EDITOR_PEN_SIZE: "Pen thickness",
+    CARD_EDITOR_BUTTONS_LEFT: "Buttons on the left",
+    CARD_EDITOR_BUTTONS_LEFT_DESC:
+        "For writing with the left hand: the Front ⇄ Back and save buttons move to the left of the writing fields.",
 
     // Card editor > command
     ADD_CARD: "Add card",
@@ -462,6 +465,8 @@ const en: IBaseLocale = {
     CARD_EDITOR_UNDO: "Undo",
     CARD_EDITOR_CLEAR_SIDE: "Clear side",
     CARD_EDITOR_CLOSE: "Close",
+    CARD_EDITOR_PREVIOUS_CARD: "Previous card",
+    CARD_EDITOR_NEXT_CARD: "Next card",
     CARD_EDITOR_DISCARD: "Delete card",
     CARD_EDITOR_DISCARD_CONFIRM: "Tap again to delete",
     CARD_EDITOR_DELETE_FAILED: "Deleting the card failed: ${error}",

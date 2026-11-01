@@ -599,6 +599,20 @@ export class FlashcardsPage extends SettingsPage {
                             await this.settingsManager.save();
                         }),
                 );
+            })
+            .addSetting((setting: Setting) => {
+                penSettings.push(setting.settingEl);
+                setting
+                    .setName(t("CARD_EDITOR_BUTTONS_LEFT"))
+                    .setDesc(t("CARD_EDITOR_BUTTONS_LEFT_DESC"))
+                    .addToggle((toggle) =>
+                        toggle
+                            .setValue(this.settingsManager.settings.cardEditorButtonsLeft)
+                            .onChange(async (value) => {
+                                this.settingsManager.settings.cardEditorButtonsLeft = value;
+                                await this.settingsManager.save();
+                            }),
+                    );
             });
         showPenSettings();
     }

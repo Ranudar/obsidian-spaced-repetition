@@ -1,8 +1,9 @@
 import { now } from "moment";
 import { App, MarkdownView, Notice, Platform } from "obsidian";
 
-import { EditQuestionResult } from "src/card-editor/card-editor-service";
+import { EditNoteResult } from "src/card-editor/card-editor-service";
 import { DataManager } from "src/data/data-manager";
+import { DataStore } from "src/data/data-store/base/data-store";
 import { Card } from "src/data/data-structures/card/card";
 import { Question } from "src/data/data-structures/card/questions/question";
 import { Deck } from "src/data/data-structures/deck/deck";
@@ -390,17 +391,30 @@ export default class ContentManager {
 
         const currentUIState = this.uiManager.uiState;
         this.uiManager.setUIState(UIState.EditModal);
-        let result: EditQuestionResult | null = null;
+        let result: EditNoteResult | null = null;
         try {
-            // Only called when the text changed: ink-only changes leave the note (and its
+            // The editor's arrows step through the cards of the card's note, not the review queue
+            const questions = currentQ.note.questionList;
+            const index = questions.indexOf(currentQ);
+            // Write only called when the text changed: ink-only changes leave the note (and its
             // schedule) untouched
-            result = await service.editQuestion(
-                currentQ,
-                (text) => sequencer.updateCurrentQuestionTextAndCards(text),
-                async () => {
-                    await sequencer.deleteCurrentCardFromNote();
-                    return true;
-                },
+            result = await service.editNoteQuestions(
+                index === -1 ? [currentQ] : questions,
+                Math.max(index, 0),
+                (question) =>
+                    question === currentQ
+                        ? {
+                              write: (text) => sequencer.updateCurrentQuestionTextAndCards(text),
+                              delete: async () => {
+                                  await sequencer.deleteCurrentCardFromNote();
+                                  return true;
+                              },
+                          }
+                        : {
+                              write: (text) => sequencer.updateQuestionTextAndCards(question, text),
+                              // From the note only; this session's queue keeps the card
+                              delete: () => DataStore.getInstance().delete(question),
+                          },
             );
         } catch (error) {
             console.error("SR: editing the card failed", error);
@@ -408,7 +422,7 @@ export default class ContentManager {
         }
         this.uiManager.setUIState(currentUIState);
         if (result === null || this.reviewSequencer === null) return;
-        if (result.deleted) {
+        if (result.deleted.includes(currentQ)) {
             await this._showNextCard();
             return;
         }

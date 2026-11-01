@@ -40,6 +40,7 @@ export interface IFlashcardReviewSequencer {
     processReview(response: ReviewResponse): Promise<void>;
     /** false, with nothing changed, when the question's text is no longer in its note */
     updateCurrentQuestionTextAndCards(text: string): Promise<boolean>;
+    updateQuestionTextAndCards(question: Question, text: string): Promise<boolean>;
     deleteCurrentCardFromNote(): Promise<void>;
 }
 
@@ -427,8 +428,11 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
     }
 
     async updateCurrentQuestionTextAndCards(text: string): Promise<boolean> {
-        const question = this.currentQuestion;
+        return this.updateQuestionTextAndCards(this.currentQuestion, text);
+    }
 
+    /** Like updateCurrentQuestionTextAndCards, for any question, e.g. another one of the note */
+    async updateQuestionTextAndCards(question: Question, text: string): Promise<boolean> {
         // Update front/back properties of all cards which question is linked to
         const cardFrontBackList: CardFrontBack[] = CardFrontBackUtil.expand(
             question.questionType,

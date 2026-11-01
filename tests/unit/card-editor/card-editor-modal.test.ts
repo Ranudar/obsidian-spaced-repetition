@@ -839,3 +839,95 @@ describe("CardEditorModal while saving", () => {
         expect(textAreas().map((ta) => ta.value)).toEqual(["Q", "A"]);
     });
 });
+
+describe("CardEditorModal buttons on the left", () => {
+    const moved = () => $(".sr-card-editor-main").hasClass("sr-card-editor-buttons-left");
+
+    test("the setting moves the right column to the left, with pen mode on", () => {
+        openAdd(null, { cardEditorButtonsLeft: true });
+        expect(moved()).toBe(true);
+    });
+
+    test("off by default, and without pen mode", () => {
+        openAdd();
+        expect(moved()).toBe(false);
+        document.body.replaceChildren();
+        openAdd(null, { cardEditorButtonsLeft: true, cardEditorPenMode: false });
+        expect(moved()).toBe(false);
+    });
+});
+
+describe("CardEditorModal previous / next card", () => {
+    const prev = () => iconButton("Previous card");
+    const next = () => iconButton("Next card");
+
+    function openStepping(prevCard: boolean, nextCard: boolean) {
+        const cb = callbacks();
+        const stepped = jest.fn<void, [-1 | 1]>();
+        const opts: CardEditorOptions = {
+            kind: "edit",
+            title: "Biology",
+            initial: { front: side({ text: "Q" }), back: side({ text: "A" }) },
+            cardType: CardType.MultiLineBasic,
+            save: cb.save,
+            closed: cb.closed,
+            delete: cb.delete,
+            steps: { prev: prevCard, next: nextCard, stepped },
+        };
+        new CardEditorModal(testApp(), SETTINGS, opts).open();
+        return { cb, stepped };
+    }
+
+    test("only shown when editing a card of a note, disabled at the ends", () => {
+        openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
+        expect(prev()).toBeNull();
+        expect(next()).toBeNull();
+        document.body.replaceChildren();
+
+        openStepping(false, true);
+        expect(prev().disabled).toBe(true);
+        expect(next().disabled).toBe(false);
+        document.body.replaceChildren();
+
+        // A note with one card
+        openStepping(false, false);
+        expect(prev().disabled).toBe(true);
+        expect(next().disabled).toBe(true);
+    });
+
+    test("stepping saves the changes first, then closes", async () => {
+        const { cb, stepped } = openStepping(true, true);
+        type(1, "A2");
+        next().click();
+        await flush();
+        expect(cb.save).toHaveBeenCalledWith({ front: textOnly("Q"), back: textOnly("A2") });
+        expect(stepped).toHaveBeenCalledWith(1);
+        expect(cb.save.mock.invocationCallOrder[0]).toBeLessThan(
+            stepped.mock.invocationCallOrder[0],
+        );
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("a card without changes is not saved", async () => {
+        const { cb, stepped } = openStepping(true, true);
+        prev().click();
+        await flush();
+        expect(cb.save).not.toHaveBeenCalled();
+        expect(stepped).toHaveBeenCalledWith(-1);
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("a failed save stays on the card", async () => {
+        jest.spyOn(console, "error").mockImplementation(() => {});
+        const { cb, stepped } = openStepping(true, true);
+        cb.save.mockRejectedValueOnce(new Error("gone"));
+        type(0, "Q2");
+        next().click();
+        await flush();
+        expect(Notice).toHaveBeenCalledTimes(1);
+        expect(stepped).not.toHaveBeenCalled();
+        expect(cb.closed).not.toHaveBeenCalled();
+        expect(next().disabled).toBe(false);
+        expect(textAreas()[0].value).toBe("Q2");
+    });
+});

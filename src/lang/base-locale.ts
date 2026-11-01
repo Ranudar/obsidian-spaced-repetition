@@ -368,6 +368,8 @@ export interface IBaseLocale {
     CARD_EDITOR_GUIDE_SPACING: string;
     CARD_EDITOR_GUIDE_SPACING_DESC: string;
     CARD_EDITOR_PEN_SIZE: string;
+    CARD_EDITOR_BUTTONS_LEFT: string;
+    CARD_EDITOR_BUTTONS_LEFT_DESC: string;
 
     // Card editor > command
     ADD_CARD: string;
@@ -393,6 +395,8 @@ export interface IBaseLocale {
     CARD_EDITOR_UNDO: string;
     CARD_EDITOR_CLEAR_SIDE: string;
     CARD_EDITOR_CLOSE: string;
+    CARD_EDITOR_PREVIOUS_CARD: string;
+    CARD_EDITOR_NEXT_CARD: string;
     CARD_EDITOR_DISCARD: string;
     CARD_EDITOR_DISCARD_CONFIRM: string;
     CARD_EDITOR_INK_TRASHED: string;

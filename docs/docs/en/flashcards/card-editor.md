@@ -84,7 +84,8 @@ The editor shows one side at a time, always in the same places:
 - Below that, the **text zone**, filling the rest of the editor, for the keyboard ("Type the
   **question**" on the front, "Type the **answer**" on the back). Long text scrolls inside it.
 - On the right, the **Front ⇅ Back** switch, exactly as tall as the pen zone, with the side shown
-  in bold; below it, beside the text zone, the save buttons.
+  in bold; below it, beside the text zone, the save buttons. With **Buttons on the left** (see
+  [Settings](#settings)) this column is on the left instead.
 
 The side shown is also marked by a broad coloured edge on both fields: on the right for the front,
 on the left for the back. Each side keeps its own text and handwriting when you switch.
@@ -144,6 +145,13 @@ handwriting, ready to change.
   line, and moves its handwriting images to the trash unless another note still shows them. During
   review, the next card is shown.
 - `Esc`, ✕ or the back gesture closes without writing anything.
+- **‹** and **›** in the title bar, left of the bin, step to the previous and next card **of the
+  same note**, in the order they appear in the note, without closing the editor yourself. Changes
+  are saved first, as with **Save**; if saving fails, the editor stays on the card with a notice. A
+  card you didn't change is not written. At the note's first card **‹** is disabled, at its last
+  card **›**; in a note with one card both are. During review the arrows step through the note's
+  cards, not the review queue; when the editor closes, the review shows its current card again.
+  A card deleted from the note this way during review can still come up later in the same session.
 
 The note is only written when the card text changed, for example when you edited typed text, wrote
 on a side that had no handwriting yet or erased all of a side's handwriting. If you only changed
@@ -159,7 +167,8 @@ editor, exactly as during review. This also works for mixed cards, for example a
 handwritten back.
 
 After saving, every visible copy of a changed image reloads. When the card text changed, the note
-is updated and Spaced Repetition rescans your notes.
+is updated and Spaced Repetition rescans your notes, once the editor has closed, also after
+stepping through several cards with **‹** and **›**.
 
 In live preview, a handwriting embed counts as one unit: with the cursor right after it, one
 `Backspace` deletes the whole embed, and `Delete` before it does the same, also with the Android
@@ -191,13 +200,14 @@ part of the text, so nothing gets lost.
 The settings are in the **Card editor** section of the flashcard settings. The pen settings are only
 shown while **Pen mode** is on.
 
-| Setting       | Default  | Description                                                                                                                                       |
-| ------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pen mode      | Off      | Give each side a field to write in with a pen, such as the S Pen. Off: cards are typed only; handwriting a card already has can still be changed. |
-| Image folder  | `sr-ink` | Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.                                                       |
-| Guide lines   | Lined    | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image.                                             |
-| Line spacing  | 44       | Distance between guide lines, in pixels (24–80).                                                                                                  |
-| Pen thickness | 2.5      | Stroke width for new handwriting (1–8). Existing images keep the thickness they were written with.                                                |
+| Setting             | Default  | Description                                                                                                                                                                                                   |
+| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pen mode            | Off      | Give each side a field to write in with a pen, such as the S Pen. Off: cards are typed only; handwriting a card already has can still be changed.                                                             |
+| Image folder        | `sr-ink` | Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.                                                                                                                   |
+| Guide lines         | Lined    | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image.                                                                                                         |
+| Line spacing        | 44       | Distance between guide lines, in pixels (24–80).                                                                                                                                                              |
+| Pen thickness       | 2.5      | Stroke width for new handwriting (1–8). Existing images keep the thickness they were written with.                                                                                                            |
+| Buttons on the left | Off      | For writing with the left hand: the **Front ⇅ Back** switch and the save buttons move to the left of the writing fields. The side marker stays where it is: right edge for the front, left edge for the back. |
 
 The card separator and the end marker are Spaced Repetition's own
 [flashcard separator settings](../user-options.md#flashcard-separators).

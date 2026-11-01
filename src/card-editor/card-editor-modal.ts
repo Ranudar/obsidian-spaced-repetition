@@ -46,6 +46,12 @@ export type CardEditorOptions =
           cardType: CardType;
           /** Deletes the card from its note; a rejection keeps the editor open with a notice */
           delete(): Promise<void>;
+          /**
+           * Previous / next card of the note, shown when given: whether there is one in each
+           * direction, and stepped(), called once the card is saved (or had no changes), just
+           * before the editor closes
+           */
+          steps?: { prev: boolean; next: boolean; stepped(direction: -1 | 1): void };
       });
 
 const DELETE_ARM_MS = 3000;
@@ -125,6 +131,10 @@ export class CardEditorModal extends Modal {
     private sidesEl!: HTMLElement;
     private counterEl: HTMLElement | null = null;
     private deleteButton!: HTMLButtonElement;
+    private prevButton: HTMLButtonElement | null = null;
+    private nextButton: HTMLButtonElement | null = null;
+    /** Each side's typed text as opened, to tell whether the card was changed */
+    private initialText = new Map<SideEditor, string>();
     private sideLabelEl!: HTMLElement;
     private sizeButton!: HTMLButtonElement;
     private eraserButton!: HTMLButtonElement;
@@ -193,11 +203,17 @@ export class CardEditorModal extends Modal {
                 allowInk: ink(initial.back),
             });
         }
+        this.sides.forEach((side) => this.initialText.set(side, side.text));
         // No pen zone anywhere: the text zone takes its place, the switch and the saves share
         // the right column
         this.modalEl.toggleClass("sr-card-editor-no-ink", !this.hasInk);
         // Cloze: one side, no switch
         main.toggleClass("sr-card-editor-one-side", this.back === null);
+        // Left-handed: the right column moves to the left of the fields
+        main.toggleClass(
+            "sr-card-editor-buttons-left",
+            this.settings.cardEditorPenMode && this.settings.cardEditorButtonsLeft,
+        );
         // New strokes follow the size button, also on a card being edited (whose file has its
         // own size) and on a restored draft (saved with the size picked then); every stroke
         // already written keeps its own size
@@ -255,7 +271,10 @@ export class CardEditorModal extends Modal {
 
     // MARK: building
 
-    /** The note's title, the "n added" badge, Delete card and, with space between them, ✕ */
+    /**
+     * The note's title, the "n added" badge, previous / next card (editing a card of a note),
+     * Delete card and, with space between them, ✕
+     */
     private buildHeader(root: HTMLElement) {
         const header = root.createDiv({ cls: "sr-card-editor-header" });
         const titleEl = header.createDiv({ cls: "sr-card-editor-title-wrap" });
@@ -266,6 +285,20 @@ export class CardEditorModal extends Modal {
                 cls: ["sr-card-editor-counter", "sr-is-hidden"],
             });
             this.counterEl.setAttr("role", "status");
+        }
+        if (this.opts.kind === "edit" && this.opts.steps) {
+            this.prevButton = this.iconButton(
+                header,
+                "chevron-left",
+                t("CARD_EDITOR_PREVIOUS_CARD"),
+                () => void this.step(-1),
+            );
+            this.nextButton = this.iconButton(
+                header,
+                "chevron-right",
+                t("CARD_EDITOR_NEXT_CARD"),
+                () => void this.step(1),
+            );
         }
         this.deleteButton = this.iconButton(header, "trash-2", t("CARD_EDITOR_DISCARD"), () => {
             void this.deleteCard();
@@ -589,6 +622,29 @@ export class CardEditorModal extends Modal {
     }
 
     /**
+     * Previous / next card of the note: saves the card like Save, unless nothing was changed, then
+     * closes the editor for the service to open the other card's. A failed save stays on the card.
+     */
+    private async step(direction: -1 | 1) {
+        if (this.busy || this.opts.kind !== "edit" || !this.opts.steps) return;
+        const steps = this.opts.steps;
+        if (!(direction < 0 ? steps.prev : steps.next)) return;
+        if (this.changed) {
+            const saved = await this.runSave();
+            if (!saved || this.isClosed) return;
+        }
+        steps.stepped(direction);
+        this.close();
+    }
+
+    /** Text or ink of a side was changed since the editor opened */
+    private get changed(): boolean {
+        return this.sides.some(
+            (side) => side.inkChanged || side.text !== this.initialText.get(side),
+        );
+    }
+
+    /**
      * Calls opts.save() once at a time; resolves to whether it succeeded. A needed side that is
      * empty is shown instead, outlined, with a notice; nothing is saved then.
      */
@@ -724,6 +780,11 @@ export class CardEditorModal extends Modal {
         this.undoButton.disabled = this.busy || this.stepsOf(side).length === 0;
         this.clearButton.disabled = this.busy || side.isEmpty;
         this.deleteButton.disabled = this.busy;
+        if (this.opts.kind === "edit" && this.opts.steps) {
+            const { prev, next } = this.opts.steps;
+            if (this.prevButton) this.prevButton.disabled = this.busy || !prev;
+            if (this.nextButton) this.nextButton.disabled = this.busy || !next;
+        }
 
         if (this.switchButton) {
             this.switchButton.disabled = this.busy;

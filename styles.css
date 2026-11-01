@@ -198,6 +198,16 @@ img[src*="sr-ink-"] {
 .sr-card-editor-main.sr-card-editor-one-side {
   grid-template-areas: "tools ." "text saves" "text saves";
 }
+.sr-card-editor-main.sr-card-editor-buttons-left {
+  grid-template-columns: max(48px, 12%) minmax(0, 1fr);
+  grid-template-areas: ". tools" "switch pen" "saves text";
+}
+.sr-card-editor-no-ink .sr-card-editor-main.sr-card-editor-buttons-left {
+  grid-template-areas: ". tools" "switch text" "saves text";
+}
+.sr-card-editor-main.sr-card-editor-one-side.sr-card-editor-buttons-left {
+  grid-template-areas: ". tools" "saves text" "saves text";
+}
 .sr-card-editor-sides,
 .sr-card-editor-side {
   display: contents;
