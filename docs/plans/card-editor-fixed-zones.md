@@ -101,3 +101,27 @@ left-handed mirror, making the pen zone height a setting.
   errors), `prettier --check`, `pnpm run build` all pass.
 - User docs (`docs/docs/en/flashcards/card-editor.md`) and the plan's layout section describe the
   new editor.
+
+## Follow-ups (agreed after the first version)
+
+### Left-handed mode
+
+- New setting `cardEditorButtonsLeft` (default off), in the Card editor settings section, shown
+  only while pen mode is on; label "Buttons on the left", description "For writing with the left
+  hand: the Front ⇄ Back and save buttons move to the left of the writing fields."
+- On: the right column (switch + saves) moves to the left of the fields; the empty cell moves
+  with it (it sits left of the tool row). The side marker keeps its meaning: front = right edge,
+  back = left edge.
+
+### Previous / next card when editing
+
+- Edit mode only (pencil in a note, Edit in the review window): two buttons ‹ › in the title bar,
+  left of the 🗑, step to the previous / next card **of the same note**, in note order, without
+  the user closing the editor (the service may close this modal and open the neighbour's editor
+  right away).
+- Before stepping, unsaved changes are saved like Save. If saving fails, the editor stays on the
+  card with the usual notice. A card without changes is not written.
+- At the first / last card the matching button is disabled. A note with one card: both disabled.
+- In the review window the arrows step through that note's cards too (not the review queue); the
+  review shows its current card again (redrawn) when the editor finally closes.
+- After stepping and closing, the note is rescanned once (as today after an edit in a note).
