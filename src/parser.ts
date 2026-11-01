@@ -106,7 +106,11 @@ export function parse(text: string, options: ParserOptions): ParsedQuestionInfo[
 
         // Skip everything in HTML comments
         if (currentLine.startsWith("<!--") && !currentLine.startsWith("<!--SR:")) {
+            const commentStart = i;
             while (i + 1 < lines.length && !lines[i].includes("-->")) i++;
+            // A comment inside a card stays in its text, so the card is found in the note again
+            // when it is written; the comment's lines are still not read as card syntax
+            if (cardText.length > 0) cardText += "\n" + lines.slice(commentStart, i + 1).join("\n");
             continue;
         }
 

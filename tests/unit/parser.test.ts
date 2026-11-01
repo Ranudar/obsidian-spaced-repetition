@@ -775,6 +775,11 @@ test("Test not parsing cards in HTML comments", () => {
     expect(parseT("<!--\nq::hidden\n-->\n\na::b", parserOptions)).toEqual([
         [CardType.SingleLineBasic, "a::b", 4, 4],
     ]);
+
+    // a comment inside a card stays in the card's text, so the card is found in the note again
+    expect(parseT("Front\n?\nBack\n<!-- note -->\nMore answer", parserOptions)).toEqual([
+        [CardType.MultiLineBasic, "Front\n?\nBack\n<!-- note -->\nMore answer", 0, 4],
+    ]);
 });
 
 test("Test not parsing 'cards' in codeblocks", () => {

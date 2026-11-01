@@ -185,6 +185,8 @@ export class DateUtil {
     }
 
     static strToDayBoundary(str: string): IDayBoundary | null {
+        // Not set, e.g. null in the saved settings
+        if (typeof str !== "string") return null;
         const dayStr: string[] = str.split(":");
         if (dayStr.length !== 3) {
             return null;

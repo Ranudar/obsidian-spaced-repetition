@@ -1,6 +1,7 @@
 import moment from "moment";
 
 import {
+    DateUtil,
     formatDate,
     formatDateWithMoment,
     globalDateProvider,
@@ -74,4 +75,8 @@ describe("LiveDateProvider", () => {
         expect(todayAt("22:59:59", dayBoundary)).toBe("2024-03-14 00:00:00");
         expect(todayAt("23:00:00", dayBoundary)).toBe("2024-03-15 00:00:00");
     });
+});
+
+test("strToDayBoundary: a start of day not set is no boundary", () => {
+    expect(DateUtil.strToDayBoundary(null)).toBeNull();
 });
