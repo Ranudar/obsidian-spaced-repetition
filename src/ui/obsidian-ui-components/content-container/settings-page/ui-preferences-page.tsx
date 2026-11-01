@@ -97,7 +97,6 @@ export class UIPreferencesPage extends SettingsPage {
                                 } else {
                                     this.plugin.commandManager.removeCustomHotkeys();
                                 }
-                                this.plugin.commandManager.addCustomHotkeys();
                                 await this.settingsManager.save();
                             }),
                     );
