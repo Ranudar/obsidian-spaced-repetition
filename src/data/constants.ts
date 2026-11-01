@@ -3,7 +3,6 @@ export const ALL_SR_COMMENT_FINDER = /<!--SR:!.+?-->/g;
 export const ONE_SR_COMMENT_FINDER = /<!--SR:!.+?-->/;
 export const FSRS_SCHEDULE_EXTRACTOR =
     /<!--SR:!fsrs,(.+?),(\d+),(\d+),(\d+),(\d+),(\d+),(\d+),(.+?)-->/gm;
-export const SM2_SCHEDULE_INFO_EXTRACTOR = /<!--SR:!(.+?),(\d+),(\d+),*(\d+)*-->/gm;
 
 export const YAML_FRONT_MATTER_REGEX = /^---\r?\n((?:.*\r?\n)*?)---/;
 

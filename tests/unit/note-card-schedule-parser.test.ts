@@ -1,6 +1,5 @@
 import { State } from "ts-fsrs";
 
-import { MULTI_SCHEDULING_EXTRACTOR } from "src/data/constants";
 import { TICKS_PER_DAY } from "src/data/constants";
 import { DataStore } from "src/data/data-store/base/data-store";
 import { DEFAULT_SETTINGS } from "src/data/settings";
@@ -46,35 +45,6 @@ test("Single schedule info for question (on same line)", () => {
 test("Legacy schedule comments without the bang prefix are still parsed", () => {
     const actual: RepItemScheduleInfo[] = DataStore.getInstance().createSchedule(
         "What symbol represents an electric field:: $\\large \\vec E$<!--SR:2023-09-02,4,270-->",
-        null,
-    );
-
-    expect(actual).toEqual([
-        RepItemScheduleInfoOsr.fromDueDateStr("2023-09-02", 4, 270, -4 * TICKS_PER_DAY),
-    ]);
-});
-
-test("Legacy fallback extractor loop still parses schedules", () => {
-    const actual: RepItemScheduleInfo[] = DataStore.getInstance().createSchedule(
-        {
-            match(): RegExpMatchArray | null {
-                return null;
-            },
-            matchAll(regex: RegExp): IterableIterator<RegExpMatchArray> {
-                const matches =
-                    regex === MULTI_SCHEDULING_EXTRACTOR
-                        ? []
-                        : [
-                              [
-                                  "<!--SR:2023-09-02,4,270-->",
-                                  "2023-09-02",
-                                  "4",
-                                  "270",
-                              ] as RegExpMatchArray,
-                          ];
-                return matches[Symbol.iterator]() as IterableIterator<RegExpMatchArray>;
-            },
-        } as never,
         null,
     );
 

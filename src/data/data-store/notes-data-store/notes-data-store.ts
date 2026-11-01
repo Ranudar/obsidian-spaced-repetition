@@ -1,4 +1,4 @@
-import { MULTI_SCHEDULING_EXTRACTOR, SM2_SCHEDULE_INFO_EXTRACTOR } from "src/data/constants";
+import { MULTI_SCHEDULING_EXTRACTOR } from "src/data/constants";
 import { IDataStore, StorageType } from "src/data/data-store/base/data-store";
 import { IFileModifier } from "src/data/data-store/base/file-modifier";
 import { RepItemStorageInfo } from "src/data/data-store/base/rep-item-storage-info";
@@ -46,19 +46,7 @@ export class NotesDataStore implements IDataStore {
                 )
                 .filter((info): info is RepItemScheduleInfo => info !== null);
         }
-
-        const result: RepItemScheduleInfo[] = [];
-        const scheduling = [...originalQuestionText.matchAll(SM2_SCHEDULE_INFO_EXTRACTOR)];
-        for (const match of scheduling) {
-            const dueDateStr = match[1];
-            const interval = parseInt(match[2]);
-            const ease = parseInt(match[3]);
-            const parsedSchedule = CommentParser.parseSM2Schedule(dueDateStr, interval, ease);
-            if (parsedSchedule) {
-                result.push(parsedSchedule);
-            }
-        }
-        return result;
+        return [];
     }
 
     /**
