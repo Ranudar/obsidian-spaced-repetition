@@ -8,7 +8,7 @@ import {
 } from "@codemirror/state";
 import { EditorView, keymap, PluginValue, ViewPlugin, ViewUpdate } from "@codemirror/view";
 
-import { INK_FILE_PREFIX, inkEmbedPath, linksIn } from "src/card-editor/core/card-text";
+import { inkEmbedPath, linksIn } from "src/card-editor/core/card-text";
 
 /** A span of text, as offsets into the text it was found in */
 export interface TextRange {
@@ -93,14 +93,6 @@ class InkAtomicRanges implements PluginValue {
 
     update(update: ViewUpdate): void {
         if (update.docChanged || update.viewportChanged) this.ranges = this.compute(update.view);
-        if (update.docChanged) {
-            const view = update.view;
-            const win = view.dom.ownerDocument.defaultView;
-            // Checked once the editor has redrawn, and again after an IME composition may have
-            // held back the redraw of its line
-            win?.requestAnimationFrame(() => removeStaleInk(view));
-            win?.setTimeout(() => removeStaleInk(view), 300);
-        }
     }
 
     private compute(view: EditorView): RangeSet<InkAtom> {
@@ -134,43 +126,6 @@ class InkAtomicRanges implements PluginValue {
 }
 
 const inkAtomicRangesPlugin = ViewPlugin.fromClass(InkAtomicRanges);
-
-/** Called with what removeStaleInk() found, for the input log */
-let onStaleInk: ((names: string[]) => void) | null = null;
-
-/**
- * Removes images of handwriting the note no longer embeds. On Android a keyboard with word
- * suggestions keeps a composition open at the cursor, and the editor doesn't redraw the DOM
- * there meanwhile: an embed deleted next to the cursor is gone from the note but its image stays
- * on screen. The image is shown only while its line in the note still has the embed.
- */
-export function removeStaleInk(view: EditorView): void {
-    if (!view.dom.isConnected) return;
-    const removed: string[] = [];
-    view.contentDOM
-        .querySelectorAll<HTMLElement>(`.internal-embed[src*="${INK_FILE_PREFIX}"]`)
-        .forEach((embed) => {
-            // Inside an embedded note: rendered from that note, not from this editor's text
-            if (embed.parentElement?.closest(".internal-embed, .markdown-embed")) return;
-            const src = embed.getAttribute("src") ?? "";
-            let pos: number;
-            try {
-                pos = view.posAtDOM(embed);
-            } catch {
-                return;
-            }
-            if (pos < 0 || pos > view.state.doc.length) return;
-            if (view.state.doc.lineAt(pos).text.includes(src)) return;
-            removed.push(src);
-            embed.remove();
-        });
-    if (removed.length > 0) onStaleInk?.(removed);
-}
-
-/** Sets who hears of stale images removed (see removeStaleInk) */
-export function setStaleInkListener(listener: ((names: string[]) => void) | null): void {
-    onStaleInk = listener;
-}
 
 /** The ink embed the cursor is in or, toward the deletion, next to; null if none */
 function inkAtCursor(view: EditorView, forward: boolean): TextRange | null {

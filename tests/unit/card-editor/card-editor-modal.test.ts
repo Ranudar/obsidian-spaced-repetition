@@ -445,14 +445,11 @@ describe("CardEditorModal drafts and discard", () => {
         expect(discard.textContent).toBe("Tap again to delete");
     });
 
-    test("Delete card arms first on an empty card too", () => {
+    test("Delete card closes an empty new card at once", () => {
         const { cb } = openAdd();
-        const discard = $<HTMLButtonElement>(".sr-card-editor-discard");
-        discard.click();
-        expect(cb.closed).not.toHaveBeenCalled();
-        expect(discard.textContent).toBe("Tap again to delete");
-        discard.click();
+        $<HTMLButtonElement>(".sr-card-editor-discard").click();
         expect(cb.closed).toHaveBeenCalledTimes(1);
+        expect(cb.keepDraft).toHaveBeenCalledWith(null);
     });
 
     test("closing while saving keeps the draft only if saving fails", async () => {

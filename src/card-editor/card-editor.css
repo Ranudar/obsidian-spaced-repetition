@@ -249,6 +249,11 @@ img[src*="sr-ink-"] {
     white-space: nowrap;
 }
 
+.sr-card-editor-footer button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .sr-card-editor-footer .sr-card-editor-discard {
     color: var(--text-error);
 }

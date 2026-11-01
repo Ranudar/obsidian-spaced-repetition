@@ -435,6 +435,12 @@ export class CardEditorModal extends Modal {
      */
     private async discard() {
         if (this.busy || !this.discardButton) return;
+        // A new card with nothing on it: nothing to lose, no second tap
+        if (this.opts.kind === "add" && this.allEmpty) {
+            this.dropDraft = true;
+            this.close();
+            return;
+        }
         if (Date.now() - this.discardArmedAt < DISCARD_ARM_MS) {
             this.disarmDiscard();
             if (this.opts.kind === "edit") {

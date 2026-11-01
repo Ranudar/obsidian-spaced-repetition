@@ -7,7 +7,6 @@ import {
     inkAtomicRanges,
     inkEmbedRanges,
     removedInkLinks,
-    removeStaleInk,
 } from "src/card-editor/ink-atomic-ranges";
 
 function slices(text: string): string[] {
@@ -271,38 +270,6 @@ describe("inkAtomicRanges onInkRemoved", () => {
         });
         view.dispatch({ changes: { from: 0, to: 22 }, userEvent: "delete.backward" });
         expect(heard).toEqual([["sr-ink-b-back.svg"]]);
-        view.destroy();
-    });
-});
-
-describe("removeStaleInk", () => {
-    function viewWithEmbed(doc: string, src: string): { view: EditorView; embed: HTMLElement } {
-        const view = new EditorView({ state: EditorState.create({ doc }), parent: document.body });
-        const embed = document.createElement("div");
-        embed.className = "internal-embed image-embed";
-        embed.setAttribute("src", src);
-        view.contentDOM.querySelector(".cm-line").appendChild(embed);
-        return { view, embed };
-    }
-
-    test("removes the image of an embed no longer in its line", () => {
-        const { view, embed } = viewWithEmbed("?", "sr-ink-a-front.svg");
-        removeStaleInk(view);
-        expect(embed.isConnected).toBe(false);
-        view.destroy();
-    });
-
-    test("keeps the image while its line still embeds it", () => {
-        const { view, embed } = viewWithEmbed("![[sr-ink-a-front.svg]]", "sr-ink-a-front.svg");
-        removeStaleInk(view);
-        expect(embed.isConnected).toBe(true);
-        view.destroy();
-    });
-
-    test("keeps other images", () => {
-        const { view, embed } = viewWithEmbed("?", "photo.png");
-        removeStaleInk(view);
-        expect(embed.isConnected).toBe(true);
         view.destroy();
     });
 });
