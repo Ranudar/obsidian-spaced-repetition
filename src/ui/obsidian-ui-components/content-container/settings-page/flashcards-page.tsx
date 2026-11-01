@@ -74,19 +74,6 @@ export class FlashcardsPage extends SettingsPage {
             })
             .addSetting((setting: Setting) => {
                 setting
-                    .setName(t("BURY_SIBLINGS_TILL_NEXT_DAY"))
-                    .setDesc(t("BURY_SIBLINGS_TILL_NEXT_DAY_DESC"))
-                    .addToggle((toggle) =>
-                        toggle
-                            .setValue(this.settingsManager.settings.burySiblingCards)
-                            .onChange(async (value) => {
-                                this.settingsManager.settings.burySiblingCards = value;
-                                await this.settingsManager.save();
-                            }),
-                    );
-            })
-            .addSetting((setting: Setting) => {
-                setting
                     .setName(t("FLASHCARD_TAGS_TO_IGNORE"))
                     .setDesc(t("FLASHCARD_TAGS_TO_IGNORE_DESC"))
                     .addTextArea((text) =>
