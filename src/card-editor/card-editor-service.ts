@@ -50,12 +50,16 @@ export interface EditQuestionResult {
     deleted?: true;
     /** The editor closed to step to the previous (-1) or next (1) card of the note */
     step?: -1 | 1;
+    /** When stepping: the preview was on, the next editor shows it too */
+    preview?: boolean;
 }
 
 /** Whether the editor offers the previous / next card of the note */
 export interface EditSteps {
     prev: boolean;
     next: boolean;
+    /** The editor opens with the preview on */
+    preview?: boolean;
 }
 
 /** Writes and deletes one question of a note, see editQuestion() */
@@ -249,10 +253,11 @@ export class CardEditorService {
                 },
                 steps: steps && {
                     ...steps,
-                    stepped: (direction) => {
+                    stepped: (direction, preview) => {
                         // Without changes the card was not saved
                         result ??= { text: original, textChanged: false, changedImages: [] };
                         result.step = direction;
+                        result.preview = preview;
                     },
                 },
                 closed: () => {
@@ -277,12 +282,14 @@ export class CardEditorService {
         writer: (question: Question) => QuestionWriter,
     ): Promise<EditNoteResult> {
         const total: EditNoteResult = { changedImages: [], textChanged: false, deleted: [] };
+        let preview = false;
         for (let i = index; ;) {
             const question = questions[i];
             const { write, delete: del } = writer(question);
             const result = await this.editQuestion(question, write, del, {
                 prev: i > 0,
                 next: i < questions.length - 1,
+                preview,
             });
             if (result === null) break;
             total.changedImages.push(...result.changedImages);
@@ -290,6 +297,7 @@ export class CardEditorService {
             if (result.deleted) total.deleted.push(question);
             if (result.step === undefined) break;
             i += result.step;
+            preview = result.preview ?? false;
         }
         return total;
     }
@@ -417,7 +425,7 @@ export class CardEditorService {
         const compose = (f: string, b: string | null) => newCardBody(f, b, this.settings, cardType);
         if (cardType === CardType.Cloze) {
             // Typed only, a cloze card has no handwriting
-            const text = this.protect(this.typedText(result.front.text, false));
+            const text = this.protect(this.typedText(result.front.text, false), "cloze");
             if (text.length === 0) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
             this.assertReadAsCard(cardType, text, null, compose);
             this.assertActive();
@@ -430,7 +438,7 @@ export class CardEditorService {
         try {
             const sideText = async (r: SideResult | null, side: InkSide): Promise<string> => {
                 if (r === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
-                const typed = this.protect(this.typedText(r.text, false));
+                const typed = this.protect(this.typedText(r.text, false), side);
                 let embed: string | null = null;
                 if (r.ink !== null) {
                     const svg = strokesToSvg(r.ink.strokes, { size: r.ink.penSize });
@@ -595,7 +603,8 @@ export class CardEditorService {
             let typed = loaded.state.text;
             if (typedChanged) {
                 typed = this.typedText(r.text, true);
-                if (protect) typed = this.protect(typed);
+                if (protect)
+                    typed = this.protect(typed, cardType === CardType.Cloze ? "cloze" : side);
             }
             const sideText = joinSide(cardType, typed, embed);
             if (sideText.trim().length === 0) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
@@ -652,8 +661,8 @@ export class CardEditorService {
     }
 
     /** protectBlankLines for a typed text; an empty one stays empty, the side may be ink only */
-    private protect(text: string): string {
-        return text.length === 0 ? text : protectBlankLines(text, this.settings);
+    private protect(text: string, part: "front" | "back" | "cloze"): string {
+        return text.length === 0 ? text : protectBlankLines(text, this.settings, part);
     }
 
     /**

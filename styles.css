@@ -153,12 +153,17 @@ img[src*="sr-ink-"] {
   color: var(--text-warning);
 }
 .sr-card-editor-header > button.sr-card-editor-type {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  display: block;
   height: 30px;
+  line-height: 30px;
   padding: 0 var(--size-4-2);
   border-radius: var(--radius-l);
   font-size: var(--font-ui-smaller);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sr-card-editor-header > button.sr-card-editor-type.is-fixed:disabled {
   opacity: 1;
@@ -372,7 +377,7 @@ img[src*="sr-ink-"] {
   display: block;
 }
 .sr-card-editor-text-wrap.is-preview > .sr-card-editor-text {
-  visibility: hidden;
+  opacity: 0;
 }
 .sr-card-editor-text-wrap.is-preview.is-empty .sr-card-editor-text-hint {
   display: none;

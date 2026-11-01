@@ -74,10 +74,16 @@ export type CardEditorOptions =
           delete(): Promise<void>;
           /**
            * Previous / next card of the note, shown when given: whether there is one in each
-           * direction, and stepped(), called once the card is saved (or had no changes), just
-           * before the editor closes
+           * direction, whether the preview is on (as in the editor stepped from), and stepped(),
+           * called once the card is saved (or had no changes), just before the editor closes,
+           * with whether the preview is on
            */
-          steps?: { prev: boolean; next: boolean; stepped(direction: -1 | 1): void };
+          steps?: {
+              prev: boolean;
+              next: boolean;
+              preview?: boolean;
+              stepped(direction: -1 | 1, preview: boolean): void;
+          };
       });
 
 const DELETE_ARM_MS = 3000;
@@ -193,6 +199,8 @@ export class CardEditorModal extends Modal {
                 ? opts.cardType
                 : (opts.draft?.cardType ?? CardType.MultiLineBasic);
         this.initialCardType = this.cardType;
+        // Kept when stepping to the previous / next card
+        this.preview = opts.kind === "edit" && (opts.steps?.preview ?? false);
     }
 
     private get sides(): SideEditor[] {
@@ -286,9 +294,11 @@ export class CardEditorModal extends Modal {
             deckEl.toggleClass("is-warning", decks.length === 0);
             deckEl.setText(
                 decks.length === 0
-                    ? t("CARD_EDITOR_NO_FLASHCARD_TAG", {
-                          tag: this.settings.flashcardTags[0] ?? "#flashcards",
-                      })
+                    ? this.settings.convertFoldersToDecks
+                        ? t("CARD_EDITOR_NO_DECK_FOLDER")
+                        : t("CARD_EDITOR_NO_FLASHCARD_TAG", {
+                              tag: this.settings.flashcardTags[0] ?? "#flashcards",
+                          })
                     : decks.length === 1
                       ? t("CARD_EDITOR_DECK", { deck: decks[0] })
                       : t("CARD_EDITOR_DECKS", { decks: decks.join(", ") }),
@@ -696,8 +706,9 @@ export class CardEditorModal extends Modal {
         if (toCloze || fromCloze) {
             const front: SideState = { ...this.front.state, strokes: [] };
             this.buildMain({ front, back: toCloze ? null : this.blankSide() });
-            this.front.focus();
         }
+        // The menu took the focus (on mobile its sheet), the soft keyboard stays open
+        this.activeSide?.focus();
         this.updateButtons();
     }
 
@@ -708,6 +719,11 @@ export class CardEditorModal extends Modal {
     private markCloze() {
         if (this.busy) return;
         this.setPreview(false);
+        // The parser reads a cloze on one line only
+        if (this.front.selectedText.includes("\n")) {
+            new Notice(t("CARD_EDITOR_CLOZE_ONE_LINE"));
+            return;
+        }
         const { open, close } = clozeMarkers(this.settings.clozePatterns[0]);
         this.front.wrapSelection(open, close);
     }
@@ -831,9 +847,7 @@ export class CardEditorModal extends Modal {
         }
         this.undoSteps.clear();
         this.disarmDelete();
-        // Nothing to show on a new card: back to typing
-        this.preview = false;
-        this.unloadPreview();
+        // The preview stays on: showSide() renders the new, empty card
         this.sides.forEach((side) => side.reset(this.blankSide()));
         this.showSide(this.front);
         this.front.focus();
@@ -857,7 +871,7 @@ export class CardEditorModal extends Modal {
             const saved = await this.runSave();
             if (!saved || this.isClosed) return;
         }
-        steps.stepped(direction);
+        steps.stepped(direction, this.preview);
         this.close();
     }
 

@@ -871,9 +871,9 @@ describe("CardEditorModal previous / next card", () => {
     const prev = () => iconButton("Previous card");
     const next = () => iconButton("Next card");
 
-    function openStepping(prevCard: boolean, nextCard: boolean) {
+    function openStepping(prevCard: boolean, nextCard: boolean, preview = false) {
         const cb = callbacks();
-        const stepped = jest.fn<void, [-1 | 1]>();
+        const stepped = jest.fn<void, [-1 | 1, boolean]>();
         const opts: CardEditorOptions = {
             kind: "edit",
             title: "Biology",
@@ -882,7 +882,7 @@ describe("CardEditorModal previous / next card", () => {
             save: cb.save,
             closed: cb.closed,
             delete: cb.delete,
-            steps: { prev: prevCard, next: nextCard, stepped },
+            steps: { prev: prevCard, next: nextCard, preview, stepped },
         };
         new CardEditorModal(testApp(), SETTINGS, opts).open();
         return { cb, stepped };
@@ -915,7 +915,7 @@ describe("CardEditorModal previous / next card", () => {
             front: textOnly("Q"),
             back: textOnly("A2"),
         });
-        expect(stepped).toHaveBeenCalledWith(1);
+        expect(stepped).toHaveBeenCalledWith(1, false);
         expect(cb.save.mock.invocationCallOrder[0]).toBeLessThan(
             stepped.mock.invocationCallOrder[0],
         );
@@ -927,8 +927,16 @@ describe("CardEditorModal previous / next card", () => {
         prev().click();
         await flush();
         expect(cb.save).not.toHaveBeenCalled();
-        expect(stepped).toHaveBeenCalledWith(-1);
+        expect(stepped).toHaveBeenCalledWith(-1, false);
         expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("the preview stays on for the next card", async () => {
+        const { stepped } = openStepping(true, true, true);
+        expect($(".sr-card-editor-text-wrap.is-preview")).not.toBeNull();
+        next().click();
+        await flush();
+        expect(stepped).toHaveBeenCalledWith(1, true);
     });
 
     test("a failed save stays on the card", async () => {
@@ -1053,6 +1061,26 @@ describe("CardEditorModal card types", () => {
         expect(ta.selectionStart).toBe(ta.value.length - 2);
     });
 
+    test("Mark as cloze refuses a selection over several lines", () => {
+        openAdd();
+        pick("Cloze");
+        const ta = textAreas()[0];
+        type(0, "line a\nline b");
+        ta.setSelectionRange(2, 9);
+        iconButton("Mark as cloze").click();
+        expect(ta.value).toBe("line a\nline b");
+        expect(Notice).toHaveBeenCalledWith(
+            "A cloze can't span lines. Mark the parts line by line.",
+        );
+    });
+
+    test("picking a type gives the focus back to the text", () => {
+        openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
+        textAreas()[0].blur();
+        pick("Reversed");
+        expect(document.activeElement).toBe(textAreas()[0]);
+    });
+
     test("a cloze card without a cloze is refused", async () => {
         const { cb } = openAdd();
         pick("Cloze");
@@ -1124,6 +1152,35 @@ describe("CardEditorModal preview", () => {
         expect(textAreas()[0].selectionStart).toBe("**bold** $x^2$".length);
     });
 
+    test("the text area keeps the focus but takes no typing meanwhile", () => {
+        openAdd();
+        type(0, "Q");
+        const ta = textAreas()[0];
+        ta.focus();
+        preview().click();
+        expect(document.activeElement).toBe(ta);
+        expect(ta.readOnly).toBe(true);
+        // A tap on the preview doesn't take the focus from the text area
+        const down = new Event("pointerdown", { bubbles: true, cancelable: true });
+        previewEls()[0].dispatchEvent(down);
+        expect(down.defaultPrevented).toBe(true);
+        previewEls()[0].click();
+        expect(ta.readOnly).toBe(false);
+        expect(document.activeElement).toBe(ta);
+    });
+
+    test("stays on after Save & next", async () => {
+        openAdd();
+        type(0, "Q");
+        type(1, "A");
+        preview().click();
+        saveNext().click();
+        await flush();
+        expect(preview().getAttribute("aria-pressed")).toBe("true");
+        expect($(".sr-card-editor-text-wrap.is-preview")).not.toBeNull();
+        expect(previewEls()[0].textContent).toBe("");
+    });
+
     test("stays on when switching sides, shows the other side; unloaded when off and closed", () => {
         const { modal } = openAdd();
         type(0, "Q");
@@ -1145,15 +1202,19 @@ describe("CardEditorModal preview", () => {
 });
 
 describe("CardEditorModal decks", () => {
-    function open(decks: string[]) {
+    function open(decks: string[], settings: Partial<SRSettings> = {}) {
         const cb = callbacks();
-        new CardEditorModal(testApp(), SETTINGS, {
-            kind: "add",
-            title: "Biology",
-            decks,
-            draft: null,
-            ...cb,
-        }).open();
+        new CardEditorModal(
+            testApp(),
+            { ...SETTINGS, ...settings },
+            {
+                kind: "add",
+                title: "Biology",
+                decks,
+                draft: null,
+                ...cb,
+            },
+        ).open();
     }
     const deckLine = () => $(".sr-card-editor-decks");
 
@@ -1169,6 +1230,16 @@ describe("CardEditorModal decks", () => {
     test("no deck: says the note is no flashcard note", () => {
         open([]);
         expect(deckLine().textContent).toContain("has no #flashcards tag");
+        expect(deckLine().hasClass("is-warning")).toBe(true);
+    });
+
+    test("folders as decks: a folder is the deck, a note at the vault root has none", () => {
+        open(["Biology/Cells"], { convertFoldersToDecks: true });
+        expect(deckLine().textContent).toBe("Deck: Biology/Cells");
+        document.body.replaceChildren();
+        open([], { convertFoldersToDecks: true });
+        expect(deckLine().textContent).toContain("vault root are in no deck");
+        expect(deckLine().textContent).not.toContain("tag");
         expect(deckLine().hasClass("is-warning")).toBe(true);
     });
 });

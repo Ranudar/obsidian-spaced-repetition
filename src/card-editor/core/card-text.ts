@@ -220,17 +220,30 @@ export function composeCardText(
 /**
  * Without an end marker, a blank line ends a multi-line or cloze card. Blank lines typed in a side
  * are therefore kept as a "<br>" line, which shows as an empty line too.
+ * With an end marker, a blank line still ends a card while the parser doesn't know its type yet:
+ * in the front of a basic or reversed card (before the separator) and in a cloze text before its
+ * first line with a cloze. Only those are protected then, the back's blank lines are kept.
  * Blank lines inside code blocks are left alone, the parser reads code blocks as a whole.
  */
-export function protectBlankLines(text: string, settings: SRSettings): string {
-    if (settings.multilineCardEndMarker) return text;
+export function protectBlankLines(
+    text: string,
+    settings: SRSettings,
+    part: "front" | "back" | "cloze" = "front",
+): string {
+    if (settings.multilineCardEndMarker && part === "back") return text;
+    const crafter = part === "cloze" ? new ClozeCrafter(settings.clozePatterns) : null;
+    // Only with an end marker: whether a line so far told the parser the card's type
+    let typeKnown = false;
     let fence: string | null = null;
     return text
         .split("\n")
         .map((line) => {
             const inCode = fence !== null;
             fence = parserFenceAfter(fence, line);
-            return !inCode && line.trim() === "" ? "<br>" : line;
+            const protect = !settings.multilineCardEndMarker || !typeKnown;
+            // The parser knows a cloze card from its first line with a cloze, outside code blocks
+            if (crafter && !inCode && fence === null && crafter.isClozeNote(line)) typeKnown = true;
+            return protect && !inCode && line.trim() === "" ? "<br>" : line;
         })
         .join("\n");
 }

@@ -231,6 +231,12 @@ export class SideEditor {
         this.textArea.setSelectionRange(end, end);
     }
 
+    /** The text selected in the text area; "" with only a cursor */
+    get selectedText(): string {
+        const ta = this.textArea;
+        return ta.value.substring(ta.selectionStart ?? 0, ta.selectionEnd ?? 0);
+    }
+
     /**
      * Puts open and close around the selected text, like typing it: the cursor then goes after
      * close, or between the two when nothing was selected
@@ -246,11 +252,13 @@ export class SideEditor {
 
     /**
      * Shows what render() puts into the text zone in place of the text area (e.g. the text
-     * rendered); null: back to the text area
+     * rendered); null: back to the text area. The text area keeps the focus, so the soft keyboard
+     * and the editor's keys stay, but is read-only meanwhile: nothing is typed into hidden text.
      */
     setPreview(render: ((el: HTMLElement) => void) | null): void {
         this.previewEl.empty();
         this.textWrap.toggleClass("is-preview", render !== null);
+        this.textArea.readOnly = render !== null;
         if (render !== null) render(this.previewEl);
     }
 
@@ -291,6 +299,8 @@ export class SideEditor {
     };
 
     private onPreviewPointerDown = (evt: PointerEvent) => {
+        // The text area keeps the focus, the tap then goes back to typing in it
+        evt.preventDefault();
         this.previewPalm = this.opts.isPalm?.(evt) ?? false;
     };
 

@@ -36,7 +36,8 @@ Under the note's name, a small line shows the deck the card will go into: from t
 flashcard tags (`#flashcards/medicine` shows as "Deck: medicine", plain `#flashcards` as "Deck:
 flashcards"), or, with `Convert folders to decks and subdecks?` on, the note's folder. A note with
 several flashcard tags shows all its decks. If the note has none of your flashcard tags, that line
-says so instead (see [Flashcard tag](#where-the-card-goes)).
+says so instead (see [Flashcard tag](#where-the-card-goes)); with folders as decks, a note at the
+vault root is in no deck, and the line says that.
 
 ### Card Type
 
@@ -55,7 +56,8 @@ default. Single-line cards (`::`, `:::`) can't be added with the editor.
 switch; the text zone fills the editor and the save buttons take the whole column beside it. Type
 the text, then select a part to ask for and tap **Mark as cloze** (the highlighter in the tool row):
 it puts your first [cloze pattern](cloze-cards.md) around the selection, for example `==four==`.
-Without a selection it inserts the empty pattern, with the cursor inside. A cloze card without a
+Without a selection it inserts the empty pattern, with the cursor inside. A cloze stays on one
+line: mark a selection over several lines line by line. A cloze card without a
 marked part is not saved ("Mark at least one part as cloze").
 
 Switching between Basic and Reversed keeps both sides. Switching to Cloze keeps the front's text
@@ -138,8 +140,10 @@ handwriting still shows its pen zone, so you can change it.
 
 The eye in the tool row shows the side's text rendered as in a note: formatting, LaTeX, code,
 links and, for cloze cards, the marked parts. Tap the preview (or the eye again) to go back to
-typing, with the cursor at the end of the text. The preview stays on when you switch sides, until
-you turn it off; it starts off each time the editor opens, and after **Save & next**. The side's
+typing, with the cursor at the end of the text. The preview stays on when you switch sides, after
+**Save & next** and when you step to the previous or next card with ‹ ›, until you turn it off; it
+starts off each time the editor opens. While it shows, typing changes nothing; the cursor
+stays in the text. The side's
 handwriting is not part of the preview, it stays in the pen zone above.
 
 ### Typing

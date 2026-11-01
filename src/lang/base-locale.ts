@@ -416,12 +416,14 @@ export interface IBaseLocale {
 
     // Card editor > notices
     CARD_EDITOR_NO_FLASHCARD_TAG: string;
+    CARD_EDITOR_NO_DECK_FOLDER: string;
     CARD_EDITOR_SIDES_EMPTY: string;
     CARD_EDITOR_FRONT_EMPTY: string;
     CARD_EDITOR_BACK_EMPTY: string;
     CARD_EDITOR_CARD_EMPTY: string;
     CARD_EDITOR_NO_CLOZE: string;
     CARD_EDITOR_CLOZE_NO_INK: string;
+    CARD_EDITOR_CLOZE_ONE_LINE: string;
     CARD_EDITOR_TO_REVERSED: string;
     CARD_EDITOR_TO_BASIC: string;
     CARD_EDITOR_SIDE_HAS_MARKER: string;

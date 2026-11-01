@@ -487,6 +487,8 @@ const en: IBaseLocale = {
     // Card editor > notices
     CARD_EDITOR_NO_FLASHCARD_TAG:
         "This note has no ${tag} tag yet. Add it so the new cards are picked up for review.",
+    CARD_EDITOR_NO_DECK_FOLDER:
+        "Notes at the vault root are in no deck. Move the note into a folder so its cards are picked up for review.",
     CARD_EDITOR_SIDES_EMPTY: "Fill in both sides of the card first.",
     CARD_EDITOR_FRONT_EMPTY: "Front is empty",
     CARD_EDITOR_BACK_EMPTY: "Back is empty",
@@ -494,6 +496,7 @@ const en: IBaseLocale = {
     CARD_EDITOR_NO_CLOZE: "Mark at least one part as cloze",
     CARD_EDITOR_CLOZE_NO_INK:
         "Handwriting can't go into a cloze card. Clear the handwriting first, or keep the card basic.",
+    CARD_EDITOR_CLOZE_ONE_LINE: "A cloze can't span lines. Mark the parts line by line.",
     CARD_EDITOR_TO_REVERSED: "The reverse direction becomes a new card",
     CARD_EDITOR_TO_BASIC: "The reverse direction's schedule is dropped",
     CARD_EDITOR_SIDE_HAS_MARKER:

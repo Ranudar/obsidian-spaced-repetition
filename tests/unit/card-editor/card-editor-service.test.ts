@@ -1019,30 +1019,32 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
 
     test("next card saves the changes, opens the next card's editor; rescanned once at the end", async () => {
         const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
-        expect(opts.steps).toMatchObject({ prev: false, next: true });
+        expect(opts.steps).toMatchObject({ prev: false, next: true, preview: false });
 
         // As the editor steps: save, stepped, closed
         await opts.save({
             front: text("What is the powerhouse of the eukaryotic cell?"),
             back: unchanged(opts.initial.back),
         });
-        opts.steps.stepped(1);
+        // With the preview on, the next editor shows it too
+        opts.steps.stepped(1, true);
         opts.closed();
         for (let i = 0; i < 20 && ModalMock.mock.calls.length < 2; i++) await Promise.resolve();
         expect(ModalMock).toHaveBeenCalledTimes(2);
         const second = ModalMock.mock.calls[1][2];
         if (second.kind !== "edit") throw new Error("not opened for editing");
         expect(second.initial.front.text).toEqual("Draw a cell");
-        expect(second.steps).toMatchObject({ prev: true, next: false });
+        expect(second.steps).toMatchObject({ prev: true, next: false, preview: true });
         expect(sync).not.toHaveBeenCalled();
 
         // Back to the first card, without changes: nothing is written
-        second.steps.stepped(-1);
+        second.steps.stepped(-1, false);
         second.closed();
         for (let i = 0; i < 20 && ModalMock.mock.calls.length < 3; i++) await Promise.resolve();
         const third = ModalMock.mock.calls[2][2];
         if (third.kind !== "edit") throw new Error("not opened for editing");
         expect(third.initial.front.text).toEqual("What is the powerhouse of the eukaryotic cell?");
+        expect(third.steps.preview).toBe(false);
         third.closed();
         await done;
 

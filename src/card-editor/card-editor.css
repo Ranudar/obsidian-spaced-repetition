@@ -195,14 +195,20 @@ img[src*="sr-ink-"] {
     color: var(--text-warning);
 }
 
-/* The card type, with ▾ for its menu */
+/* The card type, with ▾ for its menu; may shrink, so ✕ stays on a narrow phone */
 .sr-card-editor-header > button.sr-card-editor-type {
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 0;
+    /* A block, not Obsidian's flex button, so the text can end in an ellipsis */
+    display: block;
     height: 30px;
+    line-height: 30px;
     padding: 0 var(--size-4-2);
     border-radius: var(--radius-l);
     font-size: var(--font-ui-smaller);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* A cloze card being edited: its type, nothing to pick */
@@ -490,8 +496,9 @@ img[src*="sr-ink-"] {
     display: block;
 }
 
+/* Transparent, not hidden: the text area keeps the focus, so the soft keyboard stays open */
 .sr-card-editor-text-wrap.is-preview > .sr-card-editor-text {
-    visibility: hidden;
+    opacity: 0;
 }
 
 .sr-card-editor-text-wrap.is-preview.is-empty .sr-card-editor-text-hint {
