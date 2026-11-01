@@ -18,6 +18,10 @@
 
 ![flashcard-settings-scheduling-data](https://github.com/user-attachments/assets/200bb976-c631-4d73-82a5-12ba7e140339)
 
+### Card Editor
+
+See [Card Editor settings](flashcards/card-editor.md#settings).
+
 ---
 
 ## Note Settings

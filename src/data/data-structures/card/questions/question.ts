@@ -276,6 +276,11 @@ export class Question {
     }
 
     updateQuestionWithinNoteText(noteText: string, settings: SRSettings): string {
+        return this.replaceQuestionWithinNoteText(noteText, settings) ?? noteText;
+    }
+
+    /** Like updateQuestionWithinNoteText, but null when the question's text is not in the note */
+    private replaceQuestionWithinNoteText(noteText: string, settings: SRSettings): string | null {
         const originalText: string = this.questionText.original;
 
         // Get the entire text for the question including:
@@ -284,7 +289,7 @@ export class Question {
         //      3. the schedule HTML comment (if present)
         const replacementText = this.formatForNote(settings);
 
-        let newText = MultiLineTextFinder.findAndReplace(noteText, originalText, replacementText);
+        const newText = MultiLineTextFinder.findAndReplace(noteText, originalText, replacementText);
         if (newText) {
             // Don't support changing the textDirection setting
             this.questionText = QuestionText.create(
@@ -299,17 +304,32 @@ export class Question {
                     100,
                 )} in note: ${noteText.substring(0, 100)}`,
             );
-            newText = noteText;
+            return null;
         }
         return newText;
     }
 
-    async writeQuestion(settings: SRSettings): Promise<void> {
+    /**
+     * Writes the question to its note.
+     * Returns false, without writing, when the question's text is no longer in the note
+     * (e.g. the note was changed since it was parsed).
+     */
+    async writeQuestion(settings: SRSettings): Promise<boolean> {
         const fileText: string = await this.note.file.read();
 
-        const newText: string = this.updateQuestionWithinNoteText(fileText, settings);
-        await this.note.file.write(newText);
+        // replaceQuestionWithinNoteText already points the question at the new text;
+        // if the write fails, the question must still match the note on disk
+        const previous = this.questionText;
+        const newText = this.replaceQuestionWithinNoteText(fileText, settings);
+        if (newText === null) return false;
+        try {
+            await this.note.file.write(newText);
+        } catch (err) {
+            this.questionText = previous;
+            throw err;
+        }
         this.hasChanged = false;
+        return true;
     }
 
     formatTopicPathList(): string {

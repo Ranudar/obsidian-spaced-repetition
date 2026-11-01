@@ -1,6 +1,7 @@
 import { now } from "moment";
 import { App, MarkdownView, Notice, Platform } from "obsidian";
 
+import { EditQuestionResult } from "src/card-editor/card-editor-service";
 import { DataManager } from "src/data/data-manager";
 import { Card } from "src/data/data-structures/card/card";
 import { Question } from "src/data/data-structures/card/questions/question";
@@ -20,7 +21,6 @@ import { CardContainer } from "src/ui/obsidian-ui-components/content-container/c
 import CardInfoNotice from "src/ui/obsidian-ui-components/content-container/card-container/toolbar/toolbar-buttons/card-info-notice";
 import { DeckContainer } from "src/ui/obsidian-ui-components/content-container/deck-container/deck-container";
 import { ConfirmationModal } from "src/ui/obsidian-ui-components/modals/confirmation-modal";
-import { FlashcardEditModal } from "src/ui/obsidian-ui-components/modals/edit-modal";
 import { ReviewQueueLoader } from "src/ui/review-queue-loader";
 import { UIManager, UIState } from "src/ui/ui-manager";
 import EmulatedPlatform from "src/utils/platform-detector";
@@ -372,44 +372,64 @@ export default class ContentManager {
         );
     }
 
-    private async _doEditQuestionText(): Promise<void> {
-        if (this.reviewSequencer === null) return;
-        const currentCard: Card | null = this.reviewSequencer.currentCard;
-        const currentQ: Question = this.reviewSequencer.currentQuestion;
+    /**
+     * Opens the card editor for the card shown in the review window, like the toolbar's Edit button.
+     * Does nothing while no card is shown, e.g. when the editor is already open.
+     */
+    public async editCurrentQuestion(): Promise<void> {
+        const state = this.uiManager.uiState;
+        if (state !== UIState.CardFront && state !== UIState.CardBack) return;
+        await this._doEditQuestionText();
+    }
 
-        // Just the question/answer text; without any preceding topic tag
-        const textPrompt = currentQ.questionText.actualQuestion;
+    private async _doEditQuestionText(): Promise<void> {
+        const sequencer = this.reviewSequencer;
+        if (sequencer === null) return;
+        const currentQ: Question = sequencer.currentQuestion;
+        const service = this.plugin.cardEditorService;
+
         const currentUIState = this.uiManager.uiState;
         this.uiManager.setUIState(UIState.EditModal);
-        const editModal = FlashcardEditModal.Prompt(
-            this.app,
-            this.settings,
-            currentCard,
-            textPrompt,
-            currentQ.questionText.textDirection,
-        );
-        await editModal
-            .then(async (modifiedCardText) => {
-                if (this.reviewSequencer === null) return;
-                await this.reviewSequencer.updateCurrentQuestionTextAndCards(modifiedCardText);
-                this.uiManager.setUIState(currentUIState);
+        let result: EditQuestionResult | null = null;
+        try {
+            // Only called when the text changed: ink-only changes leave the note (and its
+            // schedule) untouched
+            result = await service.editQuestion(
+                currentQ,
+                (text) => sequencer.updateCurrentQuestionTextAndCards(text),
+                async () => {
+                    await sequencer.deleteCurrentCardFromNote();
+                    return true;
+                },
+            );
+        } catch (error) {
+            console.error("SR: editing the card failed", error);
+            new Notice(t("CARD_EDITOR_EDIT_FAILED", { error: String(error) }));
+        }
+        this.uiManager.setUIState(currentUIState);
+        if (result === null || this.reviewSequencer === null) return;
+        if (result.deleted) {
+            await this._showNextCard();
+            return;
+        }
 
-                if (this.sessionData !== null) {
-                    if (this.uiManager.uiState === UIState.CardFront) {
-                        await this.cardContainer.drawCardFront(this.sessionData, this.settings);
-                    }
+        service.refreshImages(result.changedImages);
 
-                    if (this.uiManager.uiState === UIState.CardBack) {
-                        await this.cardContainer.drawBack(
-                            this.sessionData,
-                            this.reviewMode,
-                            this.settings,
-                            this._determineButtonSchedule.bind(this),
-                        );
-                    }
-                }
-            })
-            .catch((reason) => console.log(reason));
+        // Always redraw, so rewritten images don't show stale ink
+        if (this.sessionData !== null) {
+            if (this.uiManager.uiState === UIState.CardFront) {
+                await this.cardContainer.drawCardFront(this.sessionData, this.settings);
+            }
+
+            if (this.uiManager.uiState === UIState.CardBack) {
+                await this.cardContainer.drawBack(
+                    this.sessionData,
+                    this.reviewMode,
+                    this.settings,
+                    this._determineButtonSchedule.bind(this),
+                );
+            }
+        }
     }
 
     public async _jumpToCurrentCard(): Promise<void> {

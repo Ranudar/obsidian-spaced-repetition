@@ -118,7 +118,8 @@ export class UnitTestSRFile implements ISRNoteTFile {
     }
 
     get basename(): string {
-        return "";
+        const name = this._path.substring(this._path.lastIndexOf("/") + 1);
+        return name.replace(/\.[^.]*$/, "");
     }
 
     get tfile(): TFile {

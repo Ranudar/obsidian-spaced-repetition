@@ -420,6 +420,64 @@ const en: IBaseLocale = {
     COPY: "Copy",
     NO_DECKS_TO_REVIEW:
         "There are no decks with cards to review. Make sure you have created some flashcards by adding the tag 'flashcards' to a note and then add cards to it (see plugin page for details on that). In case you did all that and still don't see any decks here, then it will probably caused by a bug in the plugin. There is a known bug that happens when one reviews the cards very fast, then the system bugs out and the decks are not shown. Please try again to open the deck list after a few seconds.",
+
+    // Card editor > settings
+    GROUP_CARD_EDITOR: "Card editor",
+    CARD_EDITOR_PEN_ONLY: "Pen only",
+    CARD_EDITOR_PEN_ONLY_DESC:
+        "Ignore finger touches on the writing fields, so your hand can rest on the screen. Turn off to write with a finger or mouse.",
+    CARD_EDITOR_IMAGE_FOLDER: "Image folder",
+    CARD_EDITOR_IMAGE_FOLDER_DESC:
+        "Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.",
+    CARD_EDITOR_GUIDE: "Guide lines",
+    CARD_EDITOR_GUIDE_LINED: "Lined",
+    CARD_EDITOR_GUIDE_DOTTED: "Dotted",
+    CARD_EDITOR_GUIDE_GRID: "Grid",
+    CARD_EDITOR_GUIDE_NONE: "None",
+    CARD_EDITOR_GUIDE_SPACING: "Line spacing",
+    CARD_EDITOR_GUIDE_SPACING_DESC: "Distance between guide lines, in pixels.",
+    CARD_EDITOR_PEN_SIZE: "Pen thickness",
+
+    // Card editor > command
+    ADD_CARD: "Add card",
+
+    // Card editor > editor
+    CARD_EDITOR_FRONT: "Front",
+    CARD_EDITOR_BACK: "Back",
+    CARD_EDITOR_CLOZE: "Card",
+    CARD_EDITOR_TEXT_PLACEHOLDER: "Type…",
+    CARD_EDITOR_INK_PLACEHOLDER: "Write here with the pen",
+    CARD_EDITOR_PEN_THIN: "Thin",
+    CARD_EDITOR_PEN_MEDIUM: "Medium",
+    CARD_EDITOR_PEN_THICK: "Thick",
+    CARD_EDITOR_ERASER: "Eraser (or hold the pen button)",
+    CARD_EDITOR_UNDO: "Undo",
+    CARD_EDITOR_CLEAR_SIDE: "Clear side",
+    CARD_EDITOR_CLOSE: "Close",
+    CARD_EDITOR_DISCARD: "Delete card",
+    CARD_EDITOR_DISCARD_CONFIRM: "Tap again to delete",
+    CARD_EDITOR_DELETE_FAILED: "Deleting the card failed: ${error}",
+    CARD_EDITOR_INK_TRASHED: "Handwriting moved to the trash: ${name}",
+    CARD_EDITOR_SAVE_NEXT: "Save & next",
+    CARD_EDITOR_SAVE_CLOSE: "Save & close",
+    CARD_EDITOR_ADDED_BADGE: "${count} added",
+    CARD_EDITOR_EDIT_HANDWRITTEN: "Edit handwritten card",
+
+    // Card editor > notices
+    CARD_EDITOR_NO_FLASHCARD_TAG:
+        "This note has no ${tag} tag yet. Add it so the new cards are picked up for review.",
+    CARD_EDITOR_SIDES_EMPTY: "Fill in both sides of the card first.",
+    CARD_EDITOR_SIDE_HAS_MARKER:
+        'A side can\'t have a line that is only "${line}": that line separates or ends cards. Change it, e.g. add a word to it.',
+    CARD_EDITOR_SIDE_HAS_CARD_SYNTAX:
+        'Spaced Repetition would read text on the side "${side}" as card syntax (e.g. "::"), so the card would not be read back as typed. Change that text, e.g. put it in `code`.',
+    CARD_EDITOR_PLUGIN_UNLOADED: "Spaced Repetition was turned off, so the card was not saved.",
+    CARD_EDITOR_SAVE_FAILED: "Could not save the card: ${error}",
+    CARD_EDITOR_EDIT_FAILED: "This card can't be edited: ${error}",
+    CARD_EDITOR_CARD_NOT_FOUND: "This image is not part of any card in this note.",
+    CARD_EDITOR_TEXT_NOT_FOUND:
+        "The card's text in the note has changed since the editor opened. Close the editor and try again.",
+    CARD_EDITOR_IMAGE_FOLDER_IS_FILE: "The image folder ${path} is a file.",
 };
 
 export default en;

@@ -1,7 +1,7 @@
 import { Setting, SettingGroup } from "obsidian";
 
 import { DataManager } from "src/data/data-manager";
-import { DEFAULT_SETTINGS } from "src/data/settings";
+import { CardEditorGuide, DEFAULT_SETTINGS } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
 import { t, tHTML } from "src/lang/helpers";
 import SRPlugin from "src/main";
@@ -524,6 +524,85 @@ export class FlashcardsPage extends SettingsPage {
                             });
                     });
                 }
+            });
+
+        new SettingGroup(this.containerEl)
+            .setHeading(t("GROUP_CARD_EDITOR"))
+            .addSetting((setting: Setting) => {
+                setting
+                    .setName(t("CARD_EDITOR_PEN_ONLY"))
+                    .setDesc(t("CARD_EDITOR_PEN_ONLY_DESC"))
+                    .addToggle((toggle) =>
+                        toggle
+                            .setValue(this.settingsManager.settings.cardEditorPenOnly)
+                            .onChange(async (value) => {
+                                this.settingsManager.settings.cardEditorPenOnly = value;
+                                await this.settingsManager.save();
+                            }),
+                    );
+            })
+            .addSetting((setting: Setting) => {
+                setting
+                    .setName(t("CARD_EDITOR_IMAGE_FOLDER"))
+                    .setDesc(t("CARD_EDITOR_IMAGE_FOLDER_DESC"))
+                    .addText((text) =>
+                        text
+                            .setPlaceholder(DEFAULT_SETTINGS.cardEditorImageFolder)
+                            .setValue(this.settingsManager.settings.cardEditorImageFolder)
+                            .onChange((value) => {
+                                applySettingsUpdate(async () => {
+                                    // Stored without leading / trailing slashes
+                                    this.settingsManager.settings.cardEditorImageFolder = value
+                                        .trim()
+                                        .replace(/^\/+|\/+$/g, "");
+                                    await this.settingsManager.save();
+                                });
+                            }),
+                    );
+            })
+            .addSetting((setting: Setting) => {
+                setting.setName(t("CARD_EDITOR_GUIDE")).addDropdown((dropdown) =>
+                    dropdown
+                        .addOptions({
+                            lined: t("CARD_EDITOR_GUIDE_LINED"),
+                            dotted: t("CARD_EDITOR_GUIDE_DOTTED"),
+                            grid: t("CARD_EDITOR_GUIDE_GRID"),
+                            none: t("CARD_EDITOR_GUIDE_NONE"),
+                        })
+                        .setValue(this.settingsManager.settings.cardEditorGuide)
+                        .onChange(async (value) => {
+                            this.settingsManager.settings.cardEditorGuide =
+                                value as CardEditorGuide;
+                            await this.settingsManager.save();
+                        }),
+                );
+            })
+            .addSetting((setting: Setting) => {
+                setting
+                    .setName(t("CARD_EDITOR_GUIDE_SPACING"))
+                    .setDesc(t("CARD_EDITOR_GUIDE_SPACING_DESC"))
+                    .addSlider((slider) =>
+                        slider
+                            .setLimits(24, 80, 2)
+                            .setValue(this.settingsManager.settings.cardEditorGuideSpacing)
+                            .setDynamicTooltip()
+                            .onChange(async (value) => {
+                                this.settingsManager.settings.cardEditorGuideSpacing = value;
+                                await this.settingsManager.save();
+                            }),
+                    );
+            })
+            .addSetting((setting: Setting) => {
+                setting.setName(t("CARD_EDITOR_PEN_SIZE")).addSlider((slider) =>
+                    slider
+                        .setLimits(1, 8, 0.5)
+                        .setValue(this.settingsManager.settings.cardEditorPenSize)
+                        .setDynamicTooltip()
+                        .onChange(async (value) => {
+                            this.settingsManager.settings.cardEditorPenSize = value;
+                            await this.settingsManager.save();
+                        }),
+                );
             });
     }
 }

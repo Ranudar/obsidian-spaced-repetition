@@ -21,10 +21,6 @@
     }
 }
 
-.sr-edit-view .sr-response {
-    border: none;
-}
-
 .sr-response-button > * {
     display: none;
 }

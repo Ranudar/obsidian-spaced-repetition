@@ -353,4 +353,56 @@ export interface IBaseLocale {
     DEBUG_LOG: string;
     COPY: string;
     NO_DECKS_TO_REVIEW: string;
+
+    // Card editor > settings
+    GROUP_CARD_EDITOR: string;
+    CARD_EDITOR_PEN_ONLY: string;
+    CARD_EDITOR_PEN_ONLY_DESC: string;
+    CARD_EDITOR_IMAGE_FOLDER: string;
+    CARD_EDITOR_IMAGE_FOLDER_DESC: string;
+    CARD_EDITOR_GUIDE: string;
+    CARD_EDITOR_GUIDE_LINED: string;
+    CARD_EDITOR_GUIDE_DOTTED: string;
+    CARD_EDITOR_GUIDE_GRID: string;
+    CARD_EDITOR_GUIDE_NONE: string;
+    CARD_EDITOR_GUIDE_SPACING: string;
+    CARD_EDITOR_GUIDE_SPACING_DESC: string;
+    CARD_EDITOR_PEN_SIZE: string;
+
+    // Card editor > command
+    ADD_CARD: string;
+
+    // Card editor > editor
+    CARD_EDITOR_FRONT: string;
+    CARD_EDITOR_BACK: string;
+    CARD_EDITOR_CLOZE: string;
+    CARD_EDITOR_TEXT_PLACEHOLDER: string;
+    CARD_EDITOR_INK_PLACEHOLDER: string;
+    CARD_EDITOR_PEN_THIN: string;
+    CARD_EDITOR_PEN_MEDIUM: string;
+    CARD_EDITOR_PEN_THICK: string;
+    CARD_EDITOR_ERASER: string;
+    CARD_EDITOR_UNDO: string;
+    CARD_EDITOR_CLEAR_SIDE: string;
+    CARD_EDITOR_CLOSE: string;
+    CARD_EDITOR_DISCARD: string;
+    CARD_EDITOR_DISCARD_CONFIRM: string;
+    CARD_EDITOR_INK_TRASHED: string;
+    CARD_EDITOR_DELETE_FAILED: string;
+    CARD_EDITOR_SAVE_NEXT: string;
+    CARD_EDITOR_SAVE_CLOSE: string;
+    CARD_EDITOR_ADDED_BADGE: string;
+    CARD_EDITOR_EDIT_HANDWRITTEN: string;
+
+    // Card editor > notices
+    CARD_EDITOR_NO_FLASHCARD_TAG: string;
+    CARD_EDITOR_SIDES_EMPTY: string;
+    CARD_EDITOR_SIDE_HAS_MARKER: string;
+    CARD_EDITOR_SIDE_HAS_CARD_SYNTAX: string;
+    CARD_EDITOR_PLUGIN_UNLOADED: string;
+    CARD_EDITOR_SAVE_FAILED: string;
+    CARD_EDITOR_EDIT_FAILED: string;
+    CARD_EDITOR_CARD_NOT_FOUND: string;
+    CARD_EDITOR_TEXT_NOT_FOUND: string;
+    CARD_EDITOR_IMAGE_FOLDER_IS_FILE: string;
 }

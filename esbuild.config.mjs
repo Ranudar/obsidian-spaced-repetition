@@ -35,7 +35,7 @@ const moveToRootPlugin = {
 const context = await esbuild.context({
     entryPoints: ["src/main.ts"],
     bundle: true,
-    external: ["obsidian", "electron", ...builtinModules],
+    external: ["obsidian", "electron", "@codemirror/*", ...builtinModules],
     format: "cjs",
     target: "es2018",
     logLevel: "info",

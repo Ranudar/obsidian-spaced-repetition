@@ -3,6 +3,9 @@ import { t } from "src/lang/helpers";
 import { SRAlgorithmType } from "src/scheduling/algorithms/base/isr-algorithm";
 import { pathMatchesPattern } from "src/utils/fs";
 
+/** Background guides of the card editor's ink fields */
+export type CardEditorGuide = "lined" | "dotted" | "grid" | "none";
+
 export interface SRSettings {
     // flashcards
     flashcardTags: string[];
@@ -70,6 +73,14 @@ export interface SRSettings {
     openViewInNewTab: boolean;
     useCustomHotkeys: boolean;
     useCalloutsForSchedulingComments: boolean;
+
+    // card editor
+    cardEditorPenOnly: boolean;
+    // Folder for handwritten card images; empty = Obsidian's attachment location
+    cardEditorImageFolder: string;
+    cardEditorGuide: CardEditorGuide;
+    cardEditorGuideSpacing: number;
+    cardEditorPenSize: number;
 
     // algorithm
     algorithm: SRAlgorithmType;
@@ -161,6 +172,13 @@ export const DEFAULT_SETTINGS: SRSettings = {
     useCustomHotkeys: false,
     useCalloutsForSchedulingComments: false,
 
+    // card editor
+    cardEditorPenOnly: true,
+    cardEditorImageFolder: "sr-ink",
+    cardEditorGuide: "lined",
+    cardEditorGuideSpacing: 44,
+    cardEditorPenSize: 2.5,
+
     // algorithm
     algorithm: SRAlgorithmType.SM_2_OSR,
     baseEase: 250,
@@ -183,6 +201,9 @@ export const DEFAULT_SETTINGS: SRSettings = {
     preferredDateFormatForNoteReviewQueue: "MMM DD YYYY",
     preferredLocale: "-",
 };
+
+/** cardEditorPenSize's default in builds before the first release of the card editor */
+const OLD_DEFAULT_CARD_EDITOR_PEN_SIZE = 5;
 
 export function upgradeSettings(settings: SRSettings) {
     if (settings.showRibbonIcon) {
@@ -236,6 +257,20 @@ export function upgradeSettings(settings: SRSettings) {
     if (settings.fsrsDesiredRetention === null || settings.fsrsDesiredRetention === undefined) {
         settings.fsrsDesiredRetention = DEFAULT_SETTINGS.fsrsDesiredRetention;
     }
+
+    // Builds of the card editor before its first release had a pen autodetection setting and a
+    // thicker default pen (5). Data saved by them still holds both: the setting is dropped, and
+    // the old default pen size becomes the new one. The dropped key marks such data, so this
+    // happens once and a 5 chosen later on purpose is kept.
+    const raw = settings as unknown as Record<string, unknown>;
+    if ("cardEditorPenSwitchesToInk" in raw) {
+        delete raw.cardEditorPenSwitchesToInk;
+        if (settings.cardEditorPenSize === OLD_DEFAULT_CARD_EDITOR_PEN_SIZE) {
+            settings.cardEditorPenSize = DEFAULT_SETTINGS.cardEditorPenSize;
+        }
+    }
+    // They also had a default input mode; every side now holds text and handwriting at once
+    delete raw.cardEditorDefaultMode;
 
     // Only published reminder settings are upgraded here. We deliberately do not preserve
     // unpublished draft field names from this feature branch, so the shipped schema stays clean.

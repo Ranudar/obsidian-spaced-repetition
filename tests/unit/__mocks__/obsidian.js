@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 /* eslint-disable getter-return */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 
 // Minimal stand-ins for the DOM helpers Obsidian adds to HTMLElement, so UI classes can be unit tested
 Object.assign(HTMLElement.prototype, {
@@ -14,11 +14,30 @@ Object.assign(HTMLElement.prototype, {
     createDiv(o) {
         return this.createEl("div", o);
     },
+    createSpan(o) {
+        return this.createEl("span", o);
+    },
     addClass(...cls) {
         this.classList.add(...cls);
     },
     addClasses(cls) {
         this.classList.add(...cls);
+    },
+    removeClass(...cls) {
+        this.classList.remove(...cls);
+    },
+    toggleClass(cls, value) {
+        [].concat(cls).forEach((c) => this.classList.toggle(c, value));
+    },
+    hasClass(cls) {
+        return this.classList.contains(cls);
+    },
+    setAttr(name, value) {
+        if (value === null) this.removeAttribute(name);
+        else this.setAttribute(name, String(value));
+    },
+    setCssProps(props) {
+        Object.entries(props).forEach(([k, v]) => this.style.setProperty(k, v));
     },
     setText(text) {
         this.textContent = text;
@@ -28,16 +47,32 @@ Object.assign(HTMLElement.prototype, {
     },
 });
 
+// Obsidian's cross-window instanceof: a node of a popout window has that window's classes
+Node.prototype.instanceOf = function (type) {
+    const own = this.ownerDocument?.defaultView?.[type.name];
+    return this instanceof type || (typeof own === "function" && this instanceof own);
+};
+
+// Obsidian's globals for the active window, used instead of window/document in src/
+globalThis.activeWindow = window;
+globalThis.activeDocument = document;
+
 class Modal {
     constructor(app) {
         this.app = app;
-        this.modalEl = document.createElement("div");
-        this.contentEl = this.modalEl.createDiv();
+        // Same structure as Obsidian: container > background + modal > close button + content
+        this.containerEl = document.createElement("div");
+        this.containerEl.createDiv({ cls: "modal-bg" });
+        this.modalEl = this.containerEl.createDiv({ cls: "modal" });
+        this.modalEl.createDiv({ cls: "modal-close-button" });
+        this.contentEl = this.modalEl.createDiv({ cls: "modal-content" });
     }
     open() {
+        document.body.appendChild(this.containerEl);
         this.onOpen();
     }
     close() {
+        this.containerEl.remove();
         this.onClose();
     }
     onOpen() {}
@@ -66,6 +101,10 @@ class ButtonComponent {
     }
 }
 
+class TFile {}
+class TFolder {}
+class MarkdownView {}
+
 module.exports = {
     moment: {
         locale: jest.fn(() => "en"),
@@ -78,6 +117,15 @@ module.exports = {
     },
 
     Notice: jest.fn().mockImplementation(),
+    normalizePath: (path) =>
+        path
+            .replace(/[\\/]+/g, "/")
+            .replace(/^\/|\/$/g, "")
+            .trim(),
+    setIcon: jest.fn(),
     Modal,
     ButtonComponent,
+    TFile,
+    TFolder,
+    MarkdownView,
 };

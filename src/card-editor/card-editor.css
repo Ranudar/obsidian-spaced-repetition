@@ -1,0 +1,512 @@
+/* MARK: Handwritten card images */
+
+/* Ink is stored dark on a transparent background; show it light in dark themes */
+.theme-dark img[src*="sr-ink-"] {
+    filter: invert(1) hue-rotate(180deg);
+}
+
+img[src*="sr-ink-"] {
+    max-width: 100%;
+    height: auto;
+}
+
+/* A handwritten card image in a note or the review window: the image in a frame, the pencil
+   outside the frame to its right, with a clear gap, so it never sits on or next to the ink.
+   (The frame is drawn by ::after, not on the image, so the dark mode filter doesn't change it.) */
+.sr-pencil-host {
+    --sr-pencil-size: 28px;
+    --sr-pencil-gap: 8px;
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 4px calc(var(--sr-pencil-size) + var(--sr-pencil-gap) + 4px) 4px 4px;
+    vertical-align: top;
+}
+
+.sr-pencil-host::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: calc(var(--sr-pencil-size) + var(--sr-pencil-gap));
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-m);
+    pointer-events: none;
+}
+
+/* Live preview: the image is an embed in the editor, and a tap inside it doesn't place the cursor.
+   So the pencil sits outside the frame without padding that widens the embed; the space beside it
+   is the editor's, where a tap puts the cursor after the image (to delete it with Backspace). */
+.markdown-source-view .sr-pencil-host {
+    max-width: calc(100% - var(--sr-pencil-size) - var(--sr-pencil-gap));
+    padding: 4px;
+}
+
+.markdown-source-view .sr-pencil-host::after {
+    right: 0;
+}
+
+.markdown-source-view .sr-pencil-host > .sr-pencil-button {
+    right: auto;
+    left: calc(100% + var(--sr-pencil-gap));
+}
+
+.sr-pencil-host > img {
+    display: block;
+    max-width: 100%;
+}
+
+.sr-pencil-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 2;
+    width: var(--sr-pencil-size);
+    height: var(--sr-pencil-size);
+    min-width: 0;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: var(--background-secondary);
+    color: var(--text-muted);
+    box-shadow: none;
+    opacity: 0.6;
+    transition: opacity 120ms ease-in-out;
+    touch-action: none;
+    cursor: pointer;
+}
+
+/* A slightly larger area to tap than the button shows; towards the image it stays in the gap */
+.sr-pencil-button::before {
+    content: "";
+    position: absolute;
+    inset: -4px -4px -4px calc(var(--sr-pencil-gap) / -2);
+}
+
+.sr-pencil-button:hover,
+.sr-pencil-button:active,
+.sr-pencil-button:focus-visible {
+    opacity: 1;
+    color: var(--text-normal);
+}
+
+.sr-pencil-button svg {
+    width: 15px;
+    height: 15px;
+    pointer-events: none;
+}
+
+/* MARK: Card editor modal */
+
+.sr-card-editor-modal {
+    width: min(760px, 100vw);
+    height: min(900px, 92vh);
+    max-width: 100vw;
+    max-height: 100%;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Fullscreen on phones and tablets: more room to write, no background to tap by accident.
+   The height is the window's without the soft keyboard (set by the editor), so the sides don't
+   change size when the keyboard opens or closes; the editor scrolls under the keyboard instead. */
+.is-mobile .sr-card-editor-modal {
+    width: 100vw;
+    height: var(--sr-card-editor-height, 100%);
+    max-height: none;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    border-radius: 0;
+    padding-top: var(--safe-area-inset-top);
+    padding-bottom: var(--safe-area-inset-bottom);
+}
+
+.is-mobile .modal-container.sr-card-editor-container {
+    align-items: flex-start;
+    overflow-y: auto;
+}
+
+.sr-card-editor-modal .modal-content.sr-card-editor {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-4-2);
+    padding: var(--size-4-2) var(--size-4-3) var(--size-4-3);
+    overflow: hidden;
+}
+
+/* The editor has its own close button: Obsidian's (.modal-close-button before 1.14,
+   .modal-header-button since) and its header are hidden */
+.sr-card-editor-modal > .modal-close-button,
+.sr-card-editor-modal > .modal-header-button,
+.sr-card-editor-modal > .modal-header,
+.sr-card-editor-chrome-hidden {
+    display: none !important;
+}
+
+.sr-card-editor .sr-is-hidden {
+    display: none;
+}
+
+.sr-card-editor-header {
+    display: flex;
+    align-items: center;
+    gap: var(--size-4-1);
+    min-height: 40px;
+}
+
+.sr-card-editor-title-wrap {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--size-4-2);
+}
+
+.sr-card-editor-title {
+    min-width: 0;
+    font-weight: var(--font-semibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Cards added in this session */
+.sr-card-editor-counter {
+    flex: none;
+    padding: 1px var(--size-4-2);
+    border-radius: var(--radius-l);
+    background-color: rgba(var(--color-green-rgb), 0.15);
+    color: var(--text-success);
+    font-size: var(--font-ui-smaller);
+    font-weight: var(--font-semibold);
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+/* Pen thickness: a dot of the current size */
+.sr-card-editor-pen-dot {
+    --sr-pen-dot-size: 8px;
+    width: var(--sr-pen-dot-size);
+    height: var(--sr-pen-dot-size);
+    border-radius: 50%;
+    background-color: currentColor;
+}
+
+.sr-card-editor-pen-size.is-thin .sr-card-editor-pen-dot {
+    --sr-pen-dot-size: 4px;
+}
+
+.sr-card-editor-pen-size.is-thick .sr-card-editor-pen-dot {
+    --sr-pen-dot-size: 13px;
+}
+
+.sr-card-editor-icon-button {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sr-card-editor-icon-button.is-active {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.sr-card-editor-icon-button.sr-card-editor-close {
+    margin-inline-start: var(--size-4-2);
+}
+
+.sr-card-editor-icon-button:disabled {
+    opacity: 0.35;
+}
+
+.sr-card-editor-sides {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-4-3);
+}
+
+.sr-card-editor-footer {
+    display: flex;
+    align-items: center;
+    gap: var(--size-4-2);
+}
+
+.sr-card-editor-footer button {
+    height: 44px;
+    font-size: var(--font-ui-medium);
+    white-space: nowrap;
+}
+
+.sr-card-editor-footer button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.sr-card-editor-footer .sr-card-editor-discard {
+    color: var(--text-error);
+}
+
+.sr-card-editor-footer .sr-card-editor-discard.is-armed {
+    background-color: var(--background-modifier-error);
+    color: var(--text-on-accent);
+}
+
+.sr-card-editor-footer-spacer {
+    flex: 1;
+}
+
+/* MARK: Side editor */
+
+.sr-card-editor-side {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-4-1);
+}
+
+.sr-card-editor-side-header {
+    display: flex;
+    align-items: center;
+    gap: var(--size-4-2);
+    padding-inline-start: var(--size-2-1);
+}
+
+.sr-card-editor-side-label {
+    font-size: var(--font-ui-smaller);
+    font-weight: var(--font-semibold);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* One box per side: the text area of a few lines on top, a thin divider, and the ink field
+   filling the rest. Its geometry is fixed, so nothing moves while typing or writing. */
+.sr-card-editor-side-body {
+    --sr-card-editor-text-lines: 3;
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-l);
+    background-color: var(--background-primary);
+    overflow: hidden;
+}
+
+.sr-card-editor-side-body:focus-within {
+    border-color: var(--interactive-accent);
+}
+
+/*
+ * Specific enough to win over the theme's textarea rules, focus included.
+ * In a low window (landscape phone, split screen) it shrinks down to one line before the ink
+ * field below gets smaller than its 60 px (its much larger flex-shrink takes nearly all of the
+ * shrinking first).
+ */
+.sr-card-editor-side-body > .sr-card-editor-text {
+    flex: 0 100 auto;
+    box-sizing: border-box;
+    width: 100%;
+    height: calc(
+        var(--sr-card-editor-text-lines) * var(--font-text-size) * var(--line-height-normal) + 2 *
+            var(--size-4-2)
+    );
+    min-height: calc(var(--font-text-size) * var(--line-height-normal) + 2 * var(--size-4-2));
+    max-height: none;
+    margin: 0;
+    padding: var(--size-4-2) var(--size-4-3);
+    resize: none;
+    overflow-y: auto;
+    border: none;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+    font-size: var(--font-text-size);
+    line-height: var(--line-height-normal);
+    color: var(--text-normal);
+}
+
+.sr-card-editor-side-body > .sr-card-editor-text:focus,
+.sr-card-editor-side-body > .sr-card-editor-text:focus-visible {
+    box-shadow: none;
+    outline: none;
+}
+
+/*
+ * The writing area: a shade off the text area, so the two read as separate parts of the box.
+ * The divider is its border, not the text area's: the text area's height is exactly its lines.
+ * It always fits inside the box (no min-height that could push it past the box' bottom edge,
+ * where it would be cut off but still take ink): in a very low box it gets smaller instead.
+ */
+.sr-card-editor-ink {
+    flex: 1 1 60px;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+    border-top: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary-alt);
+}
+
+.sr-card-editor-ink > .sr-ink-field {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+}
+
+/* Cloze cards: the text area alone fills the box */
+.sr-card-editor-side.is-text-only .sr-card-editor-side-body > .sr-card-editor-text {
+    flex: 1;
+    height: auto;
+}
+
+/* MARK: Ink field */
+
+.sr-ink-field {
+    --sr-ink-guide-spacing: 44px;
+    --sr-ink-guide-color: var(--background-modifier-border);
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-l);
+    background-color: var(--background-primary);
+    overflow: hidden;
+    outline: none;
+}
+
+.sr-ink-field:focus-visible {
+    border-color: var(--interactive-accent);
+}
+
+/* Guides are a background, so the canvas only has to draw strokes */
+.sr-ink-field.sr-ink-guide-lined {
+    background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent calc(var(--sr-ink-guide-spacing) - 1px),
+        var(--sr-ink-guide-color) calc(var(--sr-ink-guide-spacing) - 1px),
+        var(--sr-ink-guide-color) var(--sr-ink-guide-spacing)
+    );
+}
+
+.sr-ink-field.sr-ink-guide-grid {
+    background-image:
+        repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent calc(var(--sr-ink-guide-spacing) - 1px),
+            var(--sr-ink-guide-color) calc(var(--sr-ink-guide-spacing) - 1px),
+            var(--sr-ink-guide-color) var(--sr-ink-guide-spacing)
+        ),
+        repeating-linear-gradient(
+            to right,
+            transparent 0,
+            transparent calc(var(--sr-ink-guide-spacing) - 1px),
+            var(--sr-ink-guide-color) calc(var(--sr-ink-guide-spacing) - 1px),
+            var(--sr-ink-guide-color) var(--sr-ink-guide-spacing)
+        );
+}
+
+.sr-ink-field.sr-ink-guide-dotted {
+    background-image: radial-gradient(circle, var(--sr-ink-guide-color) 1.5px, transparent 1.5px);
+    background-size: var(--sr-ink-guide-spacing) var(--sr-ink-guide-spacing);
+    background-position: calc(var(--sr-ink-guide-spacing) / 2) calc(var(--sr-ink-guide-spacing) / 2);
+}
+
+.sr-ink-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* The eraser circle: moved with a transform, so following the pen repaints no strokes */
+.sr-ink-eraser-cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--sr-ink-eraser-size, 16px);
+    height: var(--sr-ink-eraser-size, 16px);
+    transform: translate(var(--sr-ink-eraser-x, 0), var(--sr-ink-eraser-y, 0));
+    box-sizing: border-box;
+    border: 1px solid var(--text-muted);
+    border-radius: 50%;
+    background-color: rgba(var(--mono-rgb-100), 0.08);
+    pointer-events: none;
+    display: none;
+    will-change: transform;
+}
+
+.sr-ink-eraser-cursor.is-visible {
+    display: block;
+}
+
+/* Top left, like the text area's placeholder above it */
+.sr-ink-placeholder {
+    position: absolute;
+    top: var(--size-4-2);
+    inset-inline-start: var(--size-4-3);
+    font-size: var(--font-text-size);
+    line-height: var(--line-height-normal);
+    color: var(--text-faint);
+    pointer-events: none;
+    display: none;
+}
+
+.sr-ink-field.is-empty .sr-ink-placeholder {
+    display: block;
+}
+
+/* MARK: Mobile */
+
+/* Phones: Discard · Save & close · Save & next share the width equally and always fit (360 px
+   and up); a label too long for its button wraps instead of being cut off */
+.is-phone .sr-card-editor-footer {
+    gap: var(--size-4-1);
+}
+
+.is-phone .sr-card-editor-footer button {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 48px;
+    padding: 0 var(--size-4-2);
+    font-size: var(--font-ui-small);
+    line-height: 1.15;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+}
+
+.is-phone .sr-card-editor-footer-spacer {
+    display: none;
+}
+
+.is-phone .sr-card-editor-icon-button {
+    width: 36px;
+    height: 36px;
+}
+
+.is-phone .sr-card-editor-icon-button.sr-card-editor-close {
+    margin-inline-start: var(--size-4-1);
+}

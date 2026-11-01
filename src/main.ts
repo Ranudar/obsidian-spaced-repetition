@@ -1,5 +1,8 @@
-import { Plugin } from "obsidian";
+import { editorInfoField, Plugin } from "obsidian";
 
+import { CardEditorService } from "src/card-editor/card-editor-service";
+import { inkAtomicRanges } from "src/card-editor/ink-atomic-ranges";
+import { PencilButtons } from "src/card-editor/pencil-buttons";
 import { CommandManager } from "src/command-manager";
 import { DataManager } from "src/data/data-manager";
 import { DebugLoggerInstance } from "src/data/debug-logger";
@@ -21,6 +24,8 @@ export default class SRPlugin extends Plugin {
     private _nextNoteReviewHandler: NextNoteReviewHandler | null = null;
     private _commandManager: CommandManager | null = null;
     private _reminderManager: ReminderManager | null = null;
+    private _cardEditorService: CardEditorService | null = null;
+    private _pencilButtons: PencilButtons | null = null;
     public isInitialized: boolean = false;
 
     async onload(): Promise<void> {
@@ -37,6 +42,22 @@ export default class SRPlugin extends Plugin {
             );
 
             this.dataManager = new DataManager(this, pluginDataManager, settingsManager);
+            this._cardEditorService = new CardEditorService(this, settingsManager);
+            const pencilButtons = new PencilButtons(this.app, this._cardEditorService);
+            this._pencilButtons = pencilButtons;
+            this.registerMarkdownPostProcessor((el, ctx) => pencilButtons.postProcess(el, ctx));
+            // Handwriting in a note is deleted with one Backspace, not character by character
+            // and its image goes to the trash
+            const cardEditorService = this._cardEditorService;
+            this.registerEditorExtension(
+                inkAtomicRanges((links, view) => {
+                    const path = view.state.field(editorInfoField, false)?.file?.path;
+                    if (path)
+                        cardEditorService.inkRemovedInNote(links, path, () =>
+                            view.state.doc.toString(),
+                        );
+                }),
+            );
             const uiManager = new UIManager(this, settingsManager);
             this.uiManager = uiManager;
             this.commandManager = new CommandManager(this, settingsManager, uiManager);
@@ -68,6 +89,20 @@ export default class SRPlugin extends Plugin {
                 this.isInitialized = true;
                 this._reminderManager.restartReviewReminders();
             });
+
+            // Pencils in live preview don't wait for the vault scan above
+            this.app.workspace.onLayoutReady(() => {
+                // Editors opened later (also deferred tabs, loaded once shown) are watched as they appear
+                pencilButtons.watchLivePreview();
+                this.registerEvent(
+                    this.app.workspace.on("layout-change", () => pencilButtons.watchLivePreview()),
+                );
+                this.registerEvent(
+                    this.app.workspace.on("active-leaf-change", () =>
+                        pencilButtons.watchLivePreview(),
+                    ),
+                );
+            });
         } catch (error) {
             if (error instanceof PluginDataError || error instanceof Error) {
                 console.warn("SRPlugin: Error in onLoad", error.message);
@@ -85,6 +120,12 @@ export default class SRPlugin extends Plugin {
     get reminderManager(): ReminderManager {
         if (this._reminderManager === null) throw new Error("Reminder manager not initialized!!!");
         return this._reminderManager;
+    }
+
+    get cardEditorService(): CardEditorService {
+        if (this._cardEditorService === null)
+            throw new Error("Card editor service not initialized!!!");
+        return this._cardEditorService;
     }
 
     get uiManager(): UIManager {
@@ -129,6 +170,9 @@ export default class SRPlugin extends Plugin {
     }
 
     onunload(): void {
+        this._pencilButtons?.destroy();
+        // Open card editors close and write nothing more
+        this._cardEditorService?.destroy();
         this.reminderManager.stopReviewReminders();
         this.app.workspace.getLeavesOfType(REVIEW_QUEUE_VIEW_TYPE).forEach((leaf) => leaf.detach());
         this.uiManager.destroy();

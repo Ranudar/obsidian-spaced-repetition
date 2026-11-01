@@ -265,4 +265,53 @@ describe("SettingsUtil", () => {
             reviewReminderBounceDock: DEFAULT_SETTINGS.reviewReminderBounceDock,
         });
     });
+
+    test("card editor defaults", () => {
+        expect(DEFAULT_SETTINGS).toMatchObject({
+            cardEditorPenOnly: true,
+            cardEditorImageFolder: "sr-ink",
+            cardEditorGuide: "lined",
+            cardEditorGuideSpacing: 44,
+            cardEditorPenSize: 2.5,
+        });
+    });
+
+    test("pen autodetection and default input mode settings are gone", () => {
+        expect(DEFAULT_SETTINGS).not.toHaveProperty("cardEditorPenSwitchesToInk");
+        expect(DEFAULT_SETTINGS).not.toHaveProperty("cardEditorDefaultMode");
+    });
+
+    test("data from earlier card editor builds: default input mode dropped", () => {
+        const settings = {
+            ...DEFAULT_SETTINGS,
+            cardEditorDefaultMode: "ink",
+        } as unknown as SRSettings;
+        upgradeSettings(settings);
+        expect(settings).not.toHaveProperty("cardEditorDefaultMode");
+    });
+
+    test("data from earlier card editor builds: autodetection dropped, old default pen thinner", () => {
+        const old = (penSize: number) =>
+            ({
+                ...DEFAULT_SETTINGS,
+                cardEditorPenSize: penSize,
+                cardEditorPenSwitchesToInk: true,
+            }) as unknown as SRSettings;
+
+        const settings = old(5);
+        upgradeSettings(settings);
+        expect(settings).not.toHaveProperty("cardEditorPenSwitchesToInk");
+        expect(settings.cardEditorPenSize).toBe(DEFAULT_SETTINGS.cardEditorPenSize);
+
+        // A size the user picked is kept
+        const picked = old(3.5);
+        upgradeSettings(picked);
+        expect(picked).not.toHaveProperty("cardEditorPenSwitchesToInk");
+        expect(picked.cardEditorPenSize).toBe(3.5);
+
+        // Once upgraded, a 5 chosen on purpose stays
+        const chosen = { ...DEFAULT_SETTINGS, cardEditorPenSize: 5 };
+        upgradeSettings(chosen);
+        expect(chosen.cardEditorPenSize).toBe(5);
+    });
 });
