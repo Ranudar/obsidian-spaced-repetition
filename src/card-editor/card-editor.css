@@ -766,3 +766,37 @@ img[src*="sr-ink-"] {
 .sr-ink-field.is-empty .sr-ink-placeholder {
     display: block;
 }
+
+/* The card types, as a small list right under the chip */
+.sr-card-editor-type-list {
+    position: absolute;
+    z-index: var(--layer-popover);
+    display: flex;
+    flex-direction: column;
+    min-width: 140px;
+    padding: var(--size-4-1);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-m);
+    background-color: var(--background-primary);
+    box-shadow: var(--shadow-s);
+}
+
+.sr-card-editor-type-list > .sr-card-editor-type-item {
+    justify-content: flex-start;
+    height: 40px;
+    padding: 0 var(--size-4-3);
+    border: none;
+    box-shadow: none;
+    background: none;
+    font-size: var(--font-ui-small);
+    color: var(--text-normal);
+}
+
+.sr-card-editor-type-list > .sr-card-editor-type-item.is-selected {
+    font-weight: var(--font-bold);
+    color: var(--text-accent);
+}
+
+.sr-card-editor-type-list > .sr-card-editor-type-item:hover {
+    background-color: var(--background-modifier-hover);
+}

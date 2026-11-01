@@ -3,7 +3,6 @@ import {
     Component,
     EventRef,
     MarkdownRenderer,
-    Menu,
     Modal,
     Notice,
     Platform,
@@ -184,6 +183,8 @@ export class CardEditorModal extends Modal {
     private clearButton!: HTMLButtonElement;
     private previewButton!: HTMLButtonElement;
     private typeButton!: HTMLButtonElement;
+    /** The open list of card types under the chip, see openTypeList() */
+    private typeList: { el: HTMLElement; remove: () => void } | null = null;
     private switchButton: HTMLButtonElement | null = null;
     private switchFrontEl: HTMLElement | null = null;
     private switchBackEl: HTMLElement | null = null;
@@ -243,6 +244,7 @@ export class CardEditorModal extends Modal {
     }
 
     onClose(): void {
+        this.closeTypeList();
         this.isClosed = true;
         this.contentEl.removeEventListener("keydown", this.onKeyDown);
         for (const type of PEN_EVENTS) {
@@ -291,7 +293,10 @@ export class CardEditorModal extends Modal {
         const metaEl = titleWrap.createDiv({ cls: "sr-card-editor-meta" });
         // Cloze cards can't be changed to another type
         const fixedType = this.opts.kind === "edit" && this.opts.cardType === CardType.Cloze;
-        this.typeButton = this.textButton(metaEl, "", () => this.showTypeMenu());
+        this.typeButton = this.textButton(metaEl, "", () => {
+            if (this.typeList) this.closeTypeList();
+            else this.showTypeMenu();
+        });
         this.typeButton.addClass("sr-card-editor-type");
         this.typeButton.disabled = fixedType;
         this.typeButton.toggleClass("is-fixed", fixedType);
@@ -673,17 +678,62 @@ export class CardEditorModal extends Modal {
         } else {
             types = [CardType.SingleLineBasic, CardType.SingleLineReversed];
         }
-        const menu = new Menu();
+        this.openTypeList(types);
+    }
+
+    /**
+     * The types as a small list right under the chip. Not Obsidian's Menu: on phones that opens as
+     * a sheet at the bottom of the screen, far from the chip. A tap anywhere else closes it.
+     */
+    private openTypeList(types: CardType[]) {
+        this.closeTypeList();
+        const chip = this.typeButton.getBoundingClientRect();
+        const frame = this.modalEl.getBoundingClientRect();
+        const list = this.modalEl.createDiv({ cls: "sr-card-editor-type-list" });
+        list.setAttr("role", "menu");
+        list.setCssProps({
+            left: `${chip.left - frame.left}px`,
+            top: `${chip.bottom - frame.top + 4}px`,
+        });
         for (const type of types) {
-            menu.addItem((item) =>
-                item
-                    .setTitle(cardTypeName(type))
-                    .setChecked(type === this.cardType)
-                    .onClick(() => this.setCardType(type)),
-            );
+            const item = list.createEl("button", { cls: "sr-card-editor-type-item" });
+            item.setAttr("type", "button");
+            item.setAttr("role", "menuitemradio");
+            item.setAttr("aria-checked", type === this.cardType);
+            item.toggleClass("is-selected", type === this.cardType);
+            item.setText(cardTypeName(type));
+            // Keeps the focus (and the soft keyboard) in the text area
+            item.addEventListener("pointerdown", (e) => e.preventDefault());
+            item.addEventListener("click", () => {
+                this.closeTypeList();
+                this.setCardType(type);
+            });
         }
-        const rect = this.typeButton.getBoundingClientRect();
-        menu.showAtPosition({ x: rect.left, y: rect.bottom });
+        const outside = (e: Event) => {
+            if (!list.contains(e.target as Node) && e.target !== this.typeButton) {
+                this.closeTypeList();
+            }
+        };
+        const escape = (e: KeyboardEvent) => {
+            if (e.key !== "Escape") return;
+            e.stopPropagation();
+            this.closeTypeList();
+        };
+        this.modalEl.addEventListener("pointerdown", outside, true);
+        this.modalEl.addEventListener("keydown", escape, true);
+        this.typeList = {
+            el: list,
+            remove: () => {
+                this.modalEl.removeEventListener("pointerdown", outside, true);
+                this.modalEl.removeEventListener("keydown", escape, true);
+                list.remove();
+            },
+        };
+    }
+
+    private closeTypeList() {
+        this.typeList?.remove();
+        this.typeList = null;
     }
 
     /**

@@ -1,4 +1,4 @@
-import { App, MarkdownRenderer, Menu, Notice, Platform } from "obsidian";
+import { App, MarkdownRenderer, Notice, Platform } from "obsidian";
 
 import {
     CardEditorModal,
@@ -975,19 +975,32 @@ describe("CardEditorModal previous / next card", () => {
 
 describe("CardEditorModal card types", () => {
     const typeButton = () => $<HTMLButtonElement>("button.sr-card-editor-type");
-    /** Opens the card type menu and returns its items */
+    /** Opens the list of card types under the chip and returns its items */
     function typeMenu() {
-        (Menu as unknown as { last: unknown }).last = null;
-        typeButton().click();
-        return (Menu as unknown as { last: { items: { title: string; checked: boolean }[] } }).last;
-    }
-    /** Picks a card type from the menu */
-    function pick(title: string) {
-        const item = typeMenu().items.find((i) => i.title === title) as unknown as {
-            click(): void;
+        if (!$(".sr-card-editor-type-list")) typeButton().click();
+        const items = $$<HTMLButtonElement>(".sr-card-editor-type-list > button");
+        return {
+            items: items.map((b) => ({
+                title: b.textContent,
+                checked: b.getAttribute("aria-checked") === "true",
+                click: () => b.click(),
+            })),
         };
-        item.click();
     }
+    /** Picks a card type from the list */
+    function pick(title: string) {
+        typeMenu()
+            .items.find((i) => i.title === title)
+            .click();
+    }
+
+    test("the types open as a list under the chip; a tap elsewhere closes it", () => {
+        openAdd();
+        typeButton().click();
+        expect($(".sr-card-editor-type-list")).not.toBeNull();
+        pointer("pointerdown", textAreas()[0], "touch");
+        expect($(".sr-card-editor-type-list")).toBeNull();
+    });
 
     test("adding offers Basic, Reversed and Cloze; each saves its type", async () => {
         const { cb } = openAdd();
