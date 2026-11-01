@@ -34,7 +34,7 @@ export interface SideEditorOptions {
     onChange(): void;
     /**
      * Called after every ink change with the strokes before it (for undo). Clearing the side
-     * reports the text before it too, so one undo step restores both.
+     * reports the text before it too, so undo restores a typed side's text.
      */
     onInkCommit(prev: Stroke[], prevText?: string): void;
     /** Whether a press is the palm resting on the screen (pen-only on); it is then ignored */
@@ -205,14 +205,17 @@ export class SideEditor {
         this.opts.onChange();
     }
 
-    /** Clears text and ink, reported to onInkCommit as one step so it can be undone */
+    /**
+     * Clears the side's content (its text or its strokes; the other is always empty), reported
+     * to onInkCommit so it can be undone
+     */
     clear(): void {
         if (this.text === "" && this.strokes.length === 0) return;
         const prevStrokes = this.strokes;
         const prevText = this.text;
         this.textArea.value = "";
         this.updateTextEmpty();
-        // Not ink.clear(): that would report the ink alone
+        // Not ink.clear(): that would report the ink without the text
         this.ink?.setStrokes([]);
         this.opts.onInkCommit(prevStrokes, prevText);
         this.opts.onChange();

@@ -256,7 +256,7 @@ export class CardEditorModal extends Modal {
             this.sides.forEach((side) => side.themeChanged()),
         );
 
-        // Also on mobile: the soft keyboard is meant to be open, writing doesn't close it
+        // Typed, the text area (on mobile the soft keyboard opens); drawn, the pen zone
         this.front.focus();
     }
 
@@ -694,8 +694,8 @@ export class CardEditorModal extends Modal {
     }
 
     /**
-     * Undoes the last ink change of the side shown. Undoing "Clear side" restores the side's text
-     * as well, unless something was typed since; typing is undone by the text area itself.
+     * Undoes the last ink change of the side shown. Undoing "Clear side" on a typed side restores
+     * its text, unless something was typed since; typing is undone by the text area itself.
      */
     private undo() {
         const side = this.activeSide;
@@ -707,7 +707,7 @@ export class CardEditorModal extends Modal {
         if (step.prevText !== undefined && side.text === "") side.setText(step.prevText);
     }
 
-    /** Clears text and ink of the side shown, as one undo step */
+    /** Clears the side shown (its text or its strokes), as an undo step */
     private clearSide() {
         if (this.busy) return;
         this.activeSide?.clear();
@@ -1150,9 +1150,9 @@ export class CardEditorModal extends Modal {
             if (this.opts.kind === "add") void this.saveAdd(false);
             else void this.saveEdit();
         } else if (evt.key.toLowerCase() === "z" && !evt.shiftKey) {
-            // The text area keeps the focus while the pen writes: in it, this undoes the ink when
-            // that was the side's last change, else the text area's own undo undoes the typing
-            // (instanceOf works across windows, e.g. an editor opened in a popout)
+            // In the text area, this undoes "Clear side" when nothing was typed since, else the
+            // text area's own undo undoes the typing; drawn, the pen zone has the focus and this
+            // always undoes (instanceOf works across windows, e.g. an editor opened in a popout)
             const inText = (evt.target as Node | null)?.instanceOf(HTMLTextAreaElement) ?? false;
             if (inText && !this.inkChangedLast()) return;
             evt.preventDefault();
@@ -1160,7 +1160,7 @@ export class CardEditorModal extends Modal {
         }
     };
 
-    /** The last change of the side shown is an ink change, with no typing since */
+    /** The side shown has an undo step (an ink change or "Clear side"), with no typing since */
     private inkChangedLast(): boolean {
         if (this.activeSide === null) return false;
         const steps = this.stepsOf(this.activeSide);

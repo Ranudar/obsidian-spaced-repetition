@@ -46,10 +46,9 @@ const SIDE_BUTTON_QUIET_MS = 250;
  * toolbar eraser) erases the ink under it (pixel eraser: strokes are cut, not removed whole),
  * shown by a circle cursor (an element over the canvas, so a hovering pen doesn't repaint the
  * strokes). Pressing the side button while hovering is reported to onSideButton. Writing never
- * takes the focus, so a text area keeps it and the soft keyboard stays open.
+ * moves the focus.
  *
- * Ink is only taken where the field can be seen: inside the canvas, every ancestor that clips it
- * and the (visual) viewport. Pointer capture keeps sending the pen's moves after it left that
+ * Ink is only taken where the field can be seen: inside the canvas and the (visual) viewport. Pointer capture keeps sending the pen's moves after it left that
  * area, so no stroke is lost, but a stroke ends where the pen crosses out of the area and a new
  * one starts where it comes back in; nothing outside is stored.
  *
@@ -85,12 +84,6 @@ export class InkField {
      */
     private view: View | null = null;
     /**
-     * Set once per animation frame while the pen is down: the next sample checks that the canvas
-     * is still where the view says (one getBoundingClientRect), for shifts no event reports.
-     */
-    private recheckView = false;
-    private recheckFrame = 0;
-    /**
      * The view the gesture's last sample was taken in. When the field moves mid-gesture, the
      * samples before and after are in different coordinates and must not be joined.
      */
@@ -98,9 +91,9 @@ export class InkField {
     /**
      * When the event that marked the view stale fired (its timeStamp, on the pointer events'
      * clock). Coalesced samples taken before it were in the old place: they are dropped instead
-     * of being placed with the new offset. -Infinity when the time is not known (a ResizeObserver
-     * or the frame's check): then a batch that straddles the shift may start the new stroke with
-     * a few samples (one frame at most) placed with the new offset.
+     * of being placed with the new offset. -Infinity when the time is not known (a ResizeObserver):
+     * then a batch that straddles the shift may start the new stroke with a few samples (one
+     * frame at most) placed with the new offset.
      */
     private viewChangedAt = -Infinity;
     private win: Window;
@@ -188,7 +181,6 @@ export class InkField {
         this.win.visualViewport?.removeEventListener("scroll", this.invalidateView);
         if (this.frame) activeWindow.cancelAnimationFrame(this.frame);
         this.frame = 0;
-        this.stopRecheck();
         this.canvas.removeEventListener("pointerdown", this.onDown);
         this.canvas.removeEventListener("pointermove", this.onMove);
         this.canvas.removeEventListener("pointerup", this.onUp);
@@ -220,41 +212,15 @@ export class InkField {
         return e.timeStamp < this.viewChangedAt;
     }
 
-    /**
-     * The view, measured again when an event marked it stale or, once a frame while the pen is
-     * down, when the canvas is no longer where it was (the soft keyboard closing moves the field
-     * without any event before the next samples arrive).
-     */
+    /** The view, measured again after an event marked it stale */
     private currentView(): View {
-        if (this.view !== null && this.recheckView) {
-            this.recheckView = false;
-            const r = this.canvas.getBoundingClientRect();
-            if (r.left !== this.view.left || r.top !== this.view.top) {
-                this.view = this.measure(r);
-                this.viewChangedAt = -Infinity;
-            }
-        }
         return (this.view ??= this.measure());
     }
 
-    /** While the pen is down: allow one cheap check of the canvas' position per frame */
-    private watchView() {
-        if (this.recheckFrame) return;
-        this.recheckFrame = activeWindow.requestAnimationFrame(() => {
-            this.recheckFrame = 0;
-            if (this.activePointer !== null) this.recheckView = true;
-        });
-    }
-
-    private stopRecheck() {
-        if (this.recheckFrame) activeWindow.cancelAnimationFrame(this.recheckFrame);
-        this.recheckFrame = 0;
-        this.recheckView = false;
-    }
-
     /** The visible part of the canvas: see visibleBox() */
-    private measure(r: DOMRect = this.canvas.getBoundingClientRect()): View {
-        const box = visibleBox(this.canvas, r, this.win);
+    private measure(): View {
+        const r = this.canvas.getBoundingClientRect();
+        const box = visibleBox(r, this.win);
         if (box === null) return { left: r.left, top: r.top, box: null };
         return {
             left: r.left,
@@ -293,8 +259,7 @@ export class InkField {
     private onContextMenu = (e: Event) => e.preventDefault();
 
     private onDown = (e: PointerEvent) => {
-        // The focus stays where it is, also for a finger: a text area keeps it, and the soft
-        // keyboard stays open while the pen writes
+        // The focus stays where it is, also for a finger
         e.preventDefault();
         this.lastContactAt = Date.now();
         this.sideButtonSamples = 0;
@@ -302,10 +267,9 @@ export class InkField {
         if (e.pointerType === "touch") return;
         if (this.activePointer !== null) return;
         this.activePointer = e.pointerId;
-        // The field may have moved since the last gesture (e.g. the soft keyboard closed)
+        // The field may have moved since the last gesture (e.g. the window was resized)
         this.view = null;
         this.viewChangedAt = -Infinity;
-        this.recheckView = false;
         try {
             this.canvas.setPointerCapture(e.pointerId);
         } catch {
@@ -329,7 +293,6 @@ export class InkField {
             if (this.visible(p)) this.current = this.newStroke(p);
             this.updateEmpty();
         }
-        this.watchView();
         this.schedule();
     };
 
@@ -337,7 +300,6 @@ export class InkField {
         if (this.activePointer === null) return this.hover(e);
         if (e.pointerId !== this.activePointer) return;
         e.preventDefault();
-        this.watchView();
         if (this.erasing) {
             // The eraser cuts along the whole path between moves, so coalesced samples add little;
             // the canvas is only redrawn when ink was erased
@@ -467,7 +429,6 @@ export class InkField {
         if (e.pointerId !== this.activePointer) return;
         this.activePointer = null;
         this.lastContactAt = Date.now();
-        this.stopRecheck();
         if (this.erasing) {
             this.erasing = false;
             this.eraseFrom = null;
@@ -629,12 +590,11 @@ export function renderHint(el: HTMLElement, hint: string): void {
 const SCROLL_OPTIONS: AddEventListenerOptions = { capture: true, passive: true };
 
 /**
- * The part of an element's box (`rect`, on screen) that can be seen: cut to every ancestor that
- * clips its content (overflow other than visible, up to but without body, whose overflow is the
- * window's), the window and the visual viewport (pinch zoom, soft keyboard). Ancestors that are
- * not laid out are skipped; null when the element itself is not laid out.
+ * The part of an element's box (`rect`, on screen) that can be seen: cut to the window and the
+ * visual viewport (pinch zoom, soft keyboard); null when the element is not laid out. No
+ * ancestor cuts the canvas off: it fills its field, which fills the side's zone.
  */
-export function visibleBox(el: Element, rect: DOMRect, win: Window): Box | null {
+export function visibleBox(rect: DOMRect, win: Window): Box | null {
     if (rect.width <= 0 || rect.height <= 0) return null;
     const box: Box = { minX: rect.left, minY: rect.top, maxX: rect.right, maxY: rect.bottom };
     const cut = (minX: number, minY: number, maxX: number, maxY: number) => {
@@ -643,35 +603,10 @@ export function visibleBox(el: Element, rect: DOMRect, win: Window): Box | null 
         box.maxX = Math.min(box.maxX, maxX);
         box.maxY = Math.min(box.maxY, maxY);
     };
-    const doc = el.ownerDocument;
-    for (
-        let a = el.parentElement;
-        a && a !== doc.body && a !== doc.documentElement;
-        a = a.parentElement
-    ) {
-        const style = win.getComputedStyle(a);
-        const clipsX = clips(style.overflowX || style.overflow);
-        const clipsY = clips(style.overflowY || style.overflow);
-        const r = a.getBoundingClientRect();
-        if ((clipsX || clipsY) && r.width > 0 && r.height > 0) {
-            // Content is clipped at the padding box: inside the borders
-            const px = (v: string) => parseFloat(v) || 0;
-            cut(
-                clipsX ? r.left + px(style.borderLeftWidth) : -Infinity,
-                clipsY ? r.top + px(style.borderTopWidth) : -Infinity,
-                clipsX ? r.right - px(style.borderRightWidth) : Infinity,
-                clipsY ? r.bottom - px(style.borderBottomWidth) : Infinity,
-            );
-        }
-    }
     cut(0, 0, win.innerWidth, win.innerHeight);
     const vv = win.visualViewport;
     if (vv) cut(vv.offsetLeft, vv.offsetTop, vv.offsetLeft + vv.width, vv.offsetTop + vv.height);
     return box;
-}
-
-function clips(overflow: string): boolean {
-    return overflow !== "" && overflow !== "visible";
 }
 
 function cssVar(el: HTMLElement, name: string, fallback: string): string {
