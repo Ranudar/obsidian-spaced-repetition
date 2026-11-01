@@ -106,8 +106,7 @@ export function parse(text: string, options: ParserOptions): ParsedQuestionInfo[
 
         // Skip everything in HTML comments
         if (currentLine.startsWith("<!--") && !currentLine.startsWith("<!--SR:")) {
-            while (i + 1 < lines.length && !currentLine.includes("-->")) i++;
-            i++;
+            while (i + 1 < lines.length && !lines[i].includes("-->")) i++;
             continue;
         }
 

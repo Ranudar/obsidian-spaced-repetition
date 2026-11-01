@@ -764,6 +764,17 @@ test("Test not parsing cards in HTML comments", () => {
     expect(
         parseT("something something\n\n<!--cloze {{curly}} test-->\n\na::b", parserOptions),
     ).toEqual([[CardType.SingleLineBasic, "a::b", 4, 4]]);
+    expect(parseT("<!-- note -->\na::b", parserOptions)).toEqual([
+        [CardType.SingleLineBasic, "a::b", 1, 1],
+    ]);
+    expect(parseT("<!--\nnote\n-->\na::b", parserOptions)).toEqual([
+        [CardType.SingleLineBasic, "a::b", 3, 3],
+    ]);
+
+    // card inside a multi-line comment, card after it
+    expect(parseT("<!--\nq::hidden\n-->\n\na::b", parserOptions)).toEqual([
+        [CardType.SingleLineBasic, "a::b", 4, 4],
+    ]);
 });
 
 test("Test not parsing 'cards' in codeblocks", () => {
