@@ -147,21 +147,21 @@ describe("InkField pixel eraser", () => {
 });
 
 describe("InkField cancelled stroke", () => {
-    test("a pen touch the browser cancels leaves no stroke and no stuck pen", () => {
+    test("a stroke the browser cancels keeps what was drawn, and the pen isn't stuck", () => {
         const { field, canvas, onChange } = setup();
         pointer(canvas, "pointerdown", 10, 10);
         pointer(canvas, "pointermove", 30, 10);
         pointer(canvas, "pointercancel", 30, 10);
-        expect(field.strokes).toEqual([]);
-        expect(onChange).not.toHaveBeenCalled();
+        expect(field.strokes).toHaveLength(1);
+        expect(onChange).toHaveBeenCalledTimes(1);
 
         // The pointer was let go: the next touch draws normally
         draw(canvas, [
             [0, 0],
             [20, 0],
         ]);
-        expect(field.strokes).toHaveLength(1);
-        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(field.strokes).toHaveLength(2);
+        expect(onChange).toHaveBeenCalledTimes(2);
     });
 });
 

@@ -2,6 +2,7 @@ import { editorInfoField, Plugin } from "obsidian";
 
 import { CardEditorService } from "src/card-editor/card-editor-service";
 import { inkAtomicRanges } from "src/card-editor/ink-atomic-ranges";
+import { setPenLog } from "src/card-editor/ink-field";
 import { PencilButtons } from "src/card-editor/pencil-buttons";
 import { CommandManager } from "src/command-manager";
 import { DataManager } from "src/data/data-manager";
@@ -58,6 +59,21 @@ export default class SRPlugin extends Plugin {
                         );
                 }),
             );
+            // TEMPORARY: the pen's pointer events, to find out why strokes break on Android
+            const penLogPath = `${this.manifest.dir}/ink-pen.log`;
+            let penLines: string[] = [];
+            const t0 = Date.now();
+            setPenLog((line) => {
+                if (penLines.length === 0)
+                    window.setTimeout(() => {
+                        const text = penLines.join("\n") + "\n";
+                        penLines = [];
+                        void this.app.vault.adapter.append(penLogPath, text).catch(() => {
+                            void this.app.vault.adapter.write(penLogPath, text);
+                        });
+                    }, 1000);
+                penLines.push(`${((Date.now() - t0) / 1000).toFixed(3)} ${line}`);
+            });
             const uiManager = new UIManager(this, settingsManager);
             this.uiManager = uiManager;
             this.commandManager = new CommandManager(this, settingsManager, uiManager);
