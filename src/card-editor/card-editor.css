@@ -308,64 +308,46 @@ img[src*="sr-ink-"] {
 
 /* MARK: Zones */
 
-/* The tool row and the pen zone above the text zone on the left; on the right the switch beside
-   the pen zone, exactly as tall, and the save buttons beside the text zone. The side's own
-   elements don't take part in the layout, so its zones are placed here directly. */
+/* The tool row above the side's zone (its text zone or its pen zone) on the left; on the right
+   the switch in the upper half and the save buttons in the lower half. The side's own elements
+   don't take part in the layout, so its zones are placed here directly. */
 .sr-card-editor-main {
-    --sr-card-editor-pen-height: 245px;
     --sr-card-editor-edge: 5px;
     flex: 1;
     min-height: 0;
     display: grid;
     gap: var(--size-4-2);
     grid-template-columns: minmax(0, 1fr) max(48px, 12%);
-    grid-template-rows: 40px var(--sr-card-editor-pen-height) minmax(0, 1fr);
-    grid-template-areas:
-        "tools ."
-        "pen switch"
-        "text saves";
-}
-
-/* No pen zone on either side: the text zone takes its place too; the switch and the save
-   buttons share the right column */
-.sr-card-editor-no-ink .sr-card-editor-main {
     grid-template-rows: 40px minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
         "tools ."
-        "text switch"
-        "text saves";
+        "body switch"
+        "body saves";
 }
 
 /* Cloze: one side, no switch; the save button takes the right column */
 .sr-card-editor-main.sr-card-editor-one-side {
     grid-template-areas:
         "tools ."
-        "text saves"
-        "text saves";
+        "body saves"
+        "body saves";
 }
 
 /* Buttons on the left, for writing with the left hand: the right column moves to the left of the
-   fields, the empty cell with it; the side marker stays on its edge */
+   zone, the empty cell with it; the side marker stays on its edge */
 .sr-card-editor-main.sr-card-editor-buttons-left {
     grid-template-columns: max(48px, 12%) minmax(0, 1fr);
     grid-template-areas:
         ". tools"
-        "switch pen"
-        "saves text";
-}
-
-.sr-card-editor-no-ink .sr-card-editor-main.sr-card-editor-buttons-left {
-    grid-template-areas:
-        ". tools"
-        "switch text"
-        "saves text";
+        "switch body"
+        "saves body";
 }
 
 .sr-card-editor-main.sr-card-editor-one-side.sr-card-editor-buttons-left {
     grid-template-areas:
         ". tools"
-        "saves text"
-        "saves text";
+        "saves body"
+        "saves body";
 }
 
 .sr-card-editor-sides,
@@ -377,6 +359,7 @@ img[src*="sr-ink-"] {
    free. The gaps shrink on a narrow phone */
 .sr-card-editor-tools {
     grid-area: tools;
+    position: relative;
     min-width: 0;
     display: flex;
     align-items: center;
@@ -396,6 +379,53 @@ img[src*="sr-ink-"] {
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-normal);
+}
+
+/* Typing / drawing: one group, the input in use filled */
+.sr-card-editor-input {
+    flex: none;
+    display: flex;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-m);
+    overflow: hidden;
+}
+
+.sr-card-editor-input > .sr-card-editor-icon-button {
+    width: 40px;
+    height: 34px;
+    border-radius: 0;
+    color: var(--text-muted);
+}
+
+.sr-card-editor-input > .sr-card-editor-icon-button.is-active {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+/* Before a side's input is switched: the question right below the tool row, over the zone */
+.sr-card-editor-confirm {
+    position: absolute;
+    z-index: var(--layer-popover);
+    top: calc(100% + var(--size-4-1));
+    left: 0;
+    right: 0;
+    padding: var(--size-4-3);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-l);
+    background-color: var(--background-primary);
+    box-shadow: var(--shadow-s);
+    font-size: var(--font-ui-small);
+    color: var(--text-normal);
+}
+
+.sr-card-editor-confirm-question {
+    margin-bottom: var(--size-4-3);
+}
+
+.sr-card-editor-confirm-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--size-4-2);
 }
 
 /* Size of the tool in use: a dot for the pen, a ring as large as the eraser's circle */
@@ -434,10 +464,11 @@ img[src*="sr-ink-"] {
     color: var(--text-on-accent);
 }
 
-/* The pen zone: fixed height, a shade off the text zone */
+/* The pen zone: a shade off the text zone */
 .sr-card-editor-ink {
-    grid-area: pen;
+    grid-area: body;
     min-height: 0;
+    outline: none;
     display: flex;
     box-sizing: border-box;
     border: 2px solid var(--background-modifier-border);
@@ -454,14 +485,14 @@ img[src*="sr-ink-"] {
     box-shadow: none;
 }
 
-/* A side without a pen zone (pen mode off, the other side has handwriting): the text zone takes
-   its place */
-.sr-card-editor-side.is-text-only .sr-card-editor-text-wrap {
-    grid-row: 2 / -1;
+/* A side is typed or drawn: only the zone of its input shows */
+.sr-card-editor-side.is-text > .sr-card-editor-ink,
+.sr-card-editor-side.is-pen > .sr-card-editor-text-wrap {
+    display: none;
 }
 
 .sr-card-editor-text-wrap {
-    grid-area: text;
+    grid-area: body;
     min-height: 0;
     position: relative;
     display: flex;
@@ -578,7 +609,7 @@ img[src*="sr-ink-"] {
     border-color: var(--text-error);
 }
 
-/* The side shown: a broad edge on both fields, on the left for the front, on the right for the
+/* The side shown: a broad edge on its zone, on the left for the front, on the right for the
    back (working from left to right) */
 .sr-card-editor-side.is-front .sr-card-editor-ink,
 .sr-card-editor-side.is-front .sr-card-editor-text-wrap > .sr-card-editor-text,

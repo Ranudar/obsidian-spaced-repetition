@@ -5,12 +5,16 @@ import { InkField, renderHint } from "src/card-editor/ink-field";
 import { SRSettings } from "src/data/settings";
 import { TextDirection } from "src/utils/strings";
 
-/** Content of one side: typed text and handwriting, both saved */
+/** How a side is filled in: typed or drawn, never both */
+export type SideInput = "text" | "pen";
+
+/** Content of one side: its text when typed, its strokes when drawn (see input) */
 export interface SideState {
     text: string;
     strokes: Stroke[];
     /** Pen thickness the strokes are drawn and saved with */
     penSize: number;
+    input: SideInput;
 }
 
 export interface SideEditorOptions {
@@ -22,7 +26,7 @@ export interface SideEditorOptions {
     /** Shown in the text zone while it is empty; a **word** is bold */
     textHint: string;
     initial: SideState;
-    /** false for cloze cards and with pen mode off: text only, no pen zone */
+    /** false for cloze cards and with pen mode off: always typed, no pen field */
     allowInk: boolean;
     settings: SRSettings;
     textDirection: TextDirection;
@@ -51,18 +55,20 @@ export interface SideEditorOptions {
 const FLASH_MS = 900;
 
 /**
- * One side of a card: a pen zone of fixed height and, below it, a text zone. Both are saved.
- * The side's element doesn't take part in the layout (display: contents): the two zones are
- * placed in the editor's grid, so both sides take exactly the same place and only the side
- * shown is laid out.
+ * One side of a card, typed or drawn: its text zone or its pen zone, one at a time, in the same
+ * place. The side's element doesn't take part in the layout (display: contents): its zones are
+ * placed in the editor's grid, so both sides take exactly the same place and only the side shown
+ * is laid out.
  */
 export class SideEditor {
     readonly el: HTMLDivElement;
     readonly label: string;
+    readonly face: "front" | "back";
 
     private opts: SideEditorOptions;
     private initial: SideState;
     private penSize: number;
+    private _input: SideInput;
     private eraser = false;
     private textWrap: HTMLElement;
     private textArea: HTMLTextAreaElement;
@@ -72,21 +78,25 @@ export class SideEditor {
     /** Locked while the card is saved (see setLocked()) */
     private locked = false;
     private ink: InkField | null = null;
+    private inkHost: HTMLElement | null = null;
     private flashTimer: number | null = null;
 
     constructor(parent: HTMLElement, opts: SideEditorOptions) {
         this.opts = opts;
         this.label = opts.label;
+        this.face = opts.face;
         this.initial = withOwnSizes(opts.initial);
         this.penSize = opts.initial.penSize;
+        this._input = opts.allowInk ? opts.initial.input : "text";
 
         this.el = parent.createDiv({ cls: ["sr-card-editor-side", `is-${opts.face}`] });
-        this.el.toggleClass("is-text-only", !opts.allowInk);
 
         if (opts.allowInk) {
             const s = opts.settings;
-            const inkHost = this.el.createDiv({ cls: "sr-card-editor-ink" });
-            // Also on the zone's border, around the canvas: the text area keeps the focus
+            const inkHost = (this.inkHost = this.el.createDiv({ cls: "sr-card-editor-ink" }));
+            // Takes the focus while drawing (see focus()), so the editor's keys still work
+            inkHost.tabIndex = -1;
+            // Also on the zone's border, around the canvas: the focus stays where it is
             inkHost.addEventListener("pointerdown", (evt) => evt.preventDefault());
             this.ink = new InkField(inkHost, {
                 placeholder: opts.inkHint,
@@ -120,6 +130,12 @@ export class SideEditor {
         this.previewEl.addEventListener("pointerdown", this.onPreviewPointerDown);
         this.previewEl.addEventListener("click", this.onPreviewClick);
         this.updateTextEmpty();
+        this.updateInput();
+    }
+
+    /** Typed or drawn; always typed without a pen field (cloze, pen mode off) */
+    get input(): SideInput {
+        return this._input;
     }
 
     get strokes(): Stroke[] {
@@ -131,12 +147,12 @@ export class SideEditor {
     }
 
     get state(): SideState {
-        return { text: this.text, strokes: this.strokes, penSize: this.penSize };
+        return { text: this.text, strokes: this.strokes, penSize: this.penSize, input: this.input };
     }
 
-    /** Nothing to save: blank text and no strokes */
+    /** Nothing to save: blank text when typed, no strokes when drawn */
     get isEmpty(): boolean {
-        return this.text.trim() === "" && this.strokes.length === 0;
+        return this.input === "pen" ? this.strokes.length === 0 : this.text.trim() === "";
     }
 
     /** The strokes differ from the ones the side was opened with */
@@ -144,12 +160,12 @@ export class SideEditor {
         return !sameStrokes(this.strokes, this.initial.strokes);
     }
 
-    /** The element ink is written on, null without ink (cloze, pen mode off) */
     /** The text zone (text area, hint, preview), e.g. for a button in its corner */
     get textZoneEl(): HTMLElement {
         return this.textWrap;
     }
 
+    /** The element ink is written on, null without a pen field (cloze, pen mode off) */
     get inkEl(): HTMLElement | null {
         return this.ink?.el ?? null;
     }
@@ -175,6 +191,20 @@ export class SideEditor {
         this.ink?.setStyle({ size });
     }
 
+    /**
+     * Switches between typing and drawing; the side's content is deleted (the editor asks first),
+     * not as an undo step. Without a pen field the side stays typed.
+     */
+    setInput(input: SideInput): void {
+        if (input === this.input || this.ink === null) return;
+        this._input = input;
+        this.textArea.value = "";
+        this.updateTextEmpty();
+        this.ink.setStrokes([]);
+        this.updateInput();
+        this.opts.onChange();
+    }
+
     /** Clears text and ink, reported to onInkCommit as one step so it can be undone */
     clear(): void {
         if (this.text === "" && this.strokes.length === 0) return;
@@ -193,8 +223,10 @@ export class SideEditor {
         state = withOwnSizes(state);
         this.initial = state;
         this.penSize = state.penSize;
+        if (this.ink) this._input = state.input;
         this.textArea.value = state.text;
         this.updateTextEmpty();
+        this.updateInput();
         if (this.ink) {
             this.ink.setStyle({ size: state.penSize });
             this.ink.setStrokes(state.strokes);
@@ -229,14 +261,19 @@ export class SideEditor {
         this.ink?.themeChanged();
     }
 
-    /** Focuses the text area (on mobile this opens the soft keyboard, which then stays open) */
+    /**
+     * Typed, focuses the text area (on mobile this opens the soft keyboard, which then stays
+     * open); drawn, the pen zone, which closes the soft keyboard
+     */
     focus(): void {
-        this.textArea.focus({ preventScroll: true });
+        if (this.input === "pen") this.inkHost?.focus({ preventScroll: true });
+        else this.textArea.focus({ preventScroll: true });
     }
 
-    /** Focuses the text area with the cursor at the end of the text */
+    /** Typed, focuses the text area with the cursor at the end of the text */
     focusEnd(): void {
         this.focus();
+        if (this.input === "pen") return;
         const end = this.textArea.value.length;
         this.textArea.setSelectionRange(end, end);
     }
@@ -247,10 +284,6 @@ export class SideEditor {
         return ta.value.substring(ta.selectionStart ?? 0, ta.selectionEnd ?? 0);
     }
 
-    /**
-     * Puts open and close around the selected text, like typing it: the cursor then goes after
-     * close, or between the two when nothing was selected
-     */
     /**
      * Wraps the selection in open/close. Without a selection, the word the cursor is in (or right
      * after) is wrapped, so a tap in a word is enough; outside a word, an empty pair is inserted
@@ -300,6 +333,12 @@ export class SideEditor {
     }
 
     // MARK: helpers
+
+    /** Shows the zone of the side's input, hides the other */
+    private updateInput() {
+        this.el.toggleClass("is-pen", this.input === "pen");
+        this.el.toggleClass("is-text", this.input === "text");
+    }
 
     private updateReadOnly() {
         this.textArea.readOnly = this.locked || this.textWrap.hasClass("is-preview");

@@ -11,7 +11,8 @@ import {
 
 import { clozeMarkers, hasCloze } from "src/card-editor/core/card-text";
 import { Stroke } from "src/card-editor/core/strokes";
-import { SideEditor, SideEditorOptions, SideState } from "src/card-editor/side-editor";
+import { renderHint } from "src/card-editor/ink-field";
+import { SideEditor, SideEditorOptions, SideInput, SideState } from "src/card-editor/side-editor";
 import { CardType, isMultiLine } from "src/data/data-structures/card/questions/question";
 import { SRSettings } from "src/data/settings";
 import { t } from "src/lang/helpers";
@@ -26,7 +27,7 @@ export interface CardEditorSides {
 /** An unsaved new card, with the card type chosen for it (basic by default) */
 export type CardEditorDraft = CardEditorSides & { cardType?: CardType };
 
-/** What a side is saved as: its typed text and its handwriting (null when it has no strokes) */
+/** What a side is saved as: its typed text ("" when drawn), or its handwriting (null when typed) */
 export type SideResult = {
     text: string;
     ink: { strokes: Stroke[]; penSize: number; changed: boolean } | null;
@@ -64,6 +65,8 @@ export type CardEditorOptions =
           draft: CardEditorDraft | null;
           /** Receives the unsaved card on close, or null when there is nothing to keep */
           keepDraft(draft: CardEditorDraft | null): void;
+          /** A side's input was switched: new cards start with it on that side (the settings) */
+          rememberInput?(face: "front" | "back", input: SideInput): void;
       })
     | (CommonOptions & {
           kind: "edit";
@@ -124,10 +127,10 @@ interface UndoStep {
  * The card editor, used to add new cards and to edit existing ones.
  * It only collects the sides; all file and note writes happen in opts.save().
  *
- * One side is shown at a time, in fixed zones: the tool row, the pen zone of fixed height and the
- * text zone filling the rest; on the right the switch to the other side, beside the pen zone,
- * and the save buttons, beside the text zone. Nothing takes the focus from the text area, so on a
- * phone the soft keyboard stays open while typing and writing, and nothing moves.
+ * One side is shown at a time, in fixed zones: the tool row and, below it, the side's text zone or
+ * pen zone (a side is typed or drawn, see the input toggle); on the right the switch to the other
+ * side and the save buttons. The editor's buttons never take the focus: typing, the text area
+ * keeps it, so on a phone the soft keyboard stays open; drawing, the keyboard is closed.
  */
 export class CardEditorModal extends Modal {
     private settings: SRSettings;
@@ -183,6 +186,12 @@ export class CardEditorModal extends Modal {
     private eraserButton!: HTMLButtonElement;
     private undoButton!: HTMLButtonElement;
     private clearButton!: HTMLButtonElement;
+    /** Typing / drawing for the side shown; null for cloze and with pen mode off */
+    private inputButtons: Record<SideInput, HTMLButtonElement> | null = null;
+    /** The open question before a side's input is switched, see askInput() */
+    private confirm: { el: HTMLElement; remove: () => void } | null = null;
+    /** The input each side of a new card starts with: the one it had last */
+    private newInputs: Record<"front" | "back", SideInput>;
     /** The preview toggle in each side's text zone */
     private previewButtons: HTMLButtonElement[] = [];
     private typeButton!: HTMLButtonElement;
@@ -203,6 +212,10 @@ export class CardEditorModal extends Modal {
                 ? opts.cardType
                 : (opts.draft?.cardType ?? CardType.MultiLineBasic);
         this.initialCardType = this.cardType;
+        this.newInputs = {
+            front: settings.cardEditorFrontInput,
+            back: settings.cardEditorBackInput,
+        };
         // Kept when stepping to the previous / next card
         this.preview = opts.kind === "edit" && (opts.steps?.preview ?? false);
     }
@@ -262,6 +275,7 @@ export class CardEditorModal extends Modal {
 
     onClose(): void {
         this.closeTypeList();
+        this.closeConfirm();
         this.isClosed = true;
         this.contentEl.removeEventListener("keydown", this.onKeyDown);
         for (const type of PEN_EVENTS) {
@@ -368,10 +382,11 @@ export class CardEditorModal extends Modal {
     }
 
     /**
-     * Tool row, sides and right column for the card type: a cloze card has one side without a
-     * pen zone. Built again when the type changes to or from cloze (see setCardType()).
+     * Tool row, sides and right column for the card type: a cloze card has one typed side.
+     * Built again when the type changes to or from cloze (see setCardType()).
      */
     private buildMain(initial: CardEditorSides) {
+        this.closeConfirm();
         if (this.mainEl) {
             for (const type of LOCKED_EVENTS) {
                 this.sidesEl.removeEventListener(type, this.onLockedInput, true);
@@ -391,9 +406,9 @@ export class CardEditorModal extends Modal {
         // Capturing, so this runs before the sides' own listeners
         for (const type of LOCKED_EVENTS) sidesEl.addEventListener(type, this.onLockedInput, true);
         const cloze = initial.back === null;
-        // With pen mode off, a side gets a pen zone only for the handwriting it already has, so
-        // saving the card keeps it
-        const ink = (side: SideState) => this.settings.cardEditorPenMode || side.strokes.length > 0;
+        // With pen mode off, only a side that is already drawn can be drawn, so saving the card
+        // keeps its handwriting
+        const ink = (side: SideState) => this.settings.cardEditorPenMode || side.input === "pen";
         this.front = this.createSide(sidesEl, {
             face: "front",
             label: cloze ? t("CARD_EDITOR_CLOZE") : t("CARD_EDITOR_FRONT"),
@@ -421,9 +436,6 @@ export class CardEditorModal extends Modal {
             button.addClass("sr-card-editor-preview-toggle");
             return button;
         });
-        // No pen zone anywhere: the text zone takes its place, the switch and the saves share
-        // the right column
-        this.modalEl.toggleClass("sr-card-editor-no-ink", !this.hasInk);
         // Cloze: one side, no switch
         main.toggleClass("sr-card-editor-one-side", this.back === null);
         // Left-handed: the right column moves to the left of the fields
@@ -442,12 +454,23 @@ export class CardEditorModal extends Modal {
     }
 
     /**
-     * The side's name, then size, eraser, Mark as cloze (cloze cards), undo, clear and preview, for
-     * the side shown
+     * The side's name, then typing / drawing (not for cloze, nor with pen mode off), size, eraser,
+     * undo, Mark as cloze (cloze cards) and clear, for the side shown
      */
     private buildTools(main: HTMLElement) {
         const tools = main.createDiv({ cls: "sr-card-editor-tools" });
         this.sideLabelEl = tools.createDiv({ cls: "sr-card-editor-side-label" });
+        this.inputButtons = null;
+        if (this.settings.cardEditorPenMode && this.cardType !== CardType.Cloze) {
+            const toggle = tools.createDiv({ cls: "sr-card-editor-input" });
+            toggle.setAttr("role", "group");
+            const half = (input: SideInput, icon: string, label: string) =>
+                this.iconButton(toggle, icon, label, () => this.askInput(input));
+            this.inputButtons = {
+                text: half("text", "keyboard", t("CARD_EDITOR_INPUT_TEXT")),
+                pen: half("pen", "pen-line", t("CARD_EDITOR_INPUT_PEN")),
+            };
+        }
         this.sizeButton = this.iconButton(tools, null, t("CARD_EDITOR_PEN_SIZE"), () =>
             this.cycleSize(),
         );
@@ -519,12 +542,17 @@ export class CardEditorModal extends Modal {
 
     /** A new card of the card type: one side for a cloze card */
     private blankSides(): CardEditorSides {
-        const back = this.cardType === CardType.Cloze ? null : this.blankSide();
-        return { front: this.blankSide(), back };
+        const back = this.cardType === CardType.Cloze ? null : this.blankSide("back");
+        return { front: this.blankSide("front"), back };
     }
 
-    private blankSide(): SideState {
-        return { text: "", strokes: [], penSize: this.penSize };
+    /** An empty side with the input it had last; typed for cloze and with pen mode off */
+    private blankSide(face: "front" | "back"): SideState {
+        const pen =
+            this.settings.cardEditorPenMode &&
+            this.cardType !== CardType.Cloze &&
+            this.newInputs[face] === "pen";
+        return { text: "", strokes: [], penSize: this.penSize, input: pen ? "pen" : "text" };
     }
 
     /** Pen thickness for new ink: the setting, scaled by the size button's thin / medium / thick */
@@ -617,9 +645,8 @@ export class CardEditorModal extends Modal {
 
     /**
      * On phones and tablets the editor fills the visible part of the window, above the soft
-     * keyboard, which stays open while typing and writing. The pen zone sits at the top with a
-     * fixed height, so it doesn't move when the keyboard opens or closes; only the text zone and
-     * the save buttons beside it change height.
+     * keyboard, which stays open while typing. The tool row stays at the top; the side's zone and
+     * the right column change height when the keyboard opens or closes.
      */
     private fitVisibleHeight() {
         if (!Platform.isMobile) return;
@@ -682,6 +709,69 @@ export class CardEditorModal extends Modal {
     private clearSide() {
         if (this.busy) return;
         this.activeSide?.clear();
+    }
+
+    /**
+     * Switches the side shown to typing or drawing: an empty side at once; for a side with
+     * content, a question below the tool row asks first, as switching deletes it
+     */
+    private askInput(input: SideInput) {
+        const side = this.activeSide;
+        this.closeConfirm();
+        if (this.busy || side === null || input === side.input) return;
+        if (side.isEmpty) {
+            this.setInput(side, input);
+            return;
+        }
+        const tools = this.sideLabelEl.parentElement;
+        const el = tools.createDiv({ cls: "sr-card-editor-confirm" });
+        el.setAttr("role", "alertdialog");
+        renderHint(
+            el.createDiv({ cls: "sr-card-editor-confirm-question" }),
+            t(input === "text" ? "CARD_EDITOR_TO_TEXT_CONFIRM" : "CARD_EDITOR_TO_PEN_CONFIRM", {
+                side: side.label,
+            }),
+        );
+        const row = el.createDiv({ cls: "sr-card-editor-confirm-buttons" });
+        this.textButton(row, t("CARD_EDITOR_KEEP"), () => this.closeConfirm());
+        this.textButton(row, t("CARD_EDITOR_DELETE_AND_SWITCH"), () =>
+            this.setInput(side, input),
+        ).addClass("mod-warning");
+        // A tap anywhere else is Keep; the buttons don't take the focus (see palmGuard())
+        const outside = (e: Event) => {
+            if (!el.contains(e.target as Node)) this.closeConfirm();
+        };
+        this.modalEl.addEventListener("pointerdown", outside, true);
+        this.confirm = {
+            el,
+            remove: () => {
+                this.modalEl.removeEventListener("pointerdown", outside, true);
+                el.remove();
+            },
+        };
+    }
+
+    private closeConfirm() {
+        this.confirm?.remove();
+        this.confirm = null;
+    }
+
+    /**
+     * Switches the side to typing or drawing, deleting its content (not an undo step). Adding,
+     * new cards then start with this input on the side.
+     */
+    private setInput(side: SideEditor, input: SideInput) {
+        this.closeConfirm();
+        if (this.busy) return;
+        side.setInput(input);
+        this.undoSteps.set(side, []);
+        if (this.eraser) this.setEraser(false);
+        if (this.opts.kind === "add") {
+            this.newInputs[side.face] = input;
+            this.opts.rememberInput?.(side.face, input);
+        }
+        side.focus();
+        this.updateButtons();
     }
 
     /**
@@ -778,8 +868,8 @@ export class CardEditorModal extends Modal {
             new Notice(t(reversed ? "CARD_EDITOR_TO_REVERSED" : "CARD_EDITOR_TO_BASIC"));
         }
         if (toCloze || fromCloze) {
-            const front: SideState = { ...this.front.state, strokes: [] };
-            this.buildMain({ front, back: toCloze ? null : this.blankSide() });
+            const front: SideState = { ...this.front.state, strokes: [], input: "text" };
+            this.buildMain({ front, back: toCloze ? null : this.blankSide("back") });
         }
         // The menu took the focus (on mobile its sheet), the soft keyboard stays open
         this.activeSide?.focus();
@@ -843,6 +933,7 @@ export class CardEditorModal extends Modal {
 
     /** Shows one side, hiding the other; text and strokes are kept per side */
     private showSide(side: SideEditor) {
+        this.closeConfirm();
         this.activeSide = side;
         this.sides.forEach((s) => s.show(s === side));
         this.mainEl.toggleClass("is-back", side === this.back);
@@ -850,7 +941,7 @@ export class CardEditorModal extends Modal {
         this.updateButtons();
     }
 
-    /** Front ⇅ back, with the focus in the side's text area */
+    /** Front ⇅ back, with the focus on the side's zone: typed, its text area */
     private switchSide() {
         if (this.busy || this.back === null) return;
         const side = this.activeSide === this.front ? this.back : this.front;
@@ -922,7 +1013,7 @@ export class CardEditorModal extends Modal {
         this.undoSteps.clear();
         this.disarmDelete();
         // The preview stays on: showSide() renders the new, empty card
-        this.sides.forEach((side) => side.reset(this.blankSide()));
+        this.sides.forEach((side) => side.reset(this.blankSide(side.face)));
         this.showSide(this.front);
         this.front.focus();
     }
@@ -966,6 +1057,7 @@ export class CardEditorModal extends Modal {
      * empty is shown instead, outlined, with a notice; nothing is saved then.
      */
     private async runSave(): Promise<boolean> {
+        this.closeConfirm();
         const empty = this.sides.find((side) => side.isEmpty);
         if (empty !== undefined) {
             this.showEmptySide(empty);
@@ -1082,13 +1174,22 @@ export class CardEditorModal extends Modal {
         // Callbacks from the sides can arrive while the editor is still being built
         const side = this.activeSide;
         if (side === null) return;
-        const ink = side.inkEl !== null;
+        const drawing = side.input === "pen";
         this.sideLabelEl.setText(side.label);
+        if (this.inputButtons !== null) {
+            for (const input of ["text", "pen"] as const) {
+                const button = this.inputButtons[input];
+                button.disabled = this.busy;
+                button.toggleClass("is-active", side.input === input);
+                button.setAttr("aria-pressed", side.input === input);
+            }
+        }
 
-        // The size button shows the size of the tool in use: a dot for the pen, for the eraser a
-        // ring exactly as large as its circle in the pen zone
-        this.sizeButton.toggleClass("sr-is-hidden", !ink);
-        this.sizeButton.disabled = this.busy;
+        // The pen tools: hidden when no side can be drawn; typing, disabled, so undo and clear
+        // keep their place. The size button shows the size of the tool in use: a dot for the
+        // pen, for the eraser a ring exactly as large as its circle in the pen zone
+        this.sizeButton.toggleClass("sr-is-hidden", !this.hasInk);
+        this.sizeButton.disabled = this.busy || !drawing;
         this.sizeButton.toggleClass("is-eraser", this.eraser);
         const pen = PEN_SIZE_STEPS[this.penSizeStep];
         const eraser = ERASER_SIZE_STEPS[this.eraserSizeStep];
@@ -1100,9 +1201,10 @@ export class CardEditorModal extends Modal {
                 ? `${t("CARD_EDITOR_ERASER_SIZE")}: ${t(eraser.label)}`
                 : `${t("CARD_EDITOR_PEN_SIZE")}: ${t(pen.label)}`,
         );
-        this.eraserButton.toggleClass("sr-is-hidden", !ink);
-        this.eraserButton.toggleClass("is-active", this.eraser);
-        this.eraserButton.setAttr("aria-pressed", this.eraser);
+        this.eraserButton.toggleClass("sr-is-hidden", !this.hasInk);
+        this.eraserButton.disabled = this.busy || !drawing;
+        this.eraserButton.toggleClass("is-active", this.eraser && drawing);
+        this.eraserButton.setAttr("aria-pressed", this.eraser && drawing);
         this.mainEl.toggleClass("is-erasing", this.eraser);
         this.undoButton.disabled = this.busy || this.stepsOf(side).length === 0;
         this.clearButton.disabled = this.busy || side.isEmpty;
@@ -1244,9 +1346,10 @@ function cardTypeName(type: CardType): string {
 }
 
 function sideResult(side: SideEditor): SideResult {
-    const { text, strokes, penSize } = side.state;
+    const { text, strokes, penSize, input } = side.state;
+    if (input === "text") return { text, ink: null };
     return {
-        text,
+        text: "",
         ink: strokes.length > 0 ? { strokes, penSize, changed: side.inkChanged } : null,
     };
 }

@@ -83,6 +83,9 @@ export interface SRSettings {
     cardEditorPenSize: number;
     // Left-handed: the switch and the save buttons left of the writing fields
     cardEditorButtonsLeft: boolean;
+    // The input each side of a new card starts with: the one it had last
+    cardEditorFrontInput: "text" | "pen";
+    cardEditorBackInput: "text" | "pen";
 
     // algorithm
     algorithm: SRAlgorithmType;
@@ -181,6 +184,8 @@ export const DEFAULT_SETTINGS: SRSettings = {
     cardEditorGuideSpacing: 44,
     cardEditorPenSize: 2.5,
     cardEditorButtonsLeft: false,
+    cardEditorFrontInput: "text",
+    cardEditorBackInput: "pen",
 
     // algorithm
     algorithm: SRAlgorithmType.SM_2_OSR,
@@ -272,7 +277,7 @@ export function upgradeSettings(settings: SRSettings) {
             settings.cardEditorPenSize = DEFAULT_SETTINGS.cardEditorPenSize;
         }
     }
-    // They also had a default input mode; every side now holds text and handwriting at once
+    // They also had a default input mode, replaced by the input each side remembers
     delete raw.cardEditorDefaultMode;
 
     // Only published reminder settings are upgraded here. We deliberately do not preserve

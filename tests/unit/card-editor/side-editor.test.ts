@@ -24,10 +24,12 @@ const stroke = (x: number, size = 5): Stroke => ({
     size,
 });
 
+/** A side's state; drawn when it has strokes */
 const state = (s: Partial<SideState> = {}): SideState => ({
     text: "",
     strokes: [],
     penSize: 5,
+    input: (s.strokes?.length ?? 0) > 0 ? "pen" : "text",
     ...s,
 });
 
@@ -89,17 +91,43 @@ afterEach(() => {
 });
 
 describe("SideEditor", () => {
-    test("text and strokes are kept side by side", () => {
+    test("a typed side shows its text zone, a drawn side its pen zone", () => {
+        const typed = setup(state({ text: "Hello" }));
+        expect(textArea(typed.parent).value).toBe("Hello");
+        expect(typed.side.el.hasClass("is-text")).toBe(true);
+        expect(typed.side.el.hasClass("is-pen")).toBe(false);
+        type(typed.parent, "typed");
+        expect(typed.side.state).toEqual({ text: "typed", strokes: [], penSize: 5, input: "text" });
+        expect(typed.onChange).toHaveBeenCalledTimes(1);
+
         const strokes = [stroke(0)];
-        const { side, parent, onChange } = setup(state({ text: "Hello", strokes }));
-        expect(textArea(parent).value).toBe("Hello");
-        expect(inkField(parent).hasClass("is-empty")).toBe(false);
-        type(parent, "typed");
-        expect(side.state).toEqual({ text: "typed", strokes, penSize: 5 });
-        side.setStrokes([...strokes, stroke(20)]);
-        expect(side.state.text).toBe("typed");
-        expect(side.state.strokes).toHaveLength(2);
-        expect(onChange).toHaveBeenCalledTimes(2);
+        const drawn = setup(state({ strokes }));
+        expect(drawn.side.el.hasClass("is-pen")).toBe(true);
+        expect(inkField(drawn.parent).hasClass("is-empty")).toBe(false);
+        expect(drawn.side.state).toEqual({ text: "", strokes, penSize: 5, input: "pen" });
+    });
+
+    test("setInput deletes the content and switches, without an undo step", () => {
+        const { side, parent, onInkCommit, onChange } = setup(state({ text: "typed" }));
+        side.setInput("pen");
+        expect(side.input).toBe("pen");
+        expect(side.el.hasClass("is-pen")).toBe(true);
+        expect(textArea(parent).value).toBe("");
+        expect(side.isEmpty).toBe(true);
+        expect(onInkCommit).not.toHaveBeenCalled();
+        expect(onChange).toHaveBeenCalledTimes(1);
+        side.setStrokes([stroke(0)]);
+        side.setInput("text");
+        expect(side.state).toEqual({ text: "", strokes: [], penSize: 5, input: "text" });
+    });
+
+    test("typed, the text area takes the focus; drawn, the pen zone does", () => {
+        const { side, parent } = setup(state());
+        side.focus();
+        expect(document.activeElement).toBe(textArea(parent));
+        side.setInput("pen");
+        side.focus();
+        expect(document.activeElement).toBe(parent.querySelector(".sr-card-editor-ink"));
     });
 
     test("the side shows as one pen zone and one text zone with their hints", () => {
@@ -115,9 +143,14 @@ describe("SideEditor", () => {
         expect(side.el.hasClass("sr-is-hidden")).toBe(false);
     });
 
-    test("without ink (cloze) there is only the text area", () => {
-        const { side, parent } = setup(state({ text: "a ==b==" }), { allowInk: false });
+    test("without ink (cloze) there is only the text area, always typed", () => {
+        const { side, parent } = setup(state({ text: "a ==b==", input: "pen" }), {
+            allowInk: false,
+        });
         expect(inkField(parent)).toBeNull();
+        expect(side.input).toBe("text");
+        side.setInput("pen");
+        expect(side.input).toBe("text");
         side.setStrokes([stroke(0)]);
         expect(side.state.strokes).toEqual([]);
     });
@@ -143,19 +176,20 @@ describe("SideEditor", () => {
         const { side, parent } = setup(state({ strokes: [stroke(0)], text: "x" }));
         side.setStrokes([stroke(0), stroke(1)]);
         side.reset(state({ penSize: 7 }));
-        expect(side.state).toEqual({ text: "", strokes: [], penSize: 7 });
+        expect(side.state).toEqual({ text: "", strokes: [], penSize: 7, input: "text" });
         expect(textArea(parent).value).toBe("");
         expect(side.inkChanged).toBe(false);
     });
 
-    test("isEmpty: blank text and no strokes", () => {
+    test("isEmpty: blank text when typed, no strokes when drawn", () => {
         const { side, parent } = setup(state());
         type(parent, "  \n ");
         expect(side.isEmpty).toBe(true);
-        side.setStrokes([stroke(0)]);
-        expect(side.isEmpty).toBe(false);
         type(parent, "typed");
-        side.setStrokes([]);
+        expect(side.isEmpty).toBe(false);
+        side.setInput("pen");
+        expect(side.isEmpty).toBe(true);
+        side.setStrokes([stroke(0)]);
         expect(side.isEmpty).toBe(false);
     });
 });
@@ -163,7 +197,9 @@ describe("SideEditor", () => {
 describe("SideEditor clear", () => {
     test("clears text and ink as one step that can be undone", () => {
         const strokes = [stroke(0)];
-        const { side, parent, onInkCommit, onChange } = setup(state({ text: "typed", strokes }));
+        const { side, parent, onInkCommit, onChange } = setup(
+            state({ text: "typed", strokes, input: "pen" }),
+        );
         side.clear();
         expect(side.isEmpty).toBe(true);
         expect(textArea(parent).value).toBe("");
@@ -182,7 +218,7 @@ describe("SideEditor clear", () => {
 });
 
 describe("SideEditor inkChanged", () => {
-    test("typing is no ink change; added or removed strokes are", () => {
+    test("text is no ink change; added or removed strokes are", () => {
         const a = stroke(0);
         const b = stroke(20);
         const { side, parent } = setup(state({ strokes: [a, b] }));

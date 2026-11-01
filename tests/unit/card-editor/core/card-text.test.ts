@@ -3,14 +3,12 @@ import {
     cardMarkerLine,
     composeCardText,
     inkEmbedPath,
-    joinSide,
     linksIn,
     misreadSide,
     newCardBody,
     parsesAsCard,
     protectBlankLines,
     splitCardText,
-    splitSide,
 } from "src/card-editor/core/card-text";
 import { CardType, Question } from "src/data/data-structures/card/questions/question";
 import { TopicPath } from "src/data/data-structures/deck/topic-path";
@@ -231,7 +229,8 @@ describe("misreadSide", () => {
         misreadSide(cardType, front, back, DEFAULT_SETTINGS, (f, b) =>
             composeCardText(cardType, f, b, DEFAULT_SETTINGS),
         );
-    const multi = (text: string, embed: string) => joinSide(CardType.MultiLineBasic, text, embed);
+    /** A typed side with an ink embed in its text */
+    const multi = (text: string, embed: string) => `${text}\n${embed}`;
 
     test("a card that parses as typed", () => {
         expect(added("What is a vector?", "A dynamic array\n<br>\n- with `a::b`")).toBeNull();
@@ -251,7 +250,7 @@ describe("misreadSide", () => {
         // A blank line ends the card without an end marker
         expect(added("Q", "A\n\nB")).toEqual("back");
         expect(edited(CardType.Cloze, "No cloze here", null)).toEqual("front");
-        // The typed text next to ink is still checked
+        // The typed text around an embed is still checked
         expect(added(multi("Q", frontInk), multi("Like std::vector", backInk))).toEqual("back");
     });
 });
@@ -305,7 +304,7 @@ describe("Adding a card", () => {
     test("Handwritten and mixed sides parse as one card", async () => {
         const frontInk = "![[sr-ink/sr-ink-x-front.svg]]";
         const backInk = "![[sr-ink/sr-ink-x-back.svg]]";
-        const front = joinSide(CardType.MultiLineBasic, "Sketch a cell", frontInk);
+        const front = `Sketch a cell\n${frontInk}`;
         for (const settings of [DEFAULT_SETTINGS, END_MARKER_SETTINGS]) {
             const questions = await parseQuestions(
                 `#flashcards\n\n${newCardBody(front, backInk, settings)}\n`,
@@ -313,8 +312,7 @@ describe("Adding a card", () => {
             );
             expect(questions.length).toEqual(1);
             const reread = sides(questions[0], settings);
-            expect(splitSide(reread.front)).toEqual({ text: "Sketch a cell", inkEmbed: frontInk });
-            expect(splitSide(reread.back)).toEqual({ text: "", inkEmbed: backInk });
+            expect(reread).toEqual({ front, back: backInk });
         }
     });
 
@@ -366,84 +364,5 @@ describe("Adding a card", () => {
             front: "Q\n<br>\nmore Q",
             back: "line 1\n<br>\nline 2",
         });
-    });
-});
-
-describe("Sides with text and ink", () => {
-    const frontInk = "![[sr-ink/sr-ink-x-front.svg]]";
-    const backInk = "![[sr-ink/sr-ink-x-back.svg]]";
-
-    test("splitSide finds only a trailing ink embed", () => {
-        expect(splitSide(`Sketch the cell\n${frontInk}`)).toEqual({
-            text: "Sketch the cell",
-            inkEmbed: frontInk,
-        });
-        expect(splitSide(`${frontInk}\nmore text`)).toEqual({
-            text: `${frontInk}\nmore text`,
-            inkEmbed: null,
-        });
-        expect(splitSide("See ![[diagram.png]]")).toEqual({
-            text: "See ![[diagram.png]]",
-            inkEmbed: null,
-        });
-    });
-
-    test("Join and split round trip", () => {
-        const types = [
-            CardType.SingleLineBasic,
-            CardType.SingleLineReversed,
-            CardType.MultiLineBasic,
-            CardType.MultiLineReversed,
-        ];
-        for (const cardType of types) {
-            for (const text of ["", "Q", "Line 1\n- Line 2"]) {
-                if (text.includes("\n") && !types.slice(2).includes(cardType)) continue;
-                for (const embed of [frontInk, "![](sr-ink/sr-ink-y.svg)", null]) {
-                    expect(splitSide(joinSide(cardType, text, embed))).toEqual({
-                        text,
-                        inkEmbed: embed,
-                    });
-                }
-            }
-        }
-    });
-
-    test("A code block left open is closed before the ink", () => {
-        expect(joinSide(CardType.MultiLineBasic, "```js\nconst a = 1", frontInk)).toEqual(
-            "```js\nconst a = 1\n```\n" + frontInk,
-        );
-    });
-
-    test("Mixed sides of every card type are read back by SR's parser", async () => {
-        const cases: [CardType, string, string][] = [
-            [CardType.SingleLineBasic, "Sketch a cell", "Nucleus"],
-            [CardType.SingleLineReversed, "Mitochondria", "Powerhouse"],
-            [CardType.MultiLineBasic, "Sketch a cell\nwith its parts", "- Nucleus\n- Membrane"],
-            [CardType.MultiLineReversed, "Capital of France", "Paris"],
-        ];
-        for (const [cardType, frontText, backText] of cases) {
-            for (const [fInk, bInk] of [
-                [frontInk, backInk],
-                [frontInk, null],
-                [null, backInk],
-            ]) {
-                const front = joinSide(cardType, frontText, fInk);
-                const back = joinSide(cardType, backText, bInk);
-                const cardText = composeCardText(cardType, front, back, DEFAULT_SETTINGS);
-                const questions = await parseQuestions(
-                    `#flashcards\n\n${cardText}\n`,
-                    DEFAULT_SETTINGS,
-                );
-                expect(questions.length).toEqual(1);
-                expect(questions[0].questionType).toEqual(cardType);
-                const reread = sides(questions[0]);
-                expect(splitSide(reread.front)).toEqual({ text: frontText, inkEmbed: fInk });
-                expect(splitSide(reread.back)).toEqual({ text: backText, inkEmbed: bInk });
-                expect(
-                    parsesAsCard(cardText, cardType, front, back, DEFAULT_SETTINGS),
-                    `${CardType[cardType]} ${cardText}`,
-                ).toBe(true);
-            }
-        }
     });
 });

@@ -394,6 +394,12 @@ export interface IBaseLocale {
     CARD_EDITOR_ERASER: string;
     CARD_EDITOR_UNDO: string;
     CARD_EDITOR_CLEAR_SIDE: string;
+    CARD_EDITOR_INPUT_TEXT: string;
+    CARD_EDITOR_INPUT_PEN: string;
+    CARD_EDITOR_TO_TEXT_CONFIRM: string;
+    CARD_EDITOR_TO_PEN_CONFIRM: string;
+    CARD_EDITOR_KEEP: string;
+    CARD_EDITOR_DELETE_AND_SWITCH: string;
     CARD_EDITOR_MARK_CLOZE: string;
     CARD_EDITOR_PREVIEW: string;
     CARD_EDITOR_CARD_TYPE: string;

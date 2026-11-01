@@ -425,7 +425,7 @@ const en: IBaseLocale = {
     GROUP_CARD_EDITOR: "Card editor",
     CARD_EDITOR_PEN_MODE: "Pen mode",
     CARD_EDITOR_PEN_MODE_DESC:
-        "Each side of a card gets a field to write in with a pen, such as the S Pen; fingers are ignored there, so your hand can rest on the screen. Off: cards are typed only.",
+        "Each side of a card can be typed or drawn with a pen, such as the S Pen; fingers are ignored while drawing, so your hand can rest on the screen. Off: cards are typed only.",
     CARD_EDITOR_IMAGE_FOLDER: "Image folder",
     CARD_EDITOR_IMAGE_FOLDER_DESC:
         "Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.",
@@ -464,6 +464,12 @@ const en: IBaseLocale = {
     CARD_EDITOR_ERASER: "Eraser (or press the pen button)",
     CARD_EDITOR_UNDO: "Undo",
     CARD_EDITOR_CLEAR_SIDE: "Clear side",
+    CARD_EDITOR_INPUT_TEXT: "Type",
+    CARD_EDITOR_INPUT_PEN: "Draw",
+    CARD_EDITOR_TO_TEXT_CONFIRM: "Delete the drawing on **${side}** and switch to typing?",
+    CARD_EDITOR_TO_PEN_CONFIRM: "Delete the text on **${side}** and switch to drawing?",
+    CARD_EDITOR_KEEP: "Keep",
+    CARD_EDITOR_DELETE_AND_SWITCH: "Delete & switch",
     CARD_EDITOR_MARK_CLOZE: "Mark as cloze",
     CARD_EDITOR_PREVIEW: "Preview",
     CARD_EDITOR_CARD_TYPE: "Card type",

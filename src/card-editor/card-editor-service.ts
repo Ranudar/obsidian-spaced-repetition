@@ -14,12 +14,10 @@ import {
     inkEmbed,
     inkEmbedPath,
     inkEmbedPaths,
-    joinSide,
     misreadSide,
     newCardBody,
     protectBlankLines,
     splitCardText,
-    splitSide,
 } from "src/card-editor/core/card-text";
 import { deckNames, noteDecks } from "src/card-editor/core/decks";
 import {
@@ -103,11 +101,9 @@ const INK_TRASH_DELAY_MS = 2000;
 
 /** A side of an existing card, as found in the note */
 interface LoadedSide {
-    /** The side's text in the note: typed text, then the ink embed if it has one */
+    /** The side's text in the note */
     text: string;
-    /** The trailing ink embed as written, if its file's strokes could be read; else null */
-    embed: string | null;
-    /** The ink file, if the side is handwritten and its strokes could be read */
+    /** The ink file, if the side is drawn: just its embed, whose strokes could be read */
     file: TFile | null;
     /** The ink file's content, to restore it when a save fails */
     svg: string;
@@ -181,6 +177,11 @@ export class CardEditorService {
                 added++;
             },
             keepDraft: (draft) => (this.draft = draft),
+            rememberInput: (face, input) => {
+                if (face === "front") this.settings.cardEditorFrontInput = input;
+                else this.settings.cardEditorBackInput = input;
+                void this.settingsManager.save();
+            },
             closed: () => {
                 this.modals.delete(modal);
                 if (added > 0 && !this.destroyed) void this.rescan(inserter);
@@ -389,9 +390,7 @@ export class CardEditorService {
      * cards or notes still refer to
      */
     private async deleteCard(card: LoadedCard, deleteQuestion: DeleteQuestion): Promise<void> {
-        const files = [card.front.file, card.back?.file ?? null].filter(
-            (f): f is TFile => f !== null,
-        );
+        const files = this.inkFilesIn(card.original, card.sourcePath);
         // Counted before the note is written, see saveCard()
         const linksOutside = new Map(
             files.map((f) => [f, this.linksOutsideCard(f, card.original, card.sourcePath)]),
@@ -448,7 +447,7 @@ export class CardEditorService {
 
     /**
      * Writes the ink files of a new card and inserts the card, a basic or reversed card with the
-     * card type's separator, or a cloze card. A side is its typed text, then the embed of its
+     * card type's separator, or a cloze card. A side is its typed text or the embed of its
      * handwriting. Both handwritten sides share the stem of their file names.
      */
     private async addCard(
@@ -473,19 +472,10 @@ export class CardEditorService {
         try {
             const sideText = async (r: SideResult | null, side: InkSide): Promise<string> => {
                 if (r === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
-                const typed = this.protect(this.typedText(r.text, false), side);
-                let embed: string | null = null;
-                if (r.ink !== null) {
-                    const svg = strokesToSvg(r.ink.strokes, { size: r.ink.penSize });
-                    if (svg === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
-                    embed = await this.createInk(
-                        inkFileName(stem, side),
-                        svg.svg,
-                        sourcePath,
-                        created,
-                    );
-                }
-                return joinSide(CardType.MultiLineBasic, typed, embed);
+                if (r.ink === null) return this.protect(this.typedText(r.text, false), side);
+                const svg = strokesToSvg(r.ink.strokes, { size: r.ink.penSize });
+                if (svg === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
+                return this.createInk(inkFileName(stem, side), svg.svg, sourcePath, created);
             };
 
             const front = await sideText(result.front, "front");
@@ -518,25 +508,22 @@ export class CardEditorService {
     }
 
     /**
-     * A side is typed text, optionally followed by one embed of an ink SVG with stored strokes.
-     * A missing or unreadable SVG keeps its embed in the text, so nothing is lost. Cloze cards
-     * (allowInk false) have no handwriting: their whole text is typed.
+     * A side is drawn if it is exactly one embed of an ink SVG with stored strokes; anything else
+     * is typed, embeds included, e.g. text with an ink embed, or an SVG missing or unreadable, so
+     * nothing is lost. Cloze cards (allowInk false) are always typed.
      */
     private async loadSide(text: string, sourcePath: string, allowInk = true): Promise<LoadedSide> {
         const penSize = this.settings.cardEditorPenSize;
         const asText: LoadedSide = {
             text,
-            embed: null,
             file: null,
             svg: "",
-            state: { text, strokes: [], penSize },
+            state: { text, strokes: [], penSize, input: "text" },
         };
         if (!allowInk) return asText;
 
-        const parts = splitSide(text);
-        if (parts.inkEmbed === null) return asText;
         // The embed's own link path, so a file of the same name in another folder isn't used
-        const linkPath = inkEmbedPath(parts.inkEmbed);
+        const linkPath = inkEmbedPath(text);
         if (linkPath === null) return asText;
         const file = this.inkFiles.resolve(linkPath, sourcePath);
         if (file === null) return asText;
@@ -547,10 +534,9 @@ export class CardEditorService {
             if (ink === null) return asText;
             return {
                 text,
-                embed: parts.inkEmbed,
                 file,
                 svg,
-                state: { text: parts.text, strokes: ink.strokes, penSize: ink.size },
+                state: { text: "", strokes: ink.strokes, penSize: ink.size, input: "pen" },
             };
         } catch (err) {
             console.error("SR: reading the ink image failed", err);
@@ -559,12 +545,13 @@ export class CardEditorService {
     }
 
     /**
-     * Saves an edited card. Per side, its handwriting:
-     * - kept: overwrites the SVG if the strokes changed, its embed stays as it is
-     * - added: a new SVG, named after the card's other ink side if it has one
-     * - erased: the embed goes, and the SVG to the trash once the note is written
-     * The side's text is rewritten only if its typed text or its embed changed.
-     * Then writes the note if the card's text changed, also when only its type changed (basic ⇄
+     * Saves an edited card. Per side:
+     * - drawn before and now: overwrites the SVG if the strokes changed, its embed stays as it is
+     * - drawn now, typed before: a new SVG, named after the card's other ink side if it has one
+     * - typed now: its text, rewritten only if it changed
+     * Ink the side embedded and no longer does (a drawing switched to typing, an ink embed deleted
+     * from the typed text or typed text switched to drawing) goes to the trash once the note is
+     * written, unless something else still refers to it. Then writes the note if the card's text changed, also when only its type changed (basic ⇄
      * reversed: the type's separator). On failure, everything is undone.
      */
     private async saveCard(
@@ -586,8 +573,8 @@ export class CardEditorService {
 
         // Both sides of a card share the stem of their file names
         let stem: string | null = null;
-        for (const side of [front, back]) {
-            const parsed = side?.file ? parseInkFileName(side.file.name) : null;
+        for (const file of this.inkFilesIn(card.original, sourcePath)) {
+            const parsed = parseInkFileName(file.name);
             if (parsed) {
                 stem = parsed.stem;
                 break;
@@ -610,39 +597,36 @@ export class CardEditorService {
             loaded: LoadedSide,
             side: InkSide,
         ): Promise<string> => {
-            let embed: string | null = null;
-            if (r.ink === null) {
-                if (loaded.file) toTrash.push(loaded.file);
-            } else if (loaded.file && !r.ink.changed) {
-                embed = loaded.embed;
-            } else {
+            let sideText: string;
+            if (r.ink !== null) {
+                // Still drawn and unchanged: nothing to write
+                if (loaded.file && !r.ink.changed) return loaded.text;
                 const svg = strokesToSvg(r.ink.strokes, { size: r.ink.penSize });
                 if (svg === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
                 if (loaded.file) {
                     await this.inkFiles.overwrite(loaded.file, svg.svg);
                     overwritten.push(loaded);
-                    embed = loaded.embed;
-                } else {
-                    embed = await this.createInk(
-                        inkFileName(newStem(side), side),
-                        svg.svg,
-                        sourcePath,
-                        created,
-                    );
+                    return loaded.text;
                 }
-            }
-
-            const typedChanged = r.text !== loaded.state.text;
-            // Unchanged: exactly as in the note, e.g. with whitespace before the embed
-            if (!typedChanged && embed === loaded.embed) return loaded.text;
-            let typed = loaded.state.text;
-            if (typedChanged) {
-                typed = this.typedText(r.text, true);
+                sideText = await this.createInk(
+                    inkFileName(newStem(side), side),
+                    svg.svg,
+                    sourcePath,
+                    created,
+                );
+            } else {
+                // Unchanged: exactly as in the note, e.g. with its indentation
+                if (!loaded.file && r.text === loaded.text) return loaded.text;
+                sideText = this.typedText(r.text, true);
                 if (protect)
-                    typed = this.protect(typed, cardType === CardType.Cloze ? "cloze" : side);
+                    sideText = this.protect(sideText, cardType === CardType.Cloze ? "cloze" : side);
+                if (sideText.length === 0) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
             }
-            const sideText = joinSide(cardType, typed, embed);
-            if (sideText.trim().length === 0) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
+            const kept = this.inkFilesIn(sideText, sourcePath).map((f) => f.path);
+            for (const file of this.inkFilesIn(loaded.text, sourcePath)) {
+                if (kept.includes(file.path) || toTrash.some((f) => f.path === file.path)) continue;
+                toTrash.push(file);
+            }
             return sideText;
         };
 
@@ -685,6 +669,16 @@ export class CardEditorService {
             textChanged: text !== card.original,
             changedImages: overwritten.map((side) => side.file),
         };
+    }
+
+    /** The ink files embedded in the text (see inkEmbedPaths), each once */
+    private inkFilesIn(text: string, sourcePath: string): TFile[] {
+        const files: TFile[] = [];
+        for (const path of inkEmbedPaths(text)) {
+            const file = this.inkFiles.resolve(path, sourcePath);
+            if (file !== null && !files.some((f) => f.path === file.path)) files.push(file);
+        }
+        return files;
     }
 
     /**

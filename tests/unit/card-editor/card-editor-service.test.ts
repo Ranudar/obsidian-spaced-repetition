@@ -235,17 +235,17 @@ function unchanged(state: SideState): SideResult {
     return {
         text: state.text,
         ink:
-            state.strokes.length > 0
+            state.input === "pen"
                 ? { strokes: state.strokes, penSize: state.penSize, changed: false }
                 : null,
     };
 }
 
-/** A side with only typed text: its handwriting, if it had any, erased */
+/** A typed side: its handwriting, if it was drawn, deleted */
 const text = (t: string): SideResult => ({ text: t, ink: null });
-/** A side with only handwriting: its typed text, if it had any, deleted */
-const ink = (strokes: Stroke[], changed = true, typed = ""): SideResult => ({
-    text: typed,
+/** A drawn side: its text, if it was typed, deleted */
+const ink = (strokes: Stroke[], changed = true): SideResult => ({
+    text: "",
     ink: { strokes, penSize: 5, changed },
 });
 
@@ -309,6 +309,7 @@ describe("loading a card", () => {
             text: "When plugged in, bad chargers spark 80% of the time. What's the probability that a sparking charger is bad?",
             strokes: [],
             penSize: settings.cardEditorPenSize,
+            input: "text",
         });
         expect(opts.initial.back.text).toEqual(
             "**Prior odds:** $\\text{bad} : \\text{good} = 3 : 97$\n**Probability:** $\\frac{48}{48 + 97} \\approx 33\\%$",
@@ -321,6 +322,8 @@ describe("loading a card", () => {
 
         expect(opts.initial.front.text).toEqual("What is the powerhouse of the cell?");
         expect(opts.initial.front.strokes).toEqual([]);
+        expect(opts.initial.front.input).toEqual("text");
+        expect(opts.initial.back.input).toEqual("pen");
         expect(opts.initial.back.text).toEqual("");
         expect(opts.initial.back.penSize).toEqual(7);
         expect(opts.initial.back.strokes).toHaveLength(2);
@@ -431,7 +434,7 @@ describe("saving a card", () => {
         expect(vault.content("old/sr-ink-20261031-141502123-front.svg")).toBeDefined();
     });
 
-    test("erased ink moves the SVG to the trash", async () => {
+    test("a drawn side switched to typing moves its SVG to the trash", async () => {
         const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(mixedNote));
 
@@ -636,7 +639,7 @@ describe("saving a card", () => {
     });
 });
 
-describe("sides with typed text and handwriting", () => {
+describe("sides with typed text and an ink embed", () => {
     const BACK = "sr-ink/sr-ink-20261031-141502123-back.svg";
     const combinedNote = `#flashcards
 
@@ -646,50 +649,65 @@ Mitochondria, drawn:
 ![[${BACK}]]
 `;
 
-    test("loads the typed text and the strokes of a side holding both", async () => {
+    test("open typed, with the embed in the text", async () => {
         vault.add(BACK, svgOf([stroke(0), stroke(40)]));
         const { opts } = await edit(await parseQuestion(combinedNote));
-        expect(opts.initial.back.text).toEqual("Mitochondria, drawn:");
-        expect(opts.initial.back.strokes).toHaveLength(2);
-        expect(opts.initial.back.penSize).toEqual(7);
+        expect(opts.initial.back).toEqual({
+            text: `Mitochondria, drawn:\n![[${BACK}]]`,
+            strokes: [],
+            penSize: settings.cardEditorPenSize,
+            input: "text",
+        });
     });
 
-    test("changed typed text keeps the embed after it; the SVG is untouched", async () => {
+    test("changed text keeps the embed as typed; the SVG is untouched", async () => {
         vault.add(BACK, svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(combinedNote));
-        const { front, back } = session.opts.initial;
         const result = await save(session, {
-            front: unchanged(front),
-            back: { ...unchanged(back), text: "The mitochondrion:\n\nsee drawing" },
+            front: unchanged(session.opts.initial.front),
+            back: text(`The mitochondrion:\n\n![[${BACK}]]`),
         });
         expect(result.text).toEqual(
-            `What is the powerhouse of the cell?\n?\nThe mitochondrion:\n<br>\nsee drawing\n![[${BACK}]]`,
+            `What is the powerhouse of the cell?\n?\nThe mitochondrion:\n<br>\n![[${BACK}]]`,
         );
         expect(result.changedImages).toEqual([]);
         expect(vault.app.vault.modify).not.toHaveBeenCalled();
+        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
     });
 
-    test("writing on a typed side adds a new SVG after the text", async () => {
-        vault.add(BACK, svgOf([stroke(0)]));
-        const session = await edit(await parseQuestion(mixedNote));
-        const result = await save(session, {
-            front: ink([stroke(3)], true, "What is the powerhouse of the cell?"),
-            back: unchanged(session.opts.initial.back),
-        });
-        expect(result.text).toEqual(
-            `What is the powerhouse of the cell?\n![[sr-ink/sr-ink-20261031-141502123-front.svg]]\n?\n![[${BACK}]]`,
-        );
-        expect(vault.content("sr-ink/sr-ink-20261031-141502123-front.svg")).toBeDefined();
+    test("an embed deleted from the text moves its SVG to the trash, unless referenced", async () => {
+        const back = vault.add(BACK, svgOf([stroke(0)]));
+        const removeEmbed = async () => {
+            ModalMock.mockClear();
+            const session = await edit(await parseQuestion(combinedNote));
+            const result = await save(session, {
+                front: unchanged(session.opts.initial.front),
+                back: text("Mitochondria"),
+            });
+            expect(result.text).toEqual("What is the powerhouse of the cell?\n?\nMitochondria");
+        };
+
+        // Embedded in another note too
+        vault.app.metadataCache.resolvedLinks[NOTE_PATH] = { [back.path]: 1 };
+        vault.app.metadataCache.resolvedLinks["notes/summary.md"] = { [back.path]: 1 };
+        await removeEmbed();
+        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
+
+        delete vault.app.metadataCache.resolvedLinks["notes/summary.md"];
+        await removeEmbed();
+        expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
     });
 
-    test("erasing all strokes removes the embed, keeps the typed text and trashes the SVG", async () => {
+    test("drawing on a typed side drops its text and the ink embedded in it", async () => {
         const back = vault.add(BACK, svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(combinedNote));
         const result = await save(session, {
             front: unchanged(session.opts.initial.front),
-            back: text("Mitochondria, drawn:"),
+            back: ink([stroke(3)]),
         });
-        expect(result.text).toEqual("What is the powerhouse of the cell?\n?\nMitochondria, drawn:");
+        const [, drawn] = result.text.split("\n?\n");
+        expect(inkEmbedFileName(drawn)).toMatch(/^sr-ink-.+-back\.svg$/);
+        expect(drawn).not.toContain(BACK);
         expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
     });
 });
@@ -884,10 +902,18 @@ describe("adding cards", () => {
         expect(calls[calls.length - 1][2].decks).toEqual(["a"]);
     });
 
+    test("a side's input switched is remembered in the settings for new cards", async () => {
+        const opts = await openAdd();
+        opts.rememberInput("back", "text");
+        opts.rememberInput("front", "pen");
+        expect(settings.cardEditorBackInput).toEqual("text");
+        expect(settings.cardEditorFrontInput).toEqual("pen");
+    });
+
     test("an unsaved card is restored the next time", async () => {
         const draft: CardEditorSides = {
-            front: { text: "Q", strokes: [], penSize: 5 },
-            back: { text: "A", strokes: [stroke(0)], penSize: 5 },
+            front: { text: "Q", strokes: [], penSize: 5, input: "text" },
+            back: { text: "", strokes: [stroke(0)], penSize: 5, input: "pen" },
         };
         (await openAdd()).keepDraft(draft);
         const opts = await openAdd();
