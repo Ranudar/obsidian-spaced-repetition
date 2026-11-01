@@ -343,17 +343,35 @@ export class Question {
     /**
      * Sets the actual question text (keeping topic path and schedule) and writes the question to
      * its note. Resolves to false, writing nothing, when its text is no longer in the note; the
-     * text is then set back, as it is when the write throws.
+     * text is then set back, as it is when the write throws. cardType: the type the text is
+     * written as, when the card editor changed it between basic and reversed.
      */
-    async writeActualQuestion(text: string, settings: SRSettings): Promise<boolean> {
+    async writeActualQuestion(
+        text: string,
+        settings: SRSettings,
+        cardType: CardType = this.questionType,
+    ): Promise<boolean> {
         const q = this.questionText;
         const previous = q.actualQuestion;
+        const previousType = this.parsedQuestionInfo.cardType;
+        const previousCards = this.cards;
         q.actualQuestion = text;
+        // A card changed from reversed to basic (by the card editor) keeps only its first
+        // direction, and so only that direction's schedule; one changed from basic to reversed
+        // gets its reverse direction as a new card when the note is read again
+        this.parsedQuestionInfo.cardType = cardType;
+        const toBasic =
+            cardType === CardType.SingleLineBasic || cardType === CardType.MultiLineBasic;
+        if (cardType !== previousType && toBasic) this.cards = this.cards.slice(0, 1);
         let written = false;
         try {
             written = await this.writeQuestion(settings);
         } finally {
-            if (!written) q.actualQuestion = previous;
+            if (!written) {
+                q.actualQuestion = previous;
+                this.parsedQuestionInfo.cardType = previousType;
+                this.cards = previousCards;
+            }
         }
         return written;
     }

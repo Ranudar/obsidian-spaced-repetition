@@ -1,6 +1,7 @@
 import { MarkdownView, Notice, TFile } from "obsidian";
 
 import {
+    CardEditorDraft,
     CardEditorModal,
     CardEditorResult,
     CardEditorSides,
@@ -20,6 +21,7 @@ import {
     splitCardText,
     splitSide,
 } from "src/card-editor/core/card-text";
+import { deckNames, noteDecks } from "src/card-editor/core/decks";
 import {
     inkFileName,
     InkSide,
@@ -32,7 +34,7 @@ import { InkFiles } from "src/card-editor/ink-files";
 import { SideState } from "src/card-editor/side-editor";
 import { DataStore } from "src/data/data-store/base/data-store";
 import { CardType, isSingleLine, Question } from "src/data/data-structures/card/questions/question";
-import { SettingsUtil, SRSettings } from "src/data/settings";
+import { SRSettings } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
 import { t } from "src/lang/helpers";
 import type SRPlugin from "src/main";
@@ -73,10 +75,11 @@ export interface EditNoteResult {
 }
 
 /**
- * Writes the edited question text to the note.
+ * Writes the edited question text to the note, as a card of the type (which the editor may have
+ * changed between basic and reversed).
  * Resolves to false, writing nothing, when the card's text is no longer in the note.
  */
-export type WriteQuestionText = (text: string) => Promise<boolean>;
+export type WriteQuestionText = (text: string, cardType: CardType) => Promise<boolean>;
 
 /**
  * Removes the question, with its schedule, from the note.
@@ -121,7 +124,7 @@ export class CardEditorService {
     private plugin: SRPlugin;
     private settingsManager: SettingsManager;
     /** The unsaved card of the last add editor closed without saving */
-    private draft: CardEditorSides | null = null;
+    private draft: CardEditorDraft | null = null;
     /** A card from a note is being edited; ignores a second tap on a pencil meanwhile */
     private editingInNote = false;
     /** The editors open now, closed when the plugin is unloaded */
@@ -146,19 +149,15 @@ export class CardEditorService {
      */
     openAdd(file: TFile, view: MarkdownView | null): void {
         if (this.destroyed) return;
-        if (!this.hasFlashcardTag(file)) {
-            new Notice(
-                t("CARD_EDITOR_NO_FLASHCARD_TAG", {
-                    tag: this.settings.flashcardTags[0] ?? "#flashcards",
-                }),
-            );
-        }
+        const decks = noteDecks(this.plugin.dataManager.createSRNoteTFile(file), this.settings);
 
         const inserter = new CardInserter(this.plugin.app, file, view, this.settings);
         let added = 0;
         const modal = new CardEditorModal(this.plugin.app, this.settings, {
             kind: "add",
             title: file.basename,
+            decks: deckNames(decks, this.settings),
+            sourcePath: file.path,
             textDirection: this.plugin.getObsidianRtlSetting(),
             draft: this.draft,
             save: async (r: CardEditorResult) => {
@@ -234,6 +233,8 @@ export class CardEditorService {
             const modal = new CardEditorModal(this.plugin.app, this.settings, {
                 kind: "edit",
                 title: question.note.file.basename,
+                decks: deckNames(question.topicPathList?.list ?? [], this.settings),
+                sourcePath,
                 textDirection: question.questionText.textDirection,
                 initial,
                 cardType,
@@ -325,7 +326,7 @@ export class CardEditorService {
                 questions.indexOf(question),
                 (q) => ({
                     // Replaces just the question's text, so its schedule comment stays
-                    write: (text) => q.writeActualQuestion(text, this.settings),
+                    write: (text, cardType) => q.writeActualQuestion(text, this.settings, cardType),
                     delete: () => DataStore.getInstance().delete(q),
                 }),
             );
@@ -403,14 +404,27 @@ export class CardEditorService {
     }
 
     /**
-     * Writes the ink files of a new card and inserts the card. A side is its typed text, then the
-     * embed of its handwriting. Both handwritten sides share the stem of their file names.
+     * Writes the ink files of a new card and inserts the card, a basic or reversed card with the
+     * card type's separator, or a cloze card. A side is its typed text, then the embed of its
+     * handwriting. Both handwritten sides share the stem of their file names.
      */
     private async addCard(
         result: CardEditorResult,
         sourcePath: string,
         inserter: CardInserter,
     ): Promise<void> {
+        const cardType = result.cardType ?? CardType.MultiLineBasic;
+        const compose = (f: string, b: string | null) => newCardBody(f, b, this.settings, cardType);
+        if (cardType === CardType.Cloze) {
+            // Typed only, a cloze card has no handwriting
+            const text = this.protect(this.typedText(result.front.text, false));
+            if (text.length === 0) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
+            this.assertReadAsCard(cardType, text, null, compose);
+            this.assertActive();
+            await inserter.insert(compose(text, null));
+            return;
+        }
+
         const stem = timestampName(new Date());
         const created: TFile[] = [];
         try {
@@ -435,11 +449,9 @@ export class CardEditorService {
             const back = await sideText(result.back, "back");
             if (front.length === 0 || back.length === 0)
                 throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
-            this.assertReadAsCard(CardType.MultiLineBasic, front, back, (f, b) =>
-                newCardBody(f, b ?? "", this.settings),
-            );
+            this.assertReadAsCard(cardType, front, back, compose);
             this.assertActive();
-            await inserter.insert(newCardBody(front, back, this.settings));
+            await inserter.insert(compose(front, back));
         } catch (err) {
             // The card stays in the editor; don't leave images behind that no card shows
             await this.undoSave(created, []);
@@ -455,16 +467,6 @@ export class CardEditorService {
         } catch (err) {
             console.error("SR: rescanning after adding cards failed", err);
         }
-    }
-
-    /**
-     * Whether the note's tags (incl. frontmatter tags) contain a flashcard tag,
-     * i.e. whether SR picks up the cards in it. With folders as decks, tags don't matter.
-     */
-    private hasFlashcardTag(file: TFile): boolean {
-        if (this.settings.convertFoldersToDecks) return true;
-        const tags = this.plugin.dataManager.createSRNoteTFile(file).getAllTagsFromCache();
-        return tags.some((tag) => SettingsUtil.isFlashcardTag(this.settings, tag));
     }
 
     /** Reloads every image showing one of the files */
@@ -519,7 +521,8 @@ export class CardEditorService {
      * - added: a new SVG, named after the card's other ink side if it has one
      * - erased: the embed goes, and the SVG to the trash once the note is written
      * The side's text is rewritten only if its typed text or its embed changed.
-     * Then writes the note if the card's text changed. On failure, everything is undone.
+     * Then writes the note if the card's text changed, also when only its type changed (basic ⇄
+     * reversed: the type's separator). On failure, everything is undone.
      */
     private async saveCard(
         result: CardEditorResult,
@@ -527,6 +530,9 @@ export class CardEditorService {
         writeText: WriteQuestionText,
     ): Promise<EditQuestionResult> {
         const { front, back, sourcePath } = card;
+        const cardType = result.cardType ?? card.cardType;
+        // The separator as written in the note, unless the type changed
+        const separator = cardType === card.cardType ? card.separator : null;
         const created: TFile[] = [];
         const overwritten: LoadedSide[] = [];
         const toTrash: TFile[] = [];
@@ -591,7 +597,7 @@ export class CardEditorService {
                 typed = this.typedText(r.text, true);
                 if (protect) typed = this.protect(typed);
             }
-            const sideText = joinSide(card.cardType, typed, embed);
+            const sideText = joinSide(cardType, typed, embed);
             if (sideText.trim().length === 0) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
             return sideText;
         };
@@ -603,16 +609,10 @@ export class CardEditorService {
                 back !== null && result.back !== null
                     ? await saveSide(result.back, back, "back")
                     : null;
-            text = composeCardText(
-                card.cardType,
-                frontText,
-                backText,
-                this.settings,
-                card.separator,
-            );
+            text = composeCardText(cardType, frontText, backText, this.settings, separator);
             if (text !== card.original) {
-                this.assertReadAsCard(card.cardType, frontText, backText, (f, b) =>
-                    composeCardText(card.cardType, f, b, this.settings, card.separator),
+                this.assertReadAsCard(cardType, frontText, backText, (f, b) =>
+                    composeCardText(cardType, f, b, this.settings, separator),
                 );
             }
             // Counted before the note is written: once Obsidian's link index has caught up with
@@ -621,7 +621,7 @@ export class CardEditorService {
                 linksOutside.set(file, this.linksOutsideCard(file, card.original, sourcePath));
             }
             this.assertActive();
-            if (text !== card.original && !(await writeText(text)))
+            if (text !== card.original && !(await writeText(text, cardType)))
                 throw new Error(t("CARD_EDITOR_TEXT_NOT_FOUND"));
         } catch (err) {
             await this.undoSave(created, overwritten);

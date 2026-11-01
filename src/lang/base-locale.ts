@@ -394,6 +394,14 @@ export interface IBaseLocale {
     CARD_EDITOR_ERASER: string;
     CARD_EDITOR_UNDO: string;
     CARD_EDITOR_CLEAR_SIDE: string;
+    CARD_EDITOR_MARK_CLOZE: string;
+    CARD_EDITOR_PREVIEW: string;
+    CARD_EDITOR_CARD_TYPE: string;
+    CARD_EDITOR_CARD_BASIC: string;
+    CARD_EDITOR_CARD_REVERSED: string;
+    CARD_EDITOR_CARD_CLOZE: string;
+    CARD_EDITOR_DECK: string;
+    CARD_EDITOR_DECKS: string;
     CARD_EDITOR_CLOSE: string;
     CARD_EDITOR_PREVIOUS_CARD: string;
     CARD_EDITOR_NEXT_CARD: string;
@@ -412,6 +420,10 @@ export interface IBaseLocale {
     CARD_EDITOR_FRONT_EMPTY: string;
     CARD_EDITOR_BACK_EMPTY: string;
     CARD_EDITOR_CARD_EMPTY: string;
+    CARD_EDITOR_NO_CLOZE: string;
+    CARD_EDITOR_CLOZE_NO_INK: string;
+    CARD_EDITOR_TO_REVERSED: string;
+    CARD_EDITOR_TO_BASIC: string;
     CARD_EDITOR_SIDE_HAS_MARKER: string;
     CARD_EDITOR_SIDE_HAS_CARD_SYNTAX: string;
     CARD_EDITOR_PLUGIN_UNLOADED: string;

@@ -32,6 +32,36 @@ and a second tap within 3 seconds deletes. The ✕ next to it closes the editor 
 Once you have saved a card, a small badge next to the note's name in the title bar counts the
 cards added in this session (for example "2 added").
 
+Under the note's name, a small line shows the deck the card will go into: from the note's
+flashcard tags (`#flashcards/medicine` shows as "Deck: medicine", plain `#flashcards` as "Deck:
+flashcards"), or, with `Convert folders to decks and subdecks?` on, the note's folder. A note with
+several flashcard tags shows all its decks. If the note has none of your flashcard tags, that line
+says so instead (see [Flashcard tag](#where-the-card-goes)).
+
+### Card Type
+
+The button in the title bar next to the note's name (`Basic ▾`) picks the type of the new card:
+
+| Type     | What is written                                                                                                 |
+| -------- | --------------------------------------------------------------------------------------------------------------- |
+| Basic    | A [multi-line basic](q-and-a-cards.md#multi-line-basic) card, with front and back separated by `?`.             |
+| Reversed | A [multi-line reversed](q-and-a-cards.md#multi-line-bidirectional) card, separated by `??`: reviewed both ways. |
+| Cloze    | A [cloze card](cloze-cards.md): one text, with the parts to ask for marked.                                     |
+
+The type stays for the following cards until you change it, and is kept with a draft. Basic is the
+default. Single-line cards (`::`, `:::`) can't be added with the editor.
+
+**Cloze** switches the editor to a single side, typed only: no pen zone and no **Front ⇅ Back**
+switch; the text zone fills the editor and the save buttons take the whole column beside it. Type
+the text, then select a part to ask for and tap **Mark as cloze** (the highlighter in the tool row):
+it puts your first [cloze pattern](cloze-cards.md) around the selection, for example `==four==`.
+Without a selection it inserts the empty pattern, with the cursor inside. A cloze card without a
+marked part is not saved ("Mark at least one part as cloze").
+
+Switching between Basic and Reversed keeps both sides. Switching to Cloze keeps the front's text
+(the back is dropped); if a side has handwriting, the editor says so and stays on the type, as a
+cloze card can't hold handwriting. Switching from Cloze back puts the text on the front.
+
 ### Where the Card Goes
 
 - If the note is open in an editor (source mode or live preview), the card is inserted below the
@@ -40,8 +70,8 @@ cards added in this session (for example "2 added").
   other.
 - Otherwise (reading view, or no editor open), the card is added at the end of the note.
 
-The editor always creates [multi-line basic](q-and-a-cards.md#multi-line-basic) cards, using the
-separator from your [settings](../user-options.md#flashcard-separators). A side is stored as its
+The editor creates multi-line basic or reversed cards (see [Card type](#card-type)), using the
+separators from your [settings](../user-options.md#flashcard-separators). A side is stored as its
 typed text, followed by one image embed of its handwriting on the next line. A side with only
 handwriting is just the embed, a side with only text has no embed:
 
@@ -56,7 +86,7 @@ In [single-line cards](q-and-a-cards.md#single-line-basic) (`::` and `:::`) the 
 line, after a space: `Draw a cell::A cell ![[sr-ink/sr-ink-20261031-141502123-back.svg]]`.
 
 If you have set `Characters denoting the end of clozes and multiline flashcards`, the editor adds it
-after the card, with a blank line before it so the line above does not turn into a heading.
+after the card (also after a cloze card), with a blank line before it so the line above does not turn into a heading.
 Without it, a blank line ends a card, so blank lines you type in a side are saved as a `<br>` line,
 which also shows as an empty line.
 
@@ -65,9 +95,10 @@ counts and in review.
 
 !!! note "Flashcard tag"
 
-    If the note has none of your flashcard tags (for example `#flashcards`), a notice reminds you to
-    add one. The editor still opens, but the cards are only reviewed once the note is tagged.
-    The check is skipped when `Convert folders to decks and subdecks?` is on.
+    If the note has none of your flashcard tags (for example `#flashcards`), the line under the
+    note's name in the title bar reminds you to add one. The editor still opens, but the cards are
+    only reviewed once the note is tagged. With `Convert folders to decks and subdecks?` on, the
+    line shows the note's folder instead.
 
 ### Drafts
 
@@ -79,7 +110,8 @@ empty card leave no draft behind. Drafts are kept until Obsidian is closed or th
 
 The editor shows one side at a time, always in the same places:
 
-- At the top, the **tool row**: the side's name (**FRONT** or **BACK**) and the pen tools.
+- At the top, the **tool row**: the side's name (**FRONT** or **BACK**), the pen tools and the
+  preview.
 - Below it, the **pen zone**, with a fixed height, for the pen ("Draw on **front**").
 - Below that, the **text zone**, filling the rest of the editor, for the keyboard ("Type the
   **question**" on the front, "Type the **answer**" on the back). Long text scrolls inside it.
@@ -101,6 +133,16 @@ on the right for the back, so you work from left to right. Each side keeps its o
 With **Pen mode** off (see [Settings](#settings)), there is no pen zone: the text zone takes its
 place, and the switch and the save buttons share the right column. A side that already has
 handwriting still shows its pen zone, so you can change it.
+
+### Preview
+
+The eye in the tool row shows the side's text rendered as in a note: formatting, LaTeX, code,
+links and, for cloze cards, the marked parts. Tap the preview (or the eye again) to go back to
+typing, with the cursor at the end of the text. The preview stays on when you switch sides, until
+you turn it off; it starts off each time the editor opens, and after **Save & next**. The side's
+handwriting is not part of the preview, it stays in the pen zone above.
+
+### Typing
 
 In the text zone, `Tab` inserts a tab character, like the old edit dialog, and `Ctrl/Cmd + Z`
 undoes typing as usual; if you wrote with the pen since you last typed, it undoes the pen change
@@ -157,7 +199,19 @@ The note is only written when the card text changed, for example when you edited
 on a side that had no handwriting yet or erased all of a side's handwriting. If you only changed
 existing handwriting, just the image is rewritten.
 
-[Cloze cards](cloze-cards.md) open as a single text side, without a pen zone or a switch.
+[Cloze cards](cloze-cards.md) open as a single text side, without a pen zone or a switch, with
+**Mark as cloze** in the tool row.
+
+The type button in the title bar shows the card's type. For a basic or reversed card it offers the
+other one: multi-line `?` ⇄ `??`, single-line `::` ⇄ `:::`. Saving then writes the other separator;
+the rest of the card and its schedule stay. A notice explains what changes:
+
+- To **Reversed**: "The reverse direction becomes a new card". It is reviewed as a new card once
+  Spaced Repetition has read the note again.
+- To **Basic**: "The reverse direction's schedule is dropped". During review, if the card shown
+  was the reverse direction, the review moves on to the next card when the editor closes.
+
+A cloze card shows `Cloze` and can't be changed to another type.
 
 ### From a Note
 
@@ -207,7 +261,7 @@ shown while **Pen mode** is on.
 | Guide lines         | Lined    | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image.                                                                                                         |
 | Line spacing        | 44       | Distance between guide lines, in pixels (24–80).                                                                                                                                                              |
 | Pen thickness       | 2.5      | Stroke width for new handwriting (1–8). Existing images keep the thickness they were written with.                                                                                                            |
-| Buttons on the left | Off      | For writing with the left hand: the **Front ⇅ Back** switch and the save buttons move to the left of the writing fields. The side marker stays where it is: right edge for the front, left edge for the back. |
+| Buttons on the left | Off      | For writing with the left hand: the **Front ⇅ Back** switch and the save buttons move to the left of the writing fields. The side marker stays where it is: left edge for the front, right edge for the back. |
 
 The card separator and the end marker are Spaced Repetition's own
 [flashcard separator settings](../user-options.md#flashcard-separators).

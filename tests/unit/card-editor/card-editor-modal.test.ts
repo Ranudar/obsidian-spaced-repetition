@@ -1,4 +1,4 @@
-import { App, Notice, Platform } from "obsidian";
+import { App, MarkdownRenderer, Menu, Notice, Platform } from "obsidian";
 
 import {
     CardEditorModal,
@@ -256,7 +256,11 @@ describe("CardEditorModal add mode", () => {
         switchSide().click();
         saveNext().click();
         await flush();
-        expect(cb.save).toHaveBeenCalledWith({ front: textOnly("Q1"), back: textOnly("A1") });
+        expect(cb.save).toHaveBeenCalledWith({
+            cardType: CardType.MultiLineBasic,
+            front: textOnly("Q1"),
+            back: textOnly("A1"),
+        });
         expect(textAreas().map((ta) => ta.value)).toEqual(["", ""]);
         expect($(".sr-card-editor-counter").textContent).toBe("1 added");
         expect(shown()).toBe(0);
@@ -292,6 +296,7 @@ describe("CardEditorModal add mode", () => {
         await flush();
         // The pen size is the size button's (thin, 0.6 of the 2.5 setting); strokes keep their own
         expect(cb.save.mock.calls[0][0]).toEqual({
+            cardType: CardType.MultiLineBasic,
             front: { text: "", ink: { strokes: [stroke(50)], penSize: 1.5, changed: false } },
             back: {
                 text: "typed",
@@ -466,6 +471,7 @@ describe("CardEditorModal edit mode", () => {
         button("Save").click();
         await flush();
         expect(cb.save).toHaveBeenCalledWith({
+            cardType: CardType.MultiLineBasic,
             front: textOnly("Q2"),
             back: { text: "A", ink: { strokes, penSize: 1.5, changed: false } },
         });
@@ -477,11 +483,15 @@ describe("CardEditorModal edit mode", () => {
         expect(sideEls()).toHaveLength(1);
         expect(inkFields()).toHaveLength(0);
         expect(switchSide()).toBeNull();
-        expect(sideLabel()).toBe("Card");
+        expect(sideLabel()).toBe("Cloze");
         expect($(".sr-card-editor-main").hasClass("sr-card-editor-one-side")).toBe(true);
         keyDown(textAreas()[0], "Enter", { ctrlKey: true });
         await flush();
-        expect(cb.save).toHaveBeenCalledWith({ front: textOnly("a ==b=="), back: null });
+        expect(cb.save).toHaveBeenCalledWith({
+            cardType: CardType.Cloze,
+            front: textOnly("a ==b=="),
+            back: null,
+        });
     });
 });
 
@@ -900,7 +910,11 @@ describe("CardEditorModal previous / next card", () => {
         type(1, "A2");
         next().click();
         await flush();
-        expect(cb.save).toHaveBeenCalledWith({ front: textOnly("Q"), back: textOnly("A2") });
+        expect(cb.save).toHaveBeenCalledWith({
+            cardType: CardType.MultiLineBasic,
+            front: textOnly("Q"),
+            back: textOnly("A2"),
+        });
         expect(stepped).toHaveBeenCalledWith(1);
         expect(cb.save.mock.invocationCallOrder[0]).toBeLessThan(
             stepped.mock.invocationCallOrder[0],
@@ -929,5 +943,232 @@ describe("CardEditorModal previous / next card", () => {
         expect(cb.closed).not.toHaveBeenCalled();
         expect(next().disabled).toBe(false);
         expect(textAreas()[0].value).toBe("Q2");
+    });
+});
+
+describe("CardEditorModal card types", () => {
+    const typeButton = () => $<HTMLButtonElement>("button.sr-card-editor-type");
+    /** Opens the card type menu and returns its items */
+    function typeMenu() {
+        (Menu as unknown as { last: unknown }).last = null;
+        typeButton().click();
+        return (Menu as unknown as { last: { items: { title: string; checked: boolean }[] } }).last;
+    }
+    /** Picks a card type from the menu */
+    function pick(title: string) {
+        const item = typeMenu().items.find((i) => i.title === title) as unknown as {
+            click(): void;
+        };
+        item.click();
+    }
+
+    test("adding offers Basic, Reversed and Cloze; each saves its type", async () => {
+        const { cb } = openAdd();
+        expect(typeButton().textContent).toBe("Basic ▾");
+        expect(typeMenu().items.map((i) => [i.title, i.checked])).toEqual([
+            ["Basic", true],
+            ["Reversed", false],
+            ["Cloze", false],
+        ]);
+
+        pick("Reversed");
+        expect(typeButton().textContent).toBe("Reversed ▾");
+        type(0, "Q");
+        type(1, "A");
+        saveNext().click();
+        await flush();
+        expect(cb.save.mock.calls[0][0].cardType).toBe(CardType.MultiLineReversed);
+        // Kept for the next card
+        expect(typeButton().textContent).toBe("Reversed ▾");
+
+        pick("Cloze");
+        type(0, "a ==b==");
+        saveNext().click();
+        await flush();
+        expect(cb.save.mock.calls[1][0]).toEqual({
+            cardType: CardType.Cloze,
+            front: textOnly("a ==b=="),
+            back: null,
+        });
+    });
+
+    test("cloze: one side, no pen zone, no switch; its text is kept from the front and back", () => {
+        openAdd();
+        type(0, "Q");
+        type(1, "A");
+        pick("Cloze");
+        expect(sideEls()).toHaveLength(1);
+        expect(inkFields()).toHaveLength(0);
+        expect(switchSide()).toBeNull();
+        expect(sideLabel()).toBe("Cloze");
+        expect($(".sr-card-editor-main").hasClass("sr-card-editor-one-side")).toBe(true);
+        expect(iconButton("Mark as cloze")).not.toBeNull();
+        expect(textAreas().map((ta) => ta.value)).toEqual(["Q"]);
+
+        pick("Basic");
+        expect(inkFields()).toHaveLength(2);
+        expect(switchSide()).not.toBeNull();
+        expect(iconButton("Mark as cloze")).toBeNull();
+        expect(textAreas().map((ta) => ta.value)).toEqual(["Q", ""]);
+    });
+
+    test("handwriting can't go into a cloze card", () => {
+        openAdd({ front: side({ strokes: [stroke(0)] }), back: side() });
+        pick("Cloze");
+        expect(Notice).toHaveBeenCalledWith(expect.stringContaining("Handwriting"));
+        expect(inkFields()).toHaveLength(2);
+        expect(typeButton().textContent).toBe("Basic ▾");
+    });
+
+    test("a draft keeps its card type", () => {
+        const { modal, cb } = openAdd();
+        pick("Cloze");
+        type(0, "a ==b==");
+        modal.close();
+        expect(cb.keepDraft).toHaveBeenCalledWith({
+            cardType: CardType.Cloze,
+            front: side({ text: "a ==b==", penSize: 1.5 }),
+            back: null,
+        });
+        const draft = cb.keepDraft.mock.calls[0][0];
+        document.body.replaceChildren();
+        openAdd(draft);
+        expect(typeButton().textContent).toBe("Cloze ▾");
+        expect(sideEls()).toHaveLength(1);
+    });
+
+    test("Mark as cloze wraps the selection, or puts the cursor inside an empty one", () => {
+        openAdd(null, { clozePatterns: ["{{[123::]answer[::hint]}}"] });
+        pick("Cloze");
+        const ta = textAreas()[0];
+        type(0, "The heart has four chambers");
+        ta.setSelectionRange(14, 18);
+        iconButton("Mark as cloze").click();
+        expect(ta.value).toBe("The heart has {{four}} chambers");
+        expect(ta.selectionStart).toBe(22);
+
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+        iconButton("Mark as cloze").click();
+        expect(ta.value).toBe("The heart has {{four}} chambers{{}}");
+        expect(ta.selectionStart).toBe(ta.value.length - 2);
+    });
+
+    test("a cloze card without a cloze is refused", async () => {
+        const { cb } = openAdd();
+        pick("Cloze");
+        type(0, "Nothing marked");
+        saveClose().click();
+        await flush();
+        expect(cb.save).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith("Mark at least one part as cloze", 2000);
+    });
+
+    test("editing offers the other one of basic and reversed, with a notice", async () => {
+        const { cb } = openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
+        expect(typeMenu().items.map((i) => i.title)).toEqual(["Basic", "Reversed"]);
+        pick("Reversed");
+        expect(Notice).toHaveBeenCalledWith("The reverse direction becomes a new card");
+        button("Save").click();
+        await flush();
+        expect(cb.save.mock.calls[0][0].cardType).toBe(CardType.MultiLineReversed);
+        document.body.replaceChildren();
+
+        openEdit(
+            { front: side({ text: "Q" }), back: side({ text: "A" }) },
+            CardType.SingleLineReversed,
+        );
+        expect(typeButton().textContent).toBe("Reversed ▾");
+        pick("Basic");
+        expect(Notice).toHaveBeenCalledWith("The reverse direction's schedule is dropped");
+        expect(typeButton().textContent).toBe("Basic ▾");
+    });
+
+    test("a cloze card being edited shows its type without a menu", () => {
+        openEdit({ front: side({ text: "a ==b==" }), back: null }, CardType.Cloze);
+        expect(typeButton().textContent).toBe("Cloze");
+        expect(typeButton().disabled).toBe(true);
+    });
+});
+
+describe("CardEditorModal preview", () => {
+    /** The mock renderer; its last argument is the component that owns what it rendered */
+    const render = jest.mocked(
+        MarkdownRenderer as unknown as {
+            render: jest.Mock<
+                Promise<void>,
+                [App, string, HTMLElement, string, { loaded: boolean }]
+            >;
+        },
+    ).render;
+    const preview = () => iconButton("Preview");
+    const previewEls = () => $$(".sr-card-editor-preview");
+
+    test("renders the side's text; a tap on it goes back to typing at the end", () => {
+        openAdd();
+        type(0, "**bold** $x^2$");
+        preview().click();
+        expect(render).toHaveBeenLastCalledWith(
+            expect.anything(),
+            "**bold** $x^2$",
+            previewEls()[0],
+            "",
+            expect.anything(),
+        );
+        expect($(".sr-card-editor-text-wrap.is-preview")).not.toBeNull();
+        expect(preview().getAttribute("aria-pressed")).toBe("true");
+
+        previewEls()[0].click();
+        expect($(".sr-card-editor-text-wrap.is-preview")).toBeNull();
+        expect(previewEls()[0].textContent).toBe("");
+        expect(document.activeElement).toBe(textAreas()[0]);
+        expect(textAreas()[0].selectionStart).toBe("**bold** $x^2$".length);
+    });
+
+    test("stays on when switching sides, shows the other side; unloaded when off and closed", () => {
+        const { modal } = openAdd();
+        type(0, "Q");
+        type(1, "A");
+        preview().click();
+        const component = render.mock.lastCall[4];
+        switchSide().click();
+        expect(component.loaded).toBe(false);
+        expect(previewEls()[0].textContent).toBe("");
+        expect(previewEls()[1].textContent).toBe("A");
+
+        preview().click();
+        expect($(".sr-card-editor-text-wrap.is-preview")).toBeNull();
+        preview().click();
+        const last = render.mock.lastCall[4];
+        modal.close();
+        expect(last.loaded).toBe(false);
+    });
+});
+
+describe("CardEditorModal decks", () => {
+    function open(decks: string[]) {
+        const cb = callbacks();
+        new CardEditorModal(testApp(), SETTINGS, {
+            kind: "add",
+            title: "Biology",
+            decks,
+            draft: null,
+            ...cb,
+        }).open();
+    }
+    const deckLine = () => $(".sr-card-editor-decks");
+
+    test("shows the card's decks under the title", () => {
+        open(["medicine"]);
+        expect(deckLine().textContent).toBe("Deck: medicine");
+        expect(deckLine().hasClass("is-warning")).toBe(false);
+        document.body.replaceChildren();
+        open(["medicine", "biology/cells"]);
+        expect(deckLine().textContent).toBe("Decks: medicine, biology/cells");
+    });
+
+    test("no deck: says the note is no flashcard note", () => {
+        open([]);
+        expect(deckLine().textContent).toContain("has no #flashcards tag");
+        expect(deckLine().hasClass("is-warning")).toBe(true);
     });
 });

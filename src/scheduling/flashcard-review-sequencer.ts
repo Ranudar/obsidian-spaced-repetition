@@ -3,7 +3,7 @@ import { Notice } from "obsidian";
 import { TICKS_PER_DAY } from "src/data/constants";
 import { DataStore } from "src/data/data-store/base/data-store";
 import { Card } from "src/data/data-structures/card/card";
-import { Question } from "src/data/data-structures/card/questions/question";
+import { CardType, Question } from "src/data/data-structures/card/questions/question";
 import { IQuestionPostponementList } from "src/data/data-structures/card/questions/question-postponement-list";
 import {
     CardFrontBack,
@@ -38,9 +38,21 @@ export interface IFlashcardReviewSequencer {
     skipCurrentCard(): void;
     determineCardSchedule(response: ReviewResponse, card: Card): RepItemScheduleInfo;
     processReview(response: ReviewResponse): Promise<void>;
-    /** false, with nothing changed, when the question's text is no longer in its note */
-    updateCurrentQuestionTextAndCards(text: string): Promise<boolean>;
-    updateQuestionTextAndCards(question: Question, text: string): Promise<boolean>;
+    /**
+     * false, with nothing changed, when the question's text is no longer in its note. cardType:
+     * the type the text is written as, when the card editor changed it (basic ⇄ reversed).
+     */
+    updateCurrentQuestionTextAndCards(text: string, cardType?: CardType): Promise<boolean>;
+    updateQuestionTextAndCards(
+        question: Question,
+        text: string,
+        cardType?: CardType,
+    ): Promise<boolean>;
+    /**
+     * When the current card is no longer one of its question's cards (the reverse direction of a
+     * card changed to basic), moves on to the next card and returns true
+     */
+    skipCurrentCardIfDropped(): boolean;
     deleteCurrentCardFromNote(): Promise<void>;
     /** For a question other than the current one; false, with nothing changed, as for updates */
     deleteQuestionFromNote(question: Question): Promise<boolean>;
@@ -429,20 +441,42 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
         return result;
     }
 
-    async updateCurrentQuestionTextAndCards(text: string): Promise<boolean> {
-        return this.updateQuestionTextAndCards(this.currentQuestion, text);
+    async updateCurrentQuestionTextAndCards(text: string, cardType?: CardType): Promise<boolean> {
+        return this.updateQuestionTextAndCards(this.currentQuestion, text, cardType);
     }
 
     /** Like updateCurrentQuestionTextAndCards, for any question, e.g. another one of the note */
-    async updateQuestionTextAndCards(question: Question, text: string): Promise<boolean> {
+    async updateQuestionTextAndCards(
+        question: Question,
+        text: string,
+        cardType: CardType = question.questionType,
+    ): Promise<boolean> {
+        const typeChanged = cardType !== question.questionType;
         // Update front/back properties of all cards which question is linked to
         const cardFrontBackList: CardFrontBack[] = CardFrontBackUtil.expand(
-            question.questionType,
+            cardType,
             text,
             this.settings,
         );
 
-        if (!(await question.writeActualQuestion(text, this.settings))) return false;
+        const cards = question.cards;
+        if (!(await question.writeActualQuestion(text, this.settings, cardType))) return false;
+
+        if (typeChanged) {
+            // Changed to basic: the reverse direction is no longer reviewed in this session (the
+            // current card is left to skipCurrentCardIfDropped(), once the editor has closed).
+            // Changed to reversed: the reverse direction is a new card once the note is read again
+            for (const card of cards) {
+                if (question.cards.includes(card)) continue;
+                this._originalDeckTree.deleteCardFromAllDecks(card, false);
+                if (card !== this.currentCard) this.cardSequencer.deleteRepItemFromAllDecks(card);
+            }
+            question.cards.forEach((card, i) => {
+                card.front = cardFrontBackList[i].front;
+                card.back = cardFrontBackList[i].back;
+            });
+            return true;
+        }
 
         if (cardFrontBackList.length !== question.cards.length) {
             console.warn("SR: Cards count does not match question text. Skipping redraw.");
@@ -454,6 +488,13 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
             card.front = front;
             card.back = back;
         });
+        return true;
+    }
+
+    skipCurrentCardIfDropped(): boolean {
+        const card = this.currentCard;
+        if (card === null || card.question.cards.includes(card)) return false;
+        this.cardSequencer.deleteCurrentRepItemFromAllDecks();
         return true;
     }
 

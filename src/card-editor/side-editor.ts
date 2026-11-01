@@ -15,7 +15,7 @@ export interface SideState {
 
 export interface SideEditorOptions {
     label: string;
-    /** Which side this is; it is marked on the right edge of its fields (front) or the left (back) */
+    /** Which side this is; it is marked on the left edge of its fields (front) or the right (back) */
     face: "front" | "back";
     /** Shown in the pen zone while it is empty; a **word** is bold */
     inkHint: string;
@@ -43,6 +43,8 @@ export interface SideEditorOptions {
     lastPenContact?: () => number;
     /** Called when text is typed, not when it is set (e.g. by undo or "Clear side") */
     onType?(): void;
+    /** The preview (see setPreview()) was tapped */
+    onPreviewTap?(): void;
 }
 
 /** How long a side is outlined when saving needs it filled in */
@@ -64,6 +66,9 @@ export class SideEditor {
     private eraser = false;
     private textWrap: HTMLElement;
     private textArea: HTMLTextAreaElement;
+    private previewEl: HTMLElement;
+    /** The press on the preview is the palm (see SideEditorOptions.isPalm) */
+    private previewPalm = false;
     private ink: InkField | null = null;
     private flashTimer: number | null = null;
 
@@ -106,6 +111,9 @@ export class SideEditor {
         this.textArea.addEventListener("keydown", this.onTextKeyDown);
         this.textArea.addEventListener("pointerdown", this.onTextPointerDown);
         renderHint(this.textWrap.createDiv({ cls: "sr-card-editor-text-hint" }), opts.textHint);
+        this.previewEl = this.textWrap.createDiv({ cls: "sr-card-editor-preview" });
+        this.previewEl.addEventListener("pointerdown", this.onPreviewPointerDown);
+        this.previewEl.addEventListener("click", this.onPreviewClick);
         this.updateTextEmpty();
     }
 
@@ -216,11 +224,43 @@ export class SideEditor {
         this.textArea.focus({ preventScroll: true });
     }
 
+    /** Focuses the text area with the cursor at the end of the text */
+    focusEnd(): void {
+        this.focus();
+        const end = this.textArea.value.length;
+        this.textArea.setSelectionRange(end, end);
+    }
+
+    /**
+     * Puts open and close around the selected text, like typing it: the cursor then goes after
+     * close, or between the two when nothing was selected
+     */
+    wrapSelection(open: string, close: string): void {
+        const ta = this.textArea;
+        const start = ta.selectionStart ?? ta.value.length;
+        const end = ta.selectionEnd ?? start;
+        ta.setRangeText(open + ta.value.substring(start, end) + close, start, end, "end");
+        if (start === end) ta.setSelectionRange(start + open.length, start + open.length);
+        this.onTextInput();
+    }
+
+    /**
+     * Shows what render() puts into the text zone in place of the text area (e.g. the text
+     * rendered); null: back to the text area
+     */
+    setPreview(render: ((el: HTMLElement) => void) | null): void {
+        this.previewEl.empty();
+        this.textWrap.toggleClass("is-preview", render !== null);
+        if (render !== null) render(this.previewEl);
+    }
+
     destroy(): void {
         if (this.flashTimer !== null) activeWindow.clearTimeout(this.flashTimer);
         this.textArea.removeEventListener("input", this.onTextInput);
         this.textArea.removeEventListener("keydown", this.onTextKeyDown);
         this.textArea.removeEventListener("pointerdown", this.onTextPointerDown);
+        this.previewEl.removeEventListener("pointerdown", this.onPreviewPointerDown);
+        this.previewEl.removeEventListener("click", this.onPreviewClick);
         this.ink?.destroy();
         this.el.remove();
     }
@@ -248,6 +288,17 @@ export class SideEditor {
             insertText(this.textArea, "\t");
             this.onTextInput();
         }
+    };
+
+    private onPreviewPointerDown = (evt: PointerEvent) => {
+        this.previewPalm = this.opts.isPalm?.(evt) ?? false;
+    };
+
+    /** A tap on the preview goes back to typing; not the palm's */
+    private onPreviewClick = () => {
+        const palm = this.previewPalm;
+        this.previewPalm = false;
+        if (!palm) this.opts.onPreviewTap?.();
     };
 
     /** The palm must not focus the text area: the soft keyboard would open under the pen */

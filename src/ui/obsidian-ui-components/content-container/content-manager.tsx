@@ -404,14 +404,16 @@ export default class ContentManager {
                 (question) =>
                     question === currentQ
                         ? {
-                              write: (text) => sequencer.updateCurrentQuestionTextAndCards(text),
+                              write: (text, cardType) =>
+                                  sequencer.updateCurrentQuestionTextAndCards(text, cardType),
                               delete: async () => {
                                   await sequencer.deleteCurrentCardFromNote();
                                   return true;
                               },
                           }
                         : {
-                              write: (text) => sequencer.updateQuestionTextAndCards(question, text),
+                              write: (text, cardType) =>
+                                  sequencer.updateQuestionTextAndCards(question, text, cardType),
                               delete: () => sequencer.deleteQuestionFromNote(question),
                           },
             );
@@ -421,7 +423,9 @@ export default class ContentManager {
         }
         this.uiManager.setUIState(currentUIState);
         if (result === null || this.reviewSequencer === null) return;
-        if (result.deleted.includes(currentQ)) {
+        // Also when the card shown was the reverse direction of a card changed to basic
+        if (result.deleted.includes(currentQ) || this.reviewSequencer.skipCurrentCardIfDropped()) {
+            service.refreshImages(result.changedImages);
             await this._showNextCard();
             return;
         }

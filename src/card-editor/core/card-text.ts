@@ -1,3 +1,5 @@
+import { ClozeCrafter } from "clozecraft";
+
 import {
     CardType,
     isMultiLine,
@@ -312,9 +314,18 @@ export function misreadSide(
     return parses(front, PLAIN_SIDE) ? "back" : "front";
 }
 
-/** New multi-line basic card body, without surrounding blank lines. */
-export function newCardBody(front: string, back: string, settings: SRSettings): string {
-    const lines = [front, settings.multilineCardSeparator, back];
+/**
+ * New card body, without surrounding blank lines: a multi-line basic or reversed card, or a cloze
+ * card (back null), which is just its text.
+ */
+export function newCardBody(
+    front: string,
+    back: string | null,
+    settings: SRSettings,
+    cardType = CardType.MultiLineBasic,
+): string {
+    const separator = cardSeparator(cardType, settings);
+    const lines = separator === null ? [front] : [front, separator, back ?? ""];
     // A blank line before the end marker stops "---" from turning the previous line into a heading.
     // With an end marker set, the parser keeps that blank line inside the card and trims it,
     // so it is harmless.
@@ -339,4 +350,21 @@ export function cardInsertion(before: string, body: string, after = ""): string 
     else if (after.startsWith("\n") || after.length === 0) suffix = "\n";
     else suffix = "\n\n";
     return prefix + body + suffix;
+}
+
+/**
+ * What "Mark as cloze" puts around the selection: the cloze pattern (e.g. "==[123;;]answer[;;hint]==")
+ * without its optional parts, split at "answer". "==" … "==" for a pattern without "answer".
+ */
+export function clozeMarkers(pattern: string | undefined): { open: string; close: string } {
+    const bare = (pattern ?? "").replace(/\[[^\]]*\]/g, "");
+    const at = bare.indexOf("answer");
+    if (at <= 0) return { open: "==", close: "==" };
+    return { open: bare.substring(0, at), close: bare.substring(at + "answer".length) };
+}
+
+/** Whether a line of the text has a cloze deletion, by the cloze patterns SR's parser reads */
+export function hasCloze(text: string, settings: SRSettings): boolean {
+    const crafter = new ClozeCrafter(settings.clozePatterns);
+    return text.split("\n").some((line) => crafter.isClozeNote(line));
 }

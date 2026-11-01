@@ -12,7 +12,7 @@ import { inkEmbedPath } from "src/card-editor/core/card-text";
 import { parseInkFileName, strokesToSvg, svgToStrokes } from "src/card-editor/core/ink-svg";
 import { Stroke } from "src/card-editor/core/strokes";
 import { SideState } from "src/card-editor/side-editor";
-import { Question } from "src/data/data-structures/card/questions/question";
+import { CardType, Question } from "src/data/data-structures/card/questions/question";
 import { TopicPath } from "src/data/data-structures/deck/topic-path";
 import { DEFAULT_SETTINGS, SRSettings } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
@@ -362,7 +362,7 @@ describe("saving a card", () => {
         expect(result.text).toEqual(
             question.questionText.actualQuestion.replace("true positive", "TRUE POSITIVE"),
         );
-        expect(writeText).toHaveBeenCalledWith(result.text);
+        expect(writeText).toHaveBeenCalledWith(result.text, CardType.MultiLineBasic);
     });
 
     test("cancel resolves to null and writes nothing", async () => {
@@ -816,6 +816,50 @@ describe("adding cards", () => {
         expect(sync).toHaveBeenCalledTimes(1);
     });
 
+    test("the card type decides what is written: ?, ?? or a cloze card", async () => {
+        const opts = openAdd();
+        await opts.save({
+            cardType: CardType.MultiLineBasic,
+            front: text("Q1"),
+            back: text("A1"),
+        });
+        await opts.save({
+            cardType: CardType.MultiLineReversed,
+            front: text("Q2"),
+            back: text("A2"),
+        });
+        await opts.save({
+            cardType: CardType.Cloze,
+            front: text("The ==heart== pumps"),
+            back: null,
+        });
+        expect(vault.content(NOTE_PATH)).toEqual(
+            "#flashcards\n\nQ1\n?\nA1\n\nQ2\n??\nA2\n\nThe ==heart== pumps\n",
+        );
+    });
+
+    test("a cloze card gets the end marker; it must be read back as a cloze card", async () => {
+        settings.multilineCardEndMarker = "---";
+        const opts = openAdd();
+        await opts.save({
+            cardType: CardType.Cloze,
+            front: text("The ==heart==\n\npumps"),
+            back: null,
+        });
+        expect(vault.content(NOTE_PATH)).toEqual("#flashcards\n\nThe ==heart==\n\npumps\n\n---\n");
+        await expect(
+            opts.save({ cardType: CardType.Cloze, front: text("No cloze ? here"), back: null }),
+        ).rejects.toThrow("Cloze");
+    });
+
+    test("the decks of the note go to the editor; none: an empty list, no notice", () => {
+        noteTags = ["#flashcards/medicine", "#other", "#flashcards/biology/cells"];
+        expect(openAdd().decks).toEqual(["medicine", "biology/cells"]);
+        noteTags = ["#other"];
+        expect(openAdd().decks).toEqual([]);
+        expect(Notice).not.toHaveBeenCalled();
+    });
+
     test("an unsaved card is restored the next time", () => {
         const draft: CardEditorSides = {
             front: { text: "Q", strokes: [], penSize: 5 },
@@ -892,6 +936,29 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
             pencilNote.replace("of the cell?", "of the eukaryotic cell?"),
         );
         expect(sync).toHaveBeenCalledTimes(1);
+    });
+
+    test("basic ⇄ reversed writes the other separator and keeps the schedule", async () => {
+        const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
+        await opts.save({
+            cardType: CardType.MultiLineReversed,
+            front: unchanged(opts.initial.front),
+            back: unchanged(opts.initial.back),
+        });
+        opts.closed();
+        await done;
+        expect(noteFile.content).toEqual(pencilNote.replace("cell?\n?\n", "cell?\n??\n"));
+
+        ModalMock.mockClear();
+        const second = await tapPencil("sr-ink-xyz-back.svg");
+        await second.opts.save({
+            cardType: CardType.SingleLineReversed,
+            front: unchanged(second.opts.initial.front),
+            back: unchanged(second.opts.initial.back),
+        });
+        second.opts.closed();
+        await second.done;
+        expect(noteFile.content).toContain("Draw a cell:::![](sr-ink/sr-ink-xyz-back.svg)");
     });
 
     test("changed ink rewrites only the image, and its copies are reloaded", async () => {

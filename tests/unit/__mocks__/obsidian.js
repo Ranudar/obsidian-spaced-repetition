@@ -101,6 +101,66 @@ class ButtonComponent {
     }
 }
 
+// A menu records its items; Menu.last is the menu shown last, so a test can pick an item
+class MenuItem {
+    title = "";
+    checked = false;
+    callback = null;
+    setTitle(title) {
+        this.title = title;
+        return this;
+    }
+    setChecked(checked) {
+        this.checked = checked;
+        return this;
+    }
+    setIcon() {
+        return this;
+    }
+    onClick(callback) {
+        this.callback = callback;
+        return this;
+    }
+    click() {
+        this.callback?.();
+    }
+}
+
+class Menu {
+    static last = null;
+    items = [];
+    addItem(fn) {
+        const item = new MenuItem();
+        fn(item);
+        this.items.push(item);
+        return this;
+    }
+    showAtPosition() {
+        Menu.last = this;
+    }
+    showAtMouseEvent() {
+        Menu.last = this;
+    }
+}
+
+class Component {
+    loaded = false;
+    load() {
+        this.loaded = true;
+    }
+    unload() {
+        this.loaded = false;
+    }
+}
+
+// Renders the markdown as plain text
+const MarkdownRenderer = {
+    render: jest.fn((app, markdown, el) => {
+        el.createDiv({ cls: "rendered", text: markdown });
+        return Promise.resolve();
+    }),
+};
+
 class TFile {}
 class TFolder {}
 class MarkdownView {}
@@ -125,6 +185,9 @@ module.exports = {
     setIcon: jest.fn(),
     Modal,
     ButtonComponent,
+    Menu,
+    Component,
+    MarkdownRenderer,
     TFile,
     TFolder,
     MarkdownView,

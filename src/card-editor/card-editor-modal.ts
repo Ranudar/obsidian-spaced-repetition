@@ -1,8 +1,19 @@
-import { App, EventRef, Modal, Notice, Platform, setIcon } from "obsidian";
+import {
+    App,
+    Component,
+    EventRef,
+    MarkdownRenderer,
+    Menu,
+    Modal,
+    Notice,
+    Platform,
+    setIcon,
+} from "obsidian";
 
+import { clozeMarkers, hasCloze } from "src/card-editor/core/card-text";
 import { Stroke } from "src/card-editor/core/strokes";
 import { SideEditor, SideEditorOptions, SideState } from "src/card-editor/side-editor";
-import { CardType } from "src/data/data-structures/card/questions/question";
+import { CardType, isMultiLine } from "src/data/data-structures/card/questions/question";
 import { SRSettings } from "src/data/settings";
 import { t } from "src/lang/helpers";
 import { TextDirection } from "src/utils/strings";
@@ -13,6 +24,9 @@ export interface CardEditorSides {
     back: SideState | null;
 }
 
+/** An unsaved new card, with the card type chosen for it (basic by default) */
+export type CardEditorDraft = CardEditorSides & { cardType?: CardType };
+
 /** What a side is saved as: its typed text and its handwriting (null when it has no strokes) */
 export type SideResult = {
     text: string;
@@ -20,12 +34,24 @@ export type SideResult = {
 };
 
 export interface CardEditorResult {
+    /**
+     * The type to save the card as: chosen when adding, possibly changed when editing. Always
+     * set by the editor; by default multi-line basic (adding) or the card's type (editing).
+     */
+    cardType?: CardType;
     front: SideResult;
     back: SideResult | null;
 }
 
 interface CommonOptions {
     title: string;
+    /**
+     * The decks the card belongs to, shown under the title when given; none: the note is no
+     * flashcard note, which is shown there instead
+     */
+    decks?: string[];
+    /** The note's path, for links in the preview */
+    sourcePath?: string;
     textDirection?: TextDirection;
     /** Writes the card; a rejection keeps the editor open and shows a notice */
     save(result: CardEditorResult): Promise<void>;
@@ -36,9 +62,9 @@ interface CommonOptions {
 export type CardEditorOptions =
     | (CommonOptions & {
           kind: "add";
-          draft: CardEditorSides | null;
+          draft: CardEditorDraft | null;
           /** Receives the unsaved card on close, or null when there is nothing to keep */
-          keepDraft(draft: CardEditorSides | null): void;
+          keepDraft(draft: CardEditorDraft | null): void;
       })
     | (CommonOptions & {
           kind: "edit";
@@ -101,6 +127,16 @@ export class CardEditorModal extends Modal {
     private opts: CardEditorOptions;
     private front!: SideEditor;
     private back: SideEditor | null = null;
+    /** The type the card is saved as; see setCardType() */
+    private cardType: CardType;
+    /** The type of the card being edited, as in its note */
+    private initialCardType: CardType;
+    /** The text zone shows the side's text rendered; kept while the editor is open */
+    private preview = false;
+    /** Owns what the preview rendered; unloaded when it is replaced or hidden */
+    private previewComponent: Component | null = null;
+    /** The text the preview shows */
+    private previewText: string | null = null;
     /** The side shown; tools, undo and Clear act on it */
     private activeSide: SideEditor | null = null;
     /** Ink changes per side, newest last */
@@ -140,6 +176,8 @@ export class CardEditorModal extends Modal {
     private eraserButton!: HTMLButtonElement;
     private undoButton!: HTMLButtonElement;
     private clearButton!: HTMLButtonElement;
+    private previewButton!: HTMLButtonElement;
+    private typeButton!: HTMLButtonElement;
     private switchButton: HTMLButtonElement | null = null;
     private switchFrontEl: HTMLElement | null = null;
     private switchBackEl: HTMLElement | null = null;
@@ -150,6 +188,11 @@ export class CardEditorModal extends Modal {
         super(app);
         this.settings = settings;
         this.opts = opts;
+        this.cardType =
+            opts.kind === "edit"
+                ? opts.cardType
+                : (opts.draft?.cardType ?? CardType.MultiLineBasic);
+        this.initialCardType = this.cardType;
     }
 
     private get sides(): SideEditor[] {
@@ -174,13 +217,144 @@ export class CardEditorModal extends Modal {
         root.addClass("sr-card-editor");
 
         this.buildHeader(root);
-        const main = (this.mainEl = root.createDiv({ cls: "sr-card-editor-main" }));
+        this.buildMain(this.initialSides());
+        root.addEventListener("keydown", this.onKeyDown);
+        for (const type of PEN_EVENTS) {
+            this.modalEl.addEventListener(type, this.onPenActivity, true);
+        }
+        this.guardBackground();
+        this.fitVisibleHeight();
+
+        // A theme change (e.g. to dark mode at night) changes the ink color
+        this.cssChangeRef = this.app.workspace.on("css-change", () =>
+            this.sides.forEach((side) => side.themeChanged()),
+        );
+
+        // Also on mobile: the soft keyboard is meant to be open, writing doesn't close it
+        this.front.focus();
+    }
+
+    onClose(): void {
+        this.isClosed = true;
+        this.contentEl.removeEventListener("keydown", this.onKeyDown);
+        for (const type of PEN_EVENTS) {
+            this.modalEl.removeEventListener(type, this.onPenActivity, true);
+        }
+        for (const type of LOCKED_EVENTS) {
+            this.sidesEl.removeEventListener(type, this.onLockedInput, true);
+        }
+        if (this.cssChangeRef !== null) this.app.workspace.offref(this.cssChangeRef);
+        this.unloadPreview();
+        if (this.fitWindow !== null) {
+            this.fitWindow.removeEventListener("resize", this.onResize);
+            this.fitWindow.visualViewport?.removeEventListener("resize", this.onResize);
+        }
+        this.disarmDelete();
+
+        const opts = this.opts;
+        const draft =
+            opts.kind === "add" && !this.dropDraft && !this.allEmpty
+                ? { ...this.currentSides(), cardType: this.cardType }
+                : null;
+        const finish = (saved: boolean) => {
+            // A card that was being saved while closing is only kept if saving failed
+            if (opts.kind === "add") opts.keepDraft(saved ? null : draft);
+            opts.closed();
+        };
+        if (this.inFlight !== null) void this.inFlight.then(finish);
+        else finish(false);
+
+        this.sides.forEach((side) => side.destroy());
+        this.contentEl.empty();
+    }
+
+    // MARK: building
+
+    /**
+     * The note's title with the "n added" badge and, below, the card's decks; the card type,
+     * previous / next card (editing a card of a note), Delete card and, with space between them, ✕
+     */
+    private buildHeader(root: HTMLElement) {
+        const header = root.createDiv({ cls: "sr-card-editor-header" });
+        const titleWrap = header.createDiv({ cls: "sr-card-editor-title-wrap" });
+        const titleEl = titleWrap.createDiv({ cls: "sr-card-editor-title-row" });
+        titleEl.createDiv({ cls: "sr-card-editor-title", text: this.opts.title });
+        // Not a flashcard note: the warning takes the decks' place
+        const decks = this.opts.decks;
+        if (decks !== undefined) {
+            const deckEl = titleWrap.createDiv({ cls: "sr-card-editor-decks" });
+            deckEl.toggleClass("is-warning", decks.length === 0);
+            deckEl.setText(
+                decks.length === 0
+                    ? t("CARD_EDITOR_NO_FLASHCARD_TAG", {
+                          tag: this.settings.flashcardTags[0] ?? "#flashcards",
+                      })
+                    : decks.length === 1
+                      ? t("CARD_EDITOR_DECK", { deck: decks[0] })
+                      : t("CARD_EDITOR_DECKS", { decks: decks.join(", ") }),
+            );
+        }
+        if (this.opts.kind === "add") {
+            // Cards added in this session, as a small badge so it never pushes buttons away
+            this.counterEl = titleEl.createDiv({
+                cls: ["sr-card-editor-counter", "sr-is-hidden"],
+            });
+            this.counterEl.setAttr("role", "status");
+        }
+        // Cloze cards can't be changed to another type
+        const fixedType = this.opts.kind === "edit" && this.opts.cardType === CardType.Cloze;
+        this.typeButton = this.textButton(header, "", () => this.showTypeMenu());
+        this.typeButton.addClass("sr-card-editor-type");
+        this.typeButton.disabled = fixedType;
+        this.typeButton.toggleClass("is-fixed", fixedType);
+        if (this.opts.kind === "edit" && this.opts.steps) {
+            this.prevButton = this.iconButton(
+                header,
+                "chevron-left",
+                t("CARD_EDITOR_PREVIOUS_CARD"),
+                () => void this.step(-1),
+            );
+            this.nextButton = this.iconButton(
+                header,
+                "chevron-right",
+                t("CARD_EDITOR_NEXT_CARD"),
+                () => void this.step(1),
+            );
+            this.nextButton.addClass("sr-card-editor-next");
+        }
+        this.deleteButton = this.iconButton(header, "trash-2", t("CARD_EDITOR_DISCARD"), () => {
+            void this.deleteCard();
+        });
+        this.deleteButton.addClass("sr-card-editor-delete");
+        // Closing without saving; a new card is kept as a draft
+        this.iconButton(header, "x", t("CARD_EDITOR_CLOSE"), () => this.close()).addClass(
+            "sr-card-editor-close",
+        );
+    }
+
+    /**
+     * Tool row, sides and right column for the card type: a cloze card has one side without a
+     * pen zone. Built again when the type changes to or from cloze (see setCardType()).
+     */
+    private buildMain(initial: CardEditorSides) {
+        if (this.mainEl) {
+            for (const type of LOCKED_EVENTS) {
+                this.sidesEl.removeEventListener(type, this.onLockedInput, true);
+            }
+            this.unloadPreview();
+            this.sides.forEach((side) => side.destroy());
+            this.back = null;
+            this.activeSide = null;
+            this.undoSteps.clear();
+            this.initialText.clear();
+            this.mainEl.remove();
+        }
+        const main = (this.mainEl = this.contentEl.createDiv({ cls: "sr-card-editor-main" }));
         this.buildTools(main);
 
         const sidesEl = (this.sidesEl = main.createDiv({ cls: "sr-card-editor-sides" }));
         // Capturing, so this runs before the sides' own listeners
         for (const type of LOCKED_EVENTS) sidesEl.addEventListener(type, this.onLockedInput, true);
-        const initial = this.initialSides();
         const cloze = initial.back === null;
         // With pen mode off, a side gets a pen zone only for the handwriting it already has, so
         // saving the card keeps it
@@ -221,97 +395,13 @@ export class CardEditorModal extends Modal {
         this.sides.forEach((side) => side.setPenSize(penSize));
 
         this.buildRightColumn(main);
-        root.addEventListener("keydown", this.onKeyDown);
-        for (const type of PEN_EVENTS) {
-            this.modalEl.addEventListener(type, this.onPenActivity, true);
-        }
-        this.guardBackground();
-        this.fitVisibleHeight();
-
-        // A theme change (e.g. to dark mode at night) changes the ink color
-        this.cssChangeRef = this.app.workspace.on("css-change", () =>
-            this.sides.forEach((side) => side.themeChanged()),
-        );
-
         this.showSide(this.front);
-        // Also on mobile: the soft keyboard is meant to be open, writing doesn't close it
-        this.front.focus();
     }
-
-    onClose(): void {
-        this.isClosed = true;
-        this.contentEl.removeEventListener("keydown", this.onKeyDown);
-        for (const type of PEN_EVENTS) {
-            this.modalEl.removeEventListener(type, this.onPenActivity, true);
-        }
-        for (const type of LOCKED_EVENTS) {
-            this.sidesEl.removeEventListener(type, this.onLockedInput, true);
-        }
-        if (this.cssChangeRef !== null) this.app.workspace.offref(this.cssChangeRef);
-        if (this.fitWindow !== null) {
-            this.fitWindow.removeEventListener("resize", this.onResize);
-            this.fitWindow.visualViewport?.removeEventListener("resize", this.onResize);
-        }
-        this.disarmDelete();
-
-        const opts = this.opts;
-        const draft =
-            opts.kind === "add" && !this.dropDraft && !this.allEmpty ? this.currentSides() : null;
-        const finish = (saved: boolean) => {
-            // A card that was being saved while closing is only kept if saving failed
-            if (opts.kind === "add") opts.keepDraft(saved ? null : draft);
-            opts.closed();
-        };
-        if (this.inFlight !== null) void this.inFlight.then(finish);
-        else finish(false);
-
-        this.sides.forEach((side) => side.destroy());
-        this.contentEl.empty();
-    }
-
-    // MARK: building
 
     /**
-     * The note's title, the "n added" badge, previous / next card (editing a card of a note),
-     * Delete card and, with space between them, ✕
+     * The side's name, then size, eraser, Mark as cloze (cloze cards), undo, clear and preview, for
+     * the side shown
      */
-    private buildHeader(root: HTMLElement) {
-        const header = root.createDiv({ cls: "sr-card-editor-header" });
-        const titleEl = header.createDiv({ cls: "sr-card-editor-title-wrap" });
-        titleEl.createDiv({ cls: "sr-card-editor-title", text: this.opts.title });
-        if (this.opts.kind === "add") {
-            // Cards added in this session, as a small badge so it never pushes buttons away
-            this.counterEl = titleEl.createDiv({
-                cls: ["sr-card-editor-counter", "sr-is-hidden"],
-            });
-            this.counterEl.setAttr("role", "status");
-        }
-        if (this.opts.kind === "edit" && this.opts.steps) {
-            this.prevButton = this.iconButton(
-                header,
-                "chevron-left",
-                t("CARD_EDITOR_PREVIOUS_CARD"),
-                () => void this.step(-1),
-            );
-            this.nextButton = this.iconButton(
-                header,
-                "chevron-right",
-                t("CARD_EDITOR_NEXT_CARD"),
-                () => void this.step(1),
-            );
-            this.nextButton.addClass("sr-card-editor-next");
-        }
-        this.deleteButton = this.iconButton(header, "trash-2", t("CARD_EDITOR_DISCARD"), () => {
-            void this.deleteCard();
-        });
-        this.deleteButton.addClass("sr-card-editor-delete");
-        // Closing without saving; a new card is kept as a draft
-        this.iconButton(header, "x", t("CARD_EDITOR_CLOSE"), () => this.close()).addClass(
-            "sr-card-editor-close",
-        );
-    }
-
-    /** The side's name, then size, eraser, undo and clear, for the side shown */
     private buildTools(main: HTMLElement) {
         const tools = main.createDiv({ cls: "sr-card-editor-tools" });
         this.sideLabelEl = tools.createDiv({ cls: "sr-card-editor-side-label" });
@@ -327,10 +417,19 @@ export class CardEditorModal extends Modal {
         this.undoButton = this.iconButton(tools, "undo-2", t("CARD_EDITOR_UNDO"), () =>
             this.undo(),
         );
+        if (this.cardType === CardType.Cloze) {
+            this.iconButton(tools, "highlighter", t("CARD_EDITOR_MARK_CLOZE"), () =>
+                this.markCloze(),
+            ).addClass("sr-card-editor-mark-cloze");
+        }
         // Not a bin, so it isn't mixed up with Delete card
         this.clearButton = this.iconButton(tools, "ban", t("CARD_EDITOR_CLEAR_SIDE"), () =>
             this.clearSide(),
         );
+        this.previewButton = this.iconButton(tools, "eye", t("CARD_EDITOR_PREVIEW"), () =>
+            this.setPreview(!this.preview),
+        );
+        this.previewButton.addClass("sr-card-editor-preview-toggle");
     }
 
     /** The switch beside the pen zone (not for cloze), the save buttons beside the text zone */
@@ -374,7 +473,15 @@ export class CardEditorModal extends Modal {
             const { initial, cardType } = this.opts;
             return cardType === CardType.Cloze ? { front: initial.front, back: null } : initial;
         }
-        return this.opts.draft ?? { front: this.blankSide(), back: this.blankSide() };
+        const draft = this.opts.draft;
+        if (draft !== null) return { front: draft.front, back: draft.back };
+        return this.blankSides();
+    }
+
+    /** A new card of the card type: one side for a cloze card */
+    private blankSides(): CardEditorSides {
+        const back = this.cardType === CardType.Cloze ? null : this.blankSide();
+        return { front: this.blankSide(), back };
     }
 
     private blankSide(): SideState {
@@ -402,7 +509,12 @@ export class CardEditorModal extends Modal {
             ...o,
             settings: this.settings,
             textDirection: this.opts.textDirection ?? TextDirection.Ltr,
-            onChange: () => this.updateButtons(),
+            onChange: () => {
+                // E.g. undo of "Clear side" while the preview is shown
+                if (this.preview && side === this.activeSide && side.text !== this.previewText)
+                    this.renderPreview(side);
+                this.updateButtons();
+            },
             onInkCommit: (prev, prevText) => this.stepsOf(side).push({ prev, prevText }),
             isPalm: (evt) => this.isPalm(evt),
             eraserRadius: () => this.eraserRadius,
@@ -414,6 +526,7 @@ export class CardEditorModal extends Modal {
                 const steps = this.stepsOf(side);
                 if (steps.length > 0) steps[steps.length - 1].typedAfter = true;
             },
+            onPreviewTap: () => this.setPreview(false),
         });
         side.setEraser(this.eraser);
         return side;
@@ -532,11 +645,118 @@ export class CardEditorModal extends Modal {
         this.activeSide?.clear();
     }
 
+    /**
+     * The card types to pick from: adding, basic, reversed and cloze; editing, the other one of
+     * basic and reversed (multi-line ? ⇄ ??, single-line :: ⇄ :::)
+     */
+    private showTypeMenu() {
+        if (this.busy) return;
+        let types: CardType[];
+        if (this.opts.kind === "add") {
+            types = [CardType.MultiLineBasic, CardType.MultiLineReversed, CardType.Cloze];
+        } else if (this.cardType === CardType.Cloze) {
+            return;
+        } else if (isMultiLine(this.cardType)) {
+            types = [CardType.MultiLineBasic, CardType.MultiLineReversed];
+        } else {
+            types = [CardType.SingleLineBasic, CardType.SingleLineReversed];
+        }
+        const menu = new Menu();
+        for (const type of types) {
+            menu.addItem((item) =>
+                item
+                    .setTitle(cardTypeName(type))
+                    .setChecked(type === this.cardType)
+                    .onClick(() => this.setCardType(type)),
+            );
+        }
+        const rect = this.typeButton.getBoundingClientRect();
+        menu.showAtPosition({ x: rect.left, y: rect.bottom });
+    }
+
+    /**
+     * Basic ⇄ reversed keeps the sides; editing, only the separator changes when saving. To cloze
+     * keeps the front's text, unless a side has handwriting, which a cloze card can't have; from
+     * cloze, its text goes on the front.
+     */
+    private setCardType(type: CardType) {
+        if (this.busy || type === this.cardType) return;
+        const toCloze = type === CardType.Cloze;
+        const fromCloze = this.cardType === CardType.Cloze;
+        if (toCloze && this.sides.some((side) => side.strokes.length > 0)) {
+            new Notice(t("CARD_EDITOR_CLOZE_NO_INK"));
+            return;
+        }
+        this.cardType = type;
+        if (this.opts.kind === "edit" && type !== this.initialCardType) {
+            const reversed =
+                type === CardType.MultiLineReversed || type === CardType.SingleLineReversed;
+            new Notice(t(reversed ? "CARD_EDITOR_TO_REVERSED" : "CARD_EDITOR_TO_BASIC"));
+        }
+        if (toCloze || fromCloze) {
+            const front: SideState = { ...this.front.state, strokes: [] };
+            this.buildMain({ front, back: toCloze ? null : this.blankSide() });
+            this.front.focus();
+        }
+        this.updateButtons();
+    }
+
+    /**
+     * Wraps the selection in the first cloze pattern (e.g. "==…=="); without a selection, inserts
+     * the empty pattern with the cursor inside
+     */
+    private markCloze() {
+        if (this.busy) return;
+        this.setPreview(false);
+        const { open, close } = clozeMarkers(this.settings.clozePatterns[0]);
+        this.front.wrapSelection(open, close);
+    }
+
+    /** Preview on: the side's text rendered in the text zone. Off: back to typing, at the end */
+    private setPreview(on: boolean) {
+        if (this.busy || on === this.preview) return;
+        this.preview = on;
+        const side = this.activeSide;
+        if (on) {
+            if (side !== null) this.renderPreview(side);
+        } else {
+            this.unloadPreview();
+            side?.focusEnd();
+        }
+        this.updateButtons();
+    }
+
+    /** Renders the side's text, with Obsidian's Markdown renderer, over its text zone */
+    private renderPreview(side: SideEditor) {
+        this.unloadPreview();
+        const component = (this.previewComponent = new Component());
+        component.load();
+        const text = (this.previewText = side.text);
+        side.setPreview((el) => {
+            MarkdownRenderer.render(
+                this.app,
+                text,
+                el,
+                this.opts.sourcePath ?? "",
+                component,
+            ).catch((err) => console.error("SR: rendering the preview failed", err));
+        });
+    }
+
+    /** Hides the preview and unloads what it rendered */
+    private unloadPreview() {
+        this.previewComponent?.unload();
+        this.previewComponent = null;
+        this.previewText = null;
+        this.sides.forEach((side) => side.setPreview(null));
+    }
+
     /** Shows one side, hiding the other; text and strokes are kept per side */
     private showSide(side: SideEditor) {
         this.activeSide = side;
         this.sides.forEach((s) => s.show(s === side));
         this.mainEl.toggleClass("is-back", side === this.back);
+        if (this.preview) this.renderPreview(side);
         this.updateButtons();
     }
 
@@ -611,6 +831,9 @@ export class CardEditorModal extends Modal {
         }
         this.undoSteps.clear();
         this.disarmDelete();
+        // Nothing to show on a new card: back to typing
+        this.preview = false;
+        this.unloadPreview();
         this.sides.forEach((side) => side.reset(this.blankSide()));
         this.showSide(this.front);
         this.front.focus();
@@ -638,8 +861,9 @@ export class CardEditorModal extends Modal {
         this.close();
     }
 
-    /** Text or ink of a side was changed since the editor opened */
+    /** The card type, text or ink of a side was changed since the editor opened */
     private get changed(): boolean {
+        if (this.cardType !== this.initialCardType) return true;
         return this.sides.some(
             (side) => side.inkChanged || side.text !== this.initialText.get(side),
         );
@@ -653,6 +877,12 @@ export class CardEditorModal extends Modal {
         const empty = this.sides.find((side) => side.isEmpty);
         if (empty !== undefined) {
             this.showEmptySide(empty);
+            return false;
+        }
+        if (this.cardType === CardType.Cloze && !hasCloze(this.front.text, this.settings)) {
+            this.setPreview(false);
+            this.front.flash();
+            new Notice(t("CARD_EDITOR_NO_CLOZE"), 2000);
             return false;
         }
         this.busy = true;
@@ -749,7 +979,11 @@ export class CardEditorModal extends Modal {
     }
 
     private result(): CardEditorResult {
-        return { front: sideResult(this.front), back: this.back ? sideResult(this.back) : null };
+        return {
+            cardType: this.cardType,
+            front: sideResult(this.front),
+            back: this.back ? sideResult(this.back) : null,
+        };
     }
 
     private updateButtons() {
@@ -780,6 +1014,14 @@ export class CardEditorModal extends Modal {
         this.mainEl.toggleClass("is-erasing", this.eraser);
         this.undoButton.disabled = this.busy || this.stepsOf(side).length === 0;
         this.clearButton.disabled = this.busy || side.isEmpty;
+        this.previewButton.disabled = this.busy;
+        this.previewButton.toggleClass("is-active", this.preview);
+        this.previewButton.setAttr("aria-pressed", this.preview);
+        // Cloze cards (editing) can't change type: no menu, no ▾
+        const fixedType = this.typeButton.hasClass("is-fixed");
+        this.typeButton.setText(cardTypeName(this.cardType) + (fixedType ? "" : " ▾"));
+        this.typeButton.setAttr("aria-label", t("CARD_EDITOR_CARD_TYPE"));
+        if (!fixedType) this.typeButton.disabled = this.busy;
         this.deleteButton.disabled = this.busy;
         if (this.opts.kind === "edit" && this.opts.steps) {
             const { prev, next } = this.opts.steps;
@@ -890,6 +1132,20 @@ export class CardEditorModal extends Modal {
             palm = false;
             return result;
         };
+    }
+}
+
+/** The card type as the type button and its menu name it */
+function cardTypeName(type: CardType): string {
+    switch (type) {
+        case CardType.SingleLineBasic:
+        case CardType.MultiLineBasic:
+            return t("CARD_EDITOR_CARD_BASIC");
+        case CardType.SingleLineReversed:
+        case CardType.MultiLineReversed:
+            return t("CARD_EDITOR_CARD_REVERSED");
+        case CardType.Cloze:
+            return t("CARD_EDITOR_CARD_CLOZE");
     }
 }
 

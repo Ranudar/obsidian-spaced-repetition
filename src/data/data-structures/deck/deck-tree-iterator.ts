@@ -66,6 +66,13 @@ export interface IDeckTreeIterator {
      */
     deleteQuestionFromAllDecks(question: Question): void;
     /**
+     * Deletes a repetition item other than the current one from all decks; the current card stays
+     * current.
+     *
+     * @param {Card} card - The card.
+     */
+    deleteRepItemFromAllDecks(card: Card): void;
+    /**
      * Moves the current repetition item to the end of the list.
      */
     moveCurrentRepItemToEndOfList(): void;
@@ -418,6 +425,12 @@ export class DeckTreeIterator implements IDeckTreeIterator {
     deleteQuestionFromAllDecks(question: Question): void {
         const current = this.currentRepItem;
         this.baseDeckTree.deleteQuestionFromAllDecks(question, false);
+        if (current !== null) this.singleDeckIterator.relocateCurrentCard(current);
+    }
+
+    deleteRepItemFromAllDecks(card: Card): void {
+        const current = this.currentRepItem;
+        this.baseDeckTree.deleteCardFromAllDecks(card, false);
         if (current !== null) this.singleDeckIterator.relocateCurrentCard(current);
     }
 
