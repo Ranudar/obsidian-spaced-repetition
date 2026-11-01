@@ -582,6 +582,7 @@ img[src*="sr-ink-"] {
 
 .sr-card-editor-switch-side {
     font-size: var(--font-ui-small);
+    font-weight: var(--font-normal);
     color: var(--text-muted);
 }
 
