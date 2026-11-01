@@ -221,6 +221,9 @@ describe("CardEditorModal layout", () => {
         }
         const canvas = inkFields()[0].querySelector("canvas");
         expect(pointer("pointerdown", canvas, "touch").defaultPrevented).toBe(true);
+        // The pen zone's border, around the canvas
+        const zone = $(".sr-card-editor-ink");
+        expect(pointer("pointerdown", zone, "pen").defaultPrevented).toBe(true);
     });
 });
 
@@ -580,6 +583,34 @@ describe("CardEditorModal pen tools", () => {
             expect(undo().disabled).toBe(false);
         });
     });
+
+    test("Ctrl+Z in the text area undoes the ink when it was the last change", () => {
+        withCanvas(() => {
+            openAdd();
+            const ink = inkFields()[0];
+            const draw = () => {
+                const canvas = ink.querySelector("canvas");
+                pointer("pointerdown", canvas, "pen", 1, { clientX: 10 });
+                pointer("pointermove", canvas, "pen", 1, { clientX: 40 });
+                pointer("pointerup", canvas, "pen", 1, { clientX: 40 });
+            };
+            const ctrlZ = (el: HTMLElement) => keyDown(el, "z", { ctrlKey: true });
+
+            draw();
+            expect(ctrlZ(textAreas()[0]).defaultPrevented).toBe(true);
+            expect(ink.hasClass("is-empty")).toBe(true);
+
+            // Typed after the stroke: the text area's own undo
+            draw();
+            type(0, "Q");
+            expect(ctrlZ(textAreas()[0]).defaultPrevented).toBe(false);
+            expect(ink.hasClass("is-empty")).toBe(false);
+
+            // Outside a text area it always undoes the ink
+            expect(ctrlZ($(".sr-card-editor-sides")).defaultPrevented).toBe(true);
+            expect(ink.hasClass("is-empty")).toBe(true);
+        });
+    });
 });
 
 describe("CardEditorModal pen side button", () => {
@@ -623,6 +654,29 @@ describe("CardEditorModal pen side button", () => {
             hover(true);
             hover(true);
             expect(eraser().hasClass("is-active")).toBe(true);
+        });
+    });
+
+    test("not while the pen writes, and not right after a pen tap elsewhere", () => {
+        jest.useFakeTimers({ now: 10_000 });
+        withCanvas(() => {
+            openAdd();
+            const canvas = inkFields()[0].querySelector("canvas");
+            pointer("pointerdown", canvas, "pen");
+            jest.advanceTimersByTime(300);
+            hover(true);
+            hover(true);
+            pointer("pointerup", canvas, "pen");
+            expect(eraser().hasClass("is-active")).toBe(false);
+
+            // A pen tap on a button just above the pen zone
+            jest.advanceTimersByTime(300);
+            pointer("pointerdown", sizeButton(), "pen");
+            pointer("pointerup", sizeButton(), "pen");
+            jest.advanceTimersByTime(200);
+            hover(true);
+            hover(true);
+            expect(eraser().hasClass("is-active")).toBe(false);
         });
     });
 });
@@ -729,24 +783,30 @@ describe("CardEditorModal while saving", () => {
     }
 
     test("Save & next: the sides can't be changed until the card is saved", async () => {
-        const { cb } = openAdd({
-            front: side({ text: "Q", strokes: [stroke(0)] }),
-            back: side({ text: "A" }),
-        });
+        const { cb } = openAdd({ front: side({ text: "Q" }), back: side({ text: "A" }) });
         const frontInk = inkFields()[0];
+        const canvas = frontInk.querySelector("canvas");
+        // A stroke, the last change: Ctrl+Z in the text area would undo it
+        withCanvas(() => {
+            pointer("pointerdown", canvas, "pen", 1, { clientX: 10 });
+            pointer("pointermove", canvas, "pen", 1, { clientX: 40 });
+            pointer("pointerup", canvas, "pen", 1, { clientX: 40 });
+        });
         const finish = deferSave(cb);
         saveNext().click();
 
         expect(textAreas()[0].readOnly).toBe(true);
-        const draw = pointer("pointerdown", frontInk.querySelector("canvas") ?? frontInk, "pen");
-        expect(draw.defaultPrevented).toBe(true);
+        const reached = jest.fn();
+        canvas.addEventListener("pointerdown", reached);
+        pointer("pointerdown", canvas, "pen");
+        expect(reached).not.toHaveBeenCalled();
         expect(keyDown(textAreas()[0], "Tab").defaultPrevented).toBe(false);
         expect(clearSide().disabled).toBe(true);
         expect(undo().disabled).toBe(true);
         expect(switchSide().disabled).toBe(true);
         clearSide().click();
         switchSide().click();
-        keyDown($(".sr-card-editor-sides"), "z", { ctrlKey: true });
+        keyDown(textAreas()[0], "z", { ctrlKey: true });
         expect(frontInk.hasClass("is-empty")).toBe(false);
         expect(textAreas()[0].value).toBe("Q");
         expect(shown()).toBe(0);

@@ -102,7 +102,8 @@ place, and the switch and the save buttons share the right column. A side that a
 handwriting still shows its pen zone, so you can change it.
 
 In the text zone, `Tab` inserts a tab character, like the old edit dialog, and `Ctrl/Cmd + Z`
-undoes typing as usual. Right-to-left text is supported.
+undoes typing as usual; if you wrote with the pen since you last typed, it undoes the pen change
+instead. Right-to-left text is supported.
 
 ### Pen Tools
 

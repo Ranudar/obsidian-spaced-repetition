@@ -27,6 +27,11 @@ export interface InkFieldOptions {
      * sideButton()); pressed while the pen writes, the button erases instead
      */
     onSideButton?: () => void;
+    /**
+     * Returns when the pen last touched or left the screen anywhere, e.g. on a button
+     * (Date.now()); the field's own contacts count without it
+     */
+    lastPenContact?: () => number;
     /** Called after every change with the strokes before the change (for undo) */
     onChange: (previous: Stroke[]) => void;
 }
@@ -429,7 +434,8 @@ export class InkField {
      */
     private sideButton(e: PointerEvent) {
         if (!this.opts.onSideButton) return;
-        const quiet = Date.now() - this.lastContactAt >= SIDE_BUTTON_QUIET_MS;
+        const contact = Math.max(this.lastContactAt, this.opts.lastPenContact?.() ?? -Infinity);
+        const quiet = Date.now() - contact >= SIDE_BUTTON_QUIET_MS;
         if (e.pointerType !== "pen" || this.activePointer !== null || !quiet) {
             this.sideButtonSamples = 0;
             return;

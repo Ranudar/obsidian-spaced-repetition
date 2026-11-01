@@ -39,6 +39,10 @@ export interface SideEditorOptions {
     eraserRadius?: () => number;
     /** The pen's side button was pressed while the pen hovers over the pen zone */
     onSideButton?: () => void;
+    /** Returns when the pen last touched or left the screen anywhere (Date.now()) */
+    lastPenContact?: () => number;
+    /** Called when text is typed, not when it is set (e.g. by undo or "Clear side") */
+    onType?(): void;
 }
 
 /** How long a side is outlined when saving needs it filled in */
@@ -58,7 +62,6 @@ export class SideEditor {
     private initial: SideState;
     private penSize: number;
     private eraser = false;
-    private inkHost: HTMLElement | null = null;
     private textWrap: HTMLElement;
     private textArea: HTMLTextAreaElement;
     private ink: InkField | null = null;
@@ -75,8 +78,10 @@ export class SideEditor {
 
         if (opts.allowInk) {
             const s = opts.settings;
-            this.inkHost = this.el.createDiv({ cls: "sr-card-editor-ink" });
-            this.ink = new InkField(this.inkHost, {
+            const inkHost = this.el.createDiv({ cls: "sr-card-editor-ink" });
+            // Also on the zone's border, around the canvas: the text area keeps the focus
+            inkHost.addEventListener("pointerdown", (evt) => evt.preventDefault());
+            this.ink = new InkField(inkHost, {
                 placeholder: opts.inkHint,
                 style: { size: this.penSize },
                 guide: s.cardEditorGuide,
@@ -84,6 +89,7 @@ export class SideEditor {
                 eraserActive: () => this.eraser,
                 eraserRadius: opts.eraserRadius,
                 onSideButton: opts.onSideButton,
+                lastPenContact: opts.lastPenContact,
                 onChange: (prev) => this.onInkChange(prev),
             });
             this.ink.setStrokes(this.initial.strokes);
@@ -91,10 +97,11 @@ export class SideEditor {
 
         // The hint is an element over the text area, not its placeholder, which can't be bold
         this.textWrap = this.el.createDiv({ cls: "sr-card-editor-text-wrap" });
+        // On the wrap, so the hint follows the text's direction too
+        if (opts.textDirection === TextDirection.Rtl) this.textWrap.setAttr("dir", "rtl");
         this.textArea = this.textWrap.createEl("textarea", { cls: "sr-card-editor-text" });
         this.textArea.value = opts.initial.text;
         this.textArea.setAttr("aria-label", opts.label);
-        if (opts.textDirection === TextDirection.Rtl) this.textArea.setAttr("dir", "rtl");
         this.textArea.addEventListener("input", this.onTextInput);
         this.textArea.addEventListener("keydown", this.onTextKeyDown);
         this.textArea.addEventListener("pointerdown", this.onTextPointerDown);
@@ -231,6 +238,7 @@ export class SideEditor {
 
     private onTextInput = () => {
         this.updateTextEmpty();
+        this.opts.onType?.();
         this.opts.onChange();
     };
 

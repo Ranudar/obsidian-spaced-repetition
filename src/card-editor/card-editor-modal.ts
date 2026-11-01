@@ -77,6 +77,8 @@ const DEFAULT_ERASER_SIZE_STEP = 1;
 interface UndoStep {
     prev: Stroke[];
     prevText?: string;
+    /** Text was typed on the side since this change */
+    typedAfter?: boolean;
 }
 
 /**
@@ -367,6 +369,11 @@ export class CardEditorModal extends Modal {
             onSideButton: () => {
                 if (!this.busy) this.setEraser(!this.eraser);
             },
+            lastPenContact: () => this.lastPenAt,
+            onType: () => {
+                const steps = this.stepsOf(side);
+                if (steps.length > 0) steps[steps.length - 1].typedAfter = true;
+            },
         });
         side.setEraser(this.eraser);
         return side;
@@ -655,13 +662,22 @@ export class CardEditorModal extends Modal {
             if (this.opts.kind === "add") void this.saveAdd(false);
             else void this.saveEdit();
         } else if (evt.key.toLowerCase() === "z" && !evt.shiftKey) {
-            // Text areas keep their own undo
+            // The text area keeps the focus while the pen writes: in it, this undoes the ink when
+            // that was the side's last change, else the text area's own undo undoes the typing
             // (instanceOf works across windows, e.g. an editor opened in a popout)
-            if ((evt.target as Node | null)?.instanceOf(HTMLTextAreaElement)) return;
+            const inText = (evt.target as Node | null)?.instanceOf(HTMLTextAreaElement) ?? false;
+            if (inText && !this.inkChangedLast()) return;
             evt.preventDefault();
             this.undo();
         }
     };
+
+    /** The last change of the side shown is an ink change, with no typing since */
+    private inkChangedLast(): boolean {
+        if (this.activeSide === null) return false;
+        const steps = this.stepsOf(this.activeSide);
+        return steps.length > 0 && !steps[steps.length - 1].typedAfter;
+    }
 
     // MARK: state
 

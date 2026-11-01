@@ -301,8 +301,19 @@ img[src*="sr-ink-"] {
 .sr-card-editor-text-wrap.is-empty .sr-card-editor-text-hint {
   display: block;
 }
-.sr-card-editor-side.is-back .sr-card-editor-text-hint {
+.sr-card-editor-text-wrap[dir="rtl"] > .sr-card-editor-text-hint {
+  left: auto;
+  right: calc(var(--size-4-3) + 1px);
+}
+.sr-card-editor-side.is-back
+  .sr-card-editor-text-wrap:not([dir="rtl"])
+  > .sr-card-editor-text-hint {
   left: calc(var(--size-4-3) + var(--sr-card-editor-edge));
+}
+.sr-card-editor-side.is-front
+  .sr-card-editor-text-wrap[dir="rtl"]
+  > .sr-card-editor-text-hint {
+  right: calc(var(--size-4-3) + var(--sr-card-editor-edge));
 }
 .sr-card-editor-text-hint b,
 .sr-card-editor-ink .sr-ink-placeholder b {

@@ -387,8 +387,22 @@ img[src*="sr-ink-"] {
     display: block;
 }
 
-.sr-card-editor-side.is-back .sr-card-editor-text-hint {
+/* Right to left, the hint starts at the right, like the text */
+.sr-card-editor-text-wrap[dir="rtl"] > .sr-card-editor-text-hint {
+    left: auto;
+    right: calc(var(--size-4-3) + 1px);
+}
+
+/* Clear of the side's edge where the text starts: the back's on the left, the front's on the
+   right */
+.sr-card-editor-side.is-back
+    .sr-card-editor-text-wrap:not([dir="rtl"])
+    > .sr-card-editor-text-hint {
     left: calc(var(--size-4-3) + var(--sr-card-editor-edge));
+}
+
+.sr-card-editor-side.is-front .sr-card-editor-text-wrap[dir="rtl"] > .sr-card-editor-text-hint {
+    right: calc(var(--size-4-3) + var(--sr-card-editor-edge));
 }
 
 .sr-card-editor-text-hint b,
