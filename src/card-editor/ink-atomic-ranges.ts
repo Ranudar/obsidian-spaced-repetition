@@ -73,9 +73,7 @@ export function inkEmbedRanges(text: string): TextRange[] {
         const to = from + link.match.length;
         searchFrom = to;
         if (code.some((c) => c.from < to && from < c.to)) continue;
-        if (link.match.startsWith("!") && inkEmbedPath(link.match) !== null) {
-            ranges.push({ from, to });
-        }
+        if (inkEmbedPath(link.match) !== null) ranges.push({ from, to });
     }
     return ranges;
 }
@@ -164,12 +162,7 @@ function onBeforeInput(event: InputEvent, view: EditorView): boolean {
     view.dom.ownerDocument.defaultView?.setTimeout(() => {
         if (view.state.doc !== doc || !view.dom.isConnected) return;
         if (view.state.doc.sliceString(hit.from, hit.to) !== text) return;
-        view.dispatch({
-            changes: hit,
-            selection: { anchor: hit.from },
-            scrollIntoView: true,
-            userEvent: forward ? "delete.forward" : "delete.backward",
-        });
+        deleteRange(view, hit, forward);
     }, KEYBOARD_DELETE_WAIT_MS);
     // The editor's own handling goes on as usual
     return false;
@@ -184,14 +177,18 @@ function onBeforeInput(event: InputEvent, view: EditorView): boolean {
 function deleteInk(view: EditorView, forward: boolean): boolean {
     const hit = inkAtCursor(view, forward);
     if (hit === null) return false;
-    const { from, to } = hit;
+    deleteRange(view, hit, forward);
+    return true;
+}
+
+/** Deletes the range like Backspace (forward: Delete) would, the cursor where it was */
+function deleteRange(view: EditorView, range: TextRange, forward: boolean): void {
     view.dispatch({
-        changes: { from, to },
-        selection: { anchor: from },
+        changes: range,
+        selection: { anchor: range.from },
         scrollIntoView: true,
         userEvent: forward ? "delete.forward" : "delete.backward",
     });
-    return true;
 }
 
 /**
@@ -206,9 +203,9 @@ export function removedInkLinks(tr: Transaction): string[] {
     tr.changes.iterChanges((fromA, toA) => {
         if (toA === fromA) return;
         const text = tr.startState.doc.sliceString(fromA, toA);
+        // inkEmbedRanges() holds only ink embeds, so each has a link path
         for (const range of inkEmbedRanges(text)) {
-            const path = inkEmbedPath(text.slice(range.from, range.to));
-            if (path !== null) links.push(path);
+            links.push(inkEmbedPath(text.slice(range.from, range.to)));
         }
     });
     return links;

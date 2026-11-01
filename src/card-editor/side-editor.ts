@@ -76,7 +76,7 @@ export class SideEditor {
                 guide: s.cardEditorGuide,
                 guideSpacing: s.cardEditorGuideSpacing,
                 eraserActive: () => this.eraser,
-                onChange: (_, prev) => this.onInkChange(prev),
+                onChange: (prev) => this.onInkChange(prev),
             });
             this.ink.setStrokes(this.initial.strokes);
         }

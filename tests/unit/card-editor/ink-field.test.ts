@@ -116,7 +116,7 @@ describe("InkField pixel eraser", () => {
         pointer(canvas, "pointerup", 100, 40, { buttons: 0 });
 
         expect(onChange).toHaveBeenCalledTimes(1);
-        expect(onChange).toHaveBeenCalledWith(field, [s]);
+        expect(onChange).toHaveBeenCalledWith([s]);
         const [left, right] = field.strokes;
         expect(left.points[0][0]).toBe(0);
         expect(right.points[right.points.length - 1][0]).toBe(200);
@@ -232,7 +232,7 @@ describe("InkField visible area", () => {
             ],
         ]);
         expect(onChange).toHaveBeenCalledTimes(1);
-        expect(onChange).toHaveBeenCalledWith(field, []);
+        expect(onChange).toHaveBeenCalledWith([]);
     });
 
     test("the part of the canvas an ancestor cuts off takes no ink", () => {
@@ -340,7 +340,7 @@ describe("InkField visible area", () => {
                 ],
             ]);
             expect(onChange).toHaveBeenCalledTimes(1);
-            expect(onChange).toHaveBeenCalledWith(field, []);
+            expect(onChange).toHaveBeenCalledWith([]);
         } finally {
             delete (window as unknown as { visualViewport?: unknown }).visualViewport;
         }

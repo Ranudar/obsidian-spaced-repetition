@@ -1,12 +1,16 @@
 import { App, MarkdownPostProcessorContext, MarkdownView, Notice, setIcon, TFile } from "obsidian";
 
 import { INK_FILE_PREFIX, isInkFileName } from "src/card-editor/core/card-text";
-import { imageFileName, InkFiles } from "src/card-editor/ink-files";
+import {
+    imageFileName,
+    INK_IMAGE_SELECTOR,
+    InkFiles,
+    openDocuments,
+} from "src/card-editor/ink-files";
 import { t } from "src/lang/helpers";
 
 const BUTTON_CLASS = "sr-pencil-button";
 const HOST_CLASS = "sr-pencil-host";
-const INK_IMAGE_SELECTOR = `img[src*="${INK_FILE_PREFIX}"]`;
 /** How far a pointer may move between press and release for a tap */
 const TAP_SLOP_PX = 10;
 
@@ -139,19 +143,9 @@ export class PencilButtons {
             if (button) remove(button);
         });
         this.buttons.clear();
-        for (const doc of this.openDocuments()) {
+        for (const doc of openDocuments(this.app)) {
             doc.querySelectorAll(`.${BUTTON_CLASS}`).forEach(remove);
         }
-    }
-
-    /** The documents of all windows: the main one and popouts */
-    private openDocuments(): Document[] {
-        const documents = new Set<Document>([activeDocument]);
-        this.app.workspace.iterateAllLeaves((leaf) => {
-            const doc = leaf.view?.containerEl?.ownerDocument;
-            if (doc) documents.add(doc);
-        });
-        return [...documents];
     }
 
     private scanLivePreview(node: Node, noteOf: NoteOf): void {

@@ -21,7 +21,7 @@ export interface InkFieldOptions {
     /** Returns true while the toolbar eraser is switched on */
     eraserActive: () => boolean;
     /** Called after every change with the strokes before the change (for undo) */
-    onChange: (field: InkField, previous: Stroke[]) => void;
+    onChange: (previous: Stroke[]) => void;
 }
 
 const MIN_GUIDE_SPACING = 8;
@@ -136,6 +136,11 @@ export class InkField {
         return this.strokes.length === 0;
     }
 
+    /** Nothing on the canvas: no strokes, none being drawn */
+    private get blank(): boolean {
+        return this.isEmpty && !this.current && this.parts.length === 0;
+    }
+
     /**
      * Changes the pen thickness. New strokes are written with it (each stroke keeps the size it
      * was written with); strokes without their own size, e.g. those read back from a file, are
@@ -151,13 +156,6 @@ export class InkField {
         this.strokes = strokes;
         this.updateEmpty();
         this.schedule();
-    }
-
-    clear(): void {
-        if (this.isEmpty) return;
-        const prev = this.strokes;
-        this.setStrokes([]);
-        this.opts.onChange(this, prev);
     }
 
     destroy(): void {
@@ -437,7 +435,7 @@ export class InkField {
             const prev = this.eraseSnapshot;
             this.eraseSnapshot = null;
             // One undo step for the whole gesture
-            if (prev && prev !== this.strokes) this.opts.onChange(this, prev);
+            if (prev && prev !== this.strokes) this.opts.onChange(prev);
         } else {
             const added = this.gestureStrokes();
             this.resetGesture();
@@ -445,7 +443,7 @@ export class InkField {
             if (added.length > 0) {
                 const prev = this.strokes;
                 this.strokes = [...this.strokes, ...added];
-                this.opts.onChange(this, prev);
+                this.opts.onChange(prev);
             }
         }
         this.updateEmpty();
@@ -509,7 +507,7 @@ export class InkField {
     // MARK: drawing
 
     private updateEmpty() {
-        this.el.toggleClass("is-empty", this.isEmpty && !this.current && this.parts.length === 0);
+        this.el.toggleClass("is-empty", this.blank);
     }
 
     /** The ink color follows the theme: read it again and redraw */
@@ -567,7 +565,7 @@ export class InkField {
         const ctx = this.ctx;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        if (this.strokes.length === 0 && !this.current && this.parts.length === 0) return;
+        if (this.blank) return;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         this.inkColor ??= cssVar(this.el, "--text-normal", "#222");

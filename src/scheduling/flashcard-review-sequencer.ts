@@ -3,7 +3,7 @@ import { Notice } from "obsidian";
 import { TICKS_PER_DAY } from "src/data/constants";
 import { DataStore } from "src/data/data-store/base/data-store";
 import { Card } from "src/data/data-structures/card/card";
-import { Question, QuestionText } from "src/data/data-structures/card/questions/question";
+import { Question } from "src/data/data-structures/card/questions/question";
 import { IQuestionPostponementList } from "src/data/data-structures/card/questions/question-postponement-list";
 import {
     CardFrontBack,
@@ -428,7 +428,6 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
 
     async updateCurrentQuestionTextAndCards(text: string): Promise<boolean> {
         const question = this.currentQuestion;
-        const q: QuestionText = question.questionText;
 
         // Update front/back properties of all cards which question is linked to
         const cardFrontBackList: CardFrontBack[] = CardFrontBackUtil.expand(
@@ -437,16 +436,7 @@ export class FlashcardReviewSequencer implements IFlashcardReviewSequencer {
             this.settings,
         );
 
-        const previous = q.actualQuestion;
-        q.actualQuestion = text;
-
-        let written = false;
-        try {
-            written = await this.currentQuestion.writeQuestion(this.settings);
-        } finally {
-            if (!written) q.actualQuestion = previous;
-        }
-        if (!written) return false;
+        if (!(await question.writeActualQuestion(text, this.settings))) return false;
 
         if (cardFrontBackList.length !== question.cards.length) {
             console.warn("SR: Cards count does not match question text. Skipping redraw.");

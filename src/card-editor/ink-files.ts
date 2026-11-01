@@ -1,11 +1,16 @@
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 
-import { INK_FILE_PREFIX, linksIn } from "src/card-editor/core/card-text";
+import {
+    fileNameOf,
+    INK_FILE_PREFIX,
+    linksIn,
+    safeDecodeURIComponent,
+} from "src/card-editor/core/card-text";
 import { t } from "src/lang/helpers";
 
 /** Query parameter added to the src of images rewritten in this session */
 const VERSION_PARAM = "sr-ink";
-const INK_IMAGE_SELECTOR = `img[src*="${INK_FILE_PREFIX}"]`;
+export const INK_IMAGE_SELECTOR = `img[src*="${INK_FILE_PREFIX}"]`;
 
 /**
  * Reads and writes the SVG files of handwritten card sides,
@@ -174,7 +179,7 @@ export class InkFiles {
      * and remembers the files so images rendered later in the session can be updated too.
      */
     refresh(files: TFile[]): void {
-        const documents = this.openDocuments();
+        const documents = openDocuments(this.app);
         for (const file of files) {
             const version = Date.now();
             const src = this.app.vault.getResourcePath(file);
@@ -198,16 +203,16 @@ export class InkFiles {
             img.src = withVersion(src, version);
         }
     }
+}
 
-    /** The documents of the main window and of every popout window */
-    private openDocuments(): Document[] {
-        const documents = new Set<Document>([activeDocument]);
-        this.app.workspace.iterateAllLeaves((leaf) => {
-            const doc = leaf.view?.containerEl?.ownerDocument;
-            if (doc) documents.add(doc);
-        });
-        return [...documents];
-    }
+/** The documents of the main window and of every popout window */
+export function openDocuments(app: App): Document[] {
+    const documents = new Set<Document>([activeDocument]);
+    app.workspace.iterateAllLeaves((leaf) => {
+        const doc = leaf.view?.containerEl?.ownerDocument;
+        if (doc) documents.add(doc);
+    });
+    return [...documents];
 }
 
 /** The src of an ink image without query and hash (which file it shows), or null for other images */
@@ -223,15 +228,8 @@ function withoutQuery(src: string): string {
 
 /** File name of the ink image an <img> shows, or null for other images */
 export function imageFileName(img: HTMLImageElement): string | null {
-    const src = img.getAttribute("src");
-    if (!src || !src.includes(INK_FILE_PREFIX)) return null;
-    const path = src.split(/[?#]/)[0];
-    const name = path.substring(path.lastIndexOf("/") + 1);
-    try {
-        return decodeURIComponent(name);
-    } catch {
-        return name;
-    }
+    const key = imageKey(img);
+    return key === null ? null : safeDecodeURIComponent(fileNameOf(key));
 }
 
 /** src with the version query set (replacing an earlier one) */

@@ -61,9 +61,9 @@ export interface IDataStore {
      * Deletes a question from the data store.
      *
      * @param question
-     * @returns
+     * @returns false, deleting nothing, when the question's text is no longer in the note
      */
-    delete(question: Question): Promise<void>;
+    delete(question: Question): Promise<boolean>;
 }
 
 /**

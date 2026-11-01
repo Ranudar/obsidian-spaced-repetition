@@ -51,6 +51,8 @@ export type CardEditorOptions =
 const DISCARD_ARM_MS = 3000;
 /** Input on the sides that is swallowed while a card is being saved */
 const LOCKED_EVENTS = ["pointerdown", "mousedown", "touchstart", "click", "keydown"];
+/** Pointer events that tell when the pen is used, see onPenActivity() */
+const PEN_EVENTS = ["pointerdown", "pointermove", "pointerup", "pointercancel"] as const;
 /** With pen-only on, finger presses this soon after the pen was used count as the palm */
 const PALM_GUARD_MS = 500;
 /** Pen thickness steps of the toolbar button, as factors of the pen thickness setting */
@@ -102,7 +104,7 @@ export class CardEditorModal extends Modal {
     private clearButton!: HTMLButtonElement;
     private saveButton!: HTMLButtonElement;
     private saveCloseButton: HTMLButtonElement | null = null;
-    private discardButton: HTMLButtonElement | null = null;
+    private discardButton!: HTMLButtonElement;
 
     constructor(app: App, settings: SRSettings, opts: CardEditorOptions) {
         super(app);
@@ -112,10 +114,6 @@ export class CardEditorModal extends Modal {
 
     private get sides(): SideEditor[] {
         return this.back ? [this.front, this.back] : [this.front];
-    }
-
-    private get isAdd(): boolean {
-        return this.opts.kind === "add";
     }
 
     /** Every needed side has text or ink */
@@ -175,10 +173,9 @@ export class CardEditorModal extends Modal {
 
         this.buildFooter(root);
         root.addEventListener("keydown", this.onKeyDown);
-        this.modalEl.addEventListener("pointerdown", this.onPenActivity, true);
-        this.modalEl.addEventListener("pointermove", this.onPenActivity, true);
-        this.modalEl.addEventListener("pointerup", this.onPenActivity, true);
-        this.modalEl.addEventListener("pointercancel", this.onPenActivity, true);
+        for (const type of PEN_EVENTS) {
+            this.modalEl.addEventListener(type, this.onPenActivity, true);
+        }
         this.guardBackground();
         this.keepSteadyHeight();
 
@@ -194,10 +191,9 @@ export class CardEditorModal extends Modal {
     onClose(): void {
         this.isClosed = true;
         this.contentEl.removeEventListener("keydown", this.onKeyDown);
-        this.modalEl.removeEventListener("pointerdown", this.onPenActivity, true);
-        this.modalEl.removeEventListener("pointermove", this.onPenActivity, true);
-        this.modalEl.removeEventListener("pointerup", this.onPenActivity, true);
-        this.modalEl.removeEventListener("pointercancel", this.onPenActivity, true);
+        for (const type of PEN_EVENTS) {
+            this.modalEl.removeEventListener(type, this.onPenActivity, true);
+        }
         for (const type of LOCKED_EVENTS) {
             this.sidesEl.removeEventListener(type, this.onLockedInput, true);
         }
@@ -445,7 +441,7 @@ export class CardEditorModal extends Modal {
      * dropped, an existing one removed from its note
      */
     private async discard() {
-        if (this.busy || !this.discardButton) return;
+        if (this.busy) return;
         // A new card with nothing on it: nothing to lose, no second tap
         if (this.opts.kind === "add" && this.allEmpty) {
             this.dropDraft = true;
@@ -485,8 +481,8 @@ export class CardEditorModal extends Modal {
         if (this.discardTimer !== null) activeWindow.clearTimeout(this.discardTimer);
         this.discardTimer = null;
         this.discardArmedAt = 0;
-        this.discardButton?.setText(t("CARD_EDITOR_DISCARD"));
-        this.discardButton?.removeClass("is-armed");
+        this.discardButton.setText(t("CARD_EDITOR_DISCARD"));
+        this.discardButton.removeClass("is-armed");
     }
 
     private async saveAdd(close: boolean) {
@@ -587,7 +583,7 @@ export class CardEditorModal extends Modal {
         if (!mod || evt.altKey) return;
         if (evt.key === "Enter") {
             evt.preventDefault();
-            if (this.isAdd) void this.saveAdd(false);
+            if (this.opts.kind === "add") void this.saveAdd(false);
             else void this.saveEdit();
         } else if (evt.key.toLowerCase() === "z" && !evt.shiftKey) {
             // Text areas keep their own undo
@@ -624,7 +620,7 @@ export class CardEditorModal extends Modal {
         this.saveButton.disabled = this.busy || !this.ready;
         // An empty card is closed with ✕, Esc or Delete, not with a button that looks like saving
         if (this.saveCloseButton) this.saveCloseButton.disabled = this.busy || !this.ready;
-        if (this.discardButton) this.discardButton.disabled = this.busy;
+        this.discardButton.disabled = this.busy;
         if (this.counterEl) {
             this.counterEl.setText(
                 this.added > 0 ? t("CARD_EDITOR_ADDED_BADGE", { count: this.added }) : "",

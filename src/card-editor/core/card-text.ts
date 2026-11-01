@@ -1,4 +1,8 @@
-import { CardType, QuestionText } from "src/data/data-structures/card/questions/question";
+import {
+    CardType,
+    isMultiLine,
+    QuestionText,
+} from "src/data/data-structures/card/questions/question";
 import { CardFrontBackUtil } from "src/data/data-structures/card/questions/question-type";
 import { SRSettings } from "src/data/settings";
 import { parse } from "src/parser";
@@ -30,19 +34,23 @@ export function inkEmbedPath(sideText: string): string | null {
     } else {
         const markdown = text.match(MARKDOWN_EMBED_REGEX);
         if (!markdown) return null;
-        path = markdown[1] ?? markdown[2];
-        try {
-            path = decodeURIComponent(path);
-        } catch {
-            // Not url-encoded after all (e.g. a literal "%"), use as is
-        }
+        path = safeDecodeURIComponent(markdown[1] ?? markdown[2]);
     }
 
     return isInkFileName(fileNameOf(path)) ? path : null;
 }
 
-function fileNameOf(path: string): string {
+export function fileNameOf(path: string): string {
     return path.substring(path.lastIndexOf("/") + 1);
+}
+
+/** The url-decoded text; as is if it isn't url-encoded after all (e.g. a literal "%") */
+export function safeDecodeURIComponent(text: string): string {
+    try {
+        return decodeURIComponent(text);
+    } catch {
+        return text;
+    }
 }
 
 // The embed regexes above, unanchored, to find embeds anywhere in a text
@@ -76,12 +84,7 @@ export function linksIn(text: string): LinkInText[] {
         if (match[1] !== undefined) {
             path = match[1].split(/[|#]/)[0];
         } else {
-            path = (match[2] ?? match[3]).split("#")[0];
-            try {
-                path = decodeURIComponent(path);
-            } catch {
-                // Not url-encoded after all (e.g. a literal "%"), use as is
-            }
+            path = safeDecodeURIComponent((match[2] ?? match[3]).split("#")[0]);
         }
         links.push({ match: match[0], path: path.trim() });
     }
@@ -136,15 +139,17 @@ export function joinSide(cardType: CardType, text: string, inkEmbed: string | nu
 /** The fence of a code block still open at the end of the text, else null */
 function openFence(text: string): string | null {
     let fence: string | null = null;
-    for (const line of text.split("\n")) {
-        if (fence !== null) {
-            if (line.startsWith(fence)) fence = null;
-            continue;
-        }
-        const open = line.match(/^(`{3,}|~{3,})/);
-        if (open) fence = open[1];
-    }
+    for (const line of text.split("\n")) fence = parserFenceAfter(fence, line);
     return fence;
+}
+
+/**
+ * The fence of the code block open after a line, given the one open before it (null: none),
+ * by the simple rule SR's parser uses: a line starting with the fence opens or closes it
+ */
+function parserFenceAfter(fence: string | null, line: string): string | null {
+    if (fence !== null) return line.startsWith(fence) ? null : fence;
+    return line.match(/^(`{3,}|~{3,})/)?.[1] ?? null;
 }
 
 /** The separator between front and back of a card type; null for cloze cards. */
@@ -161,10 +166,6 @@ export function cardSeparator(cardType: CardType, settings: SRSettings): string 
         case CardType.Cloze:
             return null;
     }
-}
-
-function isMultiLine(cardType: CardType): boolean {
-    return cardType === CardType.MultiLineBasic || cardType === CardType.MultiLineReversed;
 }
 
 export interface SplitCard {
@@ -225,13 +226,9 @@ export function protectBlankLines(text: string, settings: SRSettings): string {
     return text
         .split("\n")
         .map((line) => {
-            if (fence !== null) {
-                if (line.startsWith(fence)) fence = null;
-                return line;
-            }
-            const open = line.match(/^(`{3,}|~{3,})/);
-            if (open) fence = open[1];
-            return line.trim() === "" ? "<br>" : line;
+            const inCode = fence !== null;
+            fence = parserFenceAfter(fence, line);
+            return !inCode && line.trim() === "" ? "<br>" : line;
         })
         .join("\n");
 }
@@ -249,13 +246,10 @@ export function cardMarkerLine(text: string, settings: SRSettings): string | nul
     ].filter((marker) => marker);
     let fence: string | null = null;
     for (const line of text.split("\n")) {
-        if (fence !== null) {
-            if (line.startsWith(fence)) fence = null;
-            continue;
-        }
-        const open = line.match(/^(`{3,}|~{3,})/);
-        if (open) fence = open[1];
-        else if (markers.includes(line.trim())) return line.trim();
+        const inCode = fence !== null;
+        fence = parserFenceAfter(fence, line);
+        // Not inside a code block, nor its opening fence
+        if (!inCode && fence === null && markers.includes(line.trim())) return line.trim();
     }
     return null;
 }
@@ -281,14 +275,7 @@ export function parsesAsCard(
     back: string | null,
     settings: SRSettings,
 ): boolean {
-    const parsed = parse(cardText, {
-        singleLineCardSeparator: settings.singleLineCardSeparator,
-        singleLineReversedCardSeparator: settings.singleLineReversedCardSeparator,
-        multilineCardSeparator: settings.multilineCardSeparator,
-        multilineReversedCardSeparator: settings.multilineReversedCardSeparator,
-        multilineCardEndMarker: settings.multilineCardEndMarker,
-        clozePatterns: settings.clozePatterns,
-    });
+    const parsed = parse(cardText, settings);
     if (parsed.length !== 1 || parsed[0].cardType !== cardType) return false;
     // E.g. a tag at the start would be read as the card's deck, "^id" at the end as a block id
     const [topicPath, actualQuestion] = QuestionText.splitText(parsed[0].text, settings);

@@ -1,9 +1,9 @@
 import { App, MarkdownView, TFile } from "obsidian";
 
 import { cardInsertion } from "src/card-editor/core/card-text";
-import { CardType } from "src/data/data-structures/card/questions/question";
+import { isSingleLine } from "src/data/data-structures/card/questions/question";
 import { SRSettings } from "src/data/settings";
-import { parse, ParserOptions } from "src/parser";
+import { parse } from "src/parser";
 import { splitNoteIntoFrontmatterAndContent, splitTextIntoLineArray } from "src/utils/strings";
 
 /**
@@ -103,25 +103,13 @@ function insertion(
 function endsInsideCard(text: string, settings: SRSettings): boolean {
     if (!settings.multilineCardEndMarker) return false;
     const content = splitNoteIntoFrontmatterAndContent(text)[1];
-    const questions = parse(content, parserOptions(settings));
+    const questions = parse(content, settings);
     const last = questions[questions.length - 1];
     return (
         last !== undefined &&
-        last.cardType !== CardType.SingleLineBasic &&
-        last.cardType !== CardType.SingleLineReversed &&
+        !isSingleLine(last.cardType) &&
         last.lastLineNum === splitTextIntoLineArray(content).length - 1
     );
-}
-
-function parserOptions(settings: SRSettings): ParserOptions {
-    return {
-        singleLineCardSeparator: settings.singleLineCardSeparator,
-        singleLineReversedCardSeparator: settings.singleLineReversedCardSeparator,
-        multilineCardSeparator: settings.multilineCardSeparator,
-        multilineReversedCardSeparator: settings.multilineReversedCardSeparator,
-        multilineCardEndMarker: settings.multilineCardEndMarker,
-        clozePatterns: settings.clozePatterns,
-    };
 }
 
 /**
@@ -176,7 +164,7 @@ export function insertionLine(text: string, cursorLine: number, settings: SRSett
 
     const blocks: { first: number; last: number }[] = [];
     const endMarker = settings.multilineCardEndMarker;
-    const questions = parse(content, parserOptions(settings));
+    const questions = parse(content, settings);
     for (const question of questions) {
         let last = question.lastLineNum;
         // The end marker's line belongs to the card

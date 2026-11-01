@@ -2,7 +2,7 @@ import { MULTI_SCHEDULING_EXTRACTOR, SM2_SCHEDULE_INFO_EXTRACTOR } from "src/dat
 import { IDataStore, StorageType } from "src/data/data-store/base/data-store";
 import { IFileModifier } from "src/data/data-store/base/file-modifier";
 import { RepItemStorageInfo } from "src/data/data-store/base/rep-item-storage-info";
-import { CardType, Question } from "src/data/data-structures/card/questions/question";
+import { CardType, isMultiLine, Question } from "src/data/data-structures/card/questions/question";
 import { SRSettings } from "src/data/settings";
 import { RepItemScheduleInfo } from "src/scheduling/algorithms/base/rep-item-schedule-info";
 import { CommentParser } from "src/utils/comment-parser";
@@ -98,9 +98,9 @@ export class NotesDataStore implements IDataStore {
      * Deletes a question from the data store.
      *
      * @param question
-     * @returns
+     * @returns false, deleting nothing, when the question's text is no longer in the note
      */
-    async delete(question: Question): Promise<void> {
+    async delete(question: Question): Promise<boolean> {
         const fileText: string = await question.note.file.read();
         const newText = removeQuestionText(
             fileText,
@@ -110,9 +110,9 @@ export class NotesDataStore implements IDataStore {
         );
 
         // Only write if note hasn't changed
-        if (newText !== null) {
-            await question.note.file.write(newText);
-        }
+        if (newText === null) return false;
+        await question.note.file.write(newText);
+        return true;
     }
 }
 
@@ -139,10 +139,7 @@ export function removeQuestionText(
     lines.splice(i, 1);
 
     const marker = settings.multilineCardEndMarker;
-    if (
-        marker &&
-        (cardType === CardType.MultiLineBasic || cardType === CardType.MultiLineReversed)
-    ) {
+    if (marker && isMultiLine(cardType)) {
         let j = i;
         while (j < lines.length && lines[j].trim() === "") j++;
         if (j < lines.length && lines[j].trim() === marker) lines.splice(i, j - i + 1);

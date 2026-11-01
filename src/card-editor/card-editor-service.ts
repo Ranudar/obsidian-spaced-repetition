@@ -30,8 +30,8 @@ import {
 } from "src/card-editor/core/ink-svg";
 import { InkFiles } from "src/card-editor/ink-files";
 import { SideState } from "src/card-editor/side-editor";
-import { removeQuestionText } from "src/data/data-store/notes-data-store/notes-data-store";
-import { CardType, Question } from "src/data/data-structures/card/questions/question";
+import { DataStore } from "src/data/data-store/base/data-store";
+import { CardType, isSingleLine, Question } from "src/data/data-structures/card/questions/question";
 import { SettingsUtil, SRSettings } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
 import { t } from "src/lang/helpers";
@@ -255,21 +255,9 @@ export class CardEditorService {
 
             const result = await this.editQuestion(
                 question,
-                async (text) => {
-                    // Replaces just the question's text, so its schedule comment stays.
-                    // writeQuestion restores the question's text object if the write throws.
-                    const q = question.questionText;
-                    const previous = q.actualQuestion;
-                    q.actualQuestion = text;
-                    let written = false;
-                    try {
-                        written = await question.writeQuestion(this.settings);
-                    } finally {
-                        if (!written) q.actualQuestion = previous;
-                    }
-                    return written;
-                },
-                () => this.deleteFromNote(question),
+                // Replaces just the question's text, so its schedule comment stays
+                (text) => question.writeActualQuestion(text, this.settings),
+                () => DataStore.getInstance().delete(question),
             );
             if (result === null) return;
             this.refreshImages(result.changedImages);
@@ -281,20 +269,6 @@ export class CardEditorService {
         } finally {
             this.editingInNote = false;
         }
-    }
-
-    /** Removes the question's text, with its schedule and end marker, from its note */
-    private async deleteFromNote(question: Question): Promise<boolean> {
-        const file = question.note.file;
-        const newText = removeQuestionText(
-            await file.read(),
-            question.questionText.original,
-            question.questionType,
-            this.settings,
-        );
-        if (newText === null) return false;
-        await file.write(newText);
-        return true;
     }
 
     /**
@@ -313,9 +287,7 @@ export class CardEditorService {
         for (const file of files) {
             if (linksOutside.get(file) > 0) continue;
             if (await this.inkFiles.isReferenced(file, card.sourcePath)) continue;
-            await this.inkFiles
-                .trash(file)
-                .catch((e) => console.error("SR: removing the ink image failed", e));
+            await this.trashQuietly(file);
         }
     }
 
@@ -380,13 +352,12 @@ export class CardEditorService {
                 if (r.ink !== null) {
                     const svg = strokesToSvg(r.ink.strokes, { size: r.ink.penSize });
                     if (svg === null) throw new Error(t("CARD_EDITOR_SIDES_EMPTY"));
-                    const file = await this.inkFiles.create(
+                    embed = await this.createInk(
                         inkFileName(stem, side),
                         svg.svg,
                         sourcePath,
+                        created,
                     );
-                    created.push(file);
-                    embed = inkEmbed(this.inkFiles.linkPath(file, sourcePath));
                 }
                 return joinSide(CardType.MultiLineBasic, typed, embed);
             };
@@ -402,11 +373,7 @@ export class CardEditorService {
             await inserter.insert(newCardBody(front, back, this.settings));
         } catch (err) {
             // The card stays in the editor; don't leave images behind that no card shows
-            for (const file of created) {
-                await this.inkFiles
-                    .trash(file)
-                    .catch((e) => console.error("SR: removing the ink image failed", e));
-            }
+            await this.undoSave(created, []);
             throw err;
         }
     }
@@ -497,9 +464,7 @@ export class CardEditorService {
         /** For each file in toTrash: links to it from other cards and notes, per the link index */
         const linksOutside = new Map<TFile, number>();
         // Without an end marker, a blank line would end a multi-line or cloze card
-        const protect =
-            card.cardType !== CardType.SingleLineBasic &&
-            card.cardType !== CardType.SingleLineReversed;
+        const protect = !isSingleLine(card.cardType);
 
         // Both sides of a card share the stem of their file names
         let stem: string | null = null;
@@ -540,13 +505,12 @@ export class CardEditorService {
                     overwritten.push(loaded);
                     embed = loaded.embed;
                 } else {
-                    const file = await this.inkFiles.create(
+                    embed = await this.createInk(
                         inkFileName(newStem(side), side),
                         svg.svg,
                         sourcePath,
+                        created,
                     );
-                    created.push(file);
-                    embed = inkEmbed(this.inkFiles.linkPath(file, sourcePath));
                 }
             }
 
@@ -601,9 +565,7 @@ export class CardEditorService {
             if (linksOutside.get(file) > 0 || this.inkFiles.linksTo(file, text, sourcePath) > 0)
                 continue;
             if (await this.inkFiles.isReferenced(file, sourcePath)) continue;
-            await this.inkFiles
-                .trash(file)
-                .catch((e) => console.error("SR: removing the ink image failed", e));
+            await this.trashQuietly(file);
         }
         return {
             text,
@@ -658,13 +620,28 @@ export class CardEditorService {
         throw new Error(t("CARD_EDITOR_SIDE_HAS_CARD_SYNTAX", { side: name }));
     }
 
+    /** Writes a new ink file, adds it to created and returns its embed for the note */
+    private async createInk(
+        name: string,
+        svg: string,
+        sourcePath: string,
+        created: TFile[],
+    ): Promise<string> {
+        const file = await this.inkFiles.create(name, svg, sourcePath);
+        created.push(file);
+        return inkEmbed(this.inkFiles.linkPath(file, sourcePath));
+    }
+
+    /** Moves the ink file to the trash; a failure is only logged */
+    private async trashQuietly(file: TFile): Promise<void> {
+        await this.inkFiles
+            .trash(file)
+            .catch((e) => console.error("SR: removing the ink image failed", e));
+    }
+
     /** Leaves the ink files of a card as they were before a failed save */
     private async undoSave(created: TFile[], overwritten: LoadedSide[]): Promise<void> {
-        for (const file of created) {
-            await this.inkFiles
-                .trash(file)
-                .catch((e) => console.error("SR: removing the ink image failed", e));
-        }
+        for (const file of created) await this.trashQuietly(file);
         for (const side of overwritten) {
             await this.inkFiles
                 .overwrite(side.file, side.svg)

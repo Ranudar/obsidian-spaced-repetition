@@ -24,6 +24,14 @@ export enum CardType {
     Cloze,
 }
 
+export function isSingleLine(cardType: CardType): boolean {
+    return cardType === CardType.SingleLineBasic || cardType === CardType.SingleLineReversed;
+}
+
+export function isMultiLine(cardType: CardType): boolean {
+    return cardType === CardType.MultiLineBasic || cardType === CardType.MultiLineReversed;
+}
+
 // QuestionText comprises the following components:
 //      1. QuestionTopicPath (optional, and if present there may be whitespace before)
 //
@@ -330,6 +338,24 @@ export class Question {
         }
         this.hasChanged = false;
         return true;
+    }
+
+    /**
+     * Sets the actual question text (keeping topic path and schedule) and writes the question to
+     * its note. Resolves to false, writing nothing, when its text is no longer in the note; the
+     * text is then set back, as it is when the write throws.
+     */
+    async writeActualQuestion(text: string, settings: SRSettings): Promise<boolean> {
+        const q = this.questionText;
+        const previous = q.actualQuestion;
+        q.actualQuestion = text;
+        let written = false;
+        try {
+            written = await this.writeQuestion(settings);
+        } finally {
+            if (!written) q.actualQuestion = previous;
+        }
+        return written;
     }
 
     formatTopicPathList(): string {
