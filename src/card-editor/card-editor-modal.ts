@@ -123,6 +123,11 @@ export class CardEditorModal extends Modal {
         return this.sides.every((side) => !side.isEmpty);
     }
 
+    /** A side has a pen field */
+    private get hasInk(): boolean {
+        return this.sides.some((side) => side.inkEl !== null);
+    }
+
     private get allEmpty(): boolean {
         return this.sides.every((side) => side.isEmpty);
     }
@@ -142,9 +147,9 @@ export class CardEditorModal extends Modal {
         for (const type of LOCKED_EVENTS) sidesEl.addEventListener(type, this.onLockedInput, true);
         const initial = this.initialSides();
         const cloze = initial.back === null;
-        // With handwriting off, a side gets a writing field only for the handwriting it already has
-        const ink = (side: SideState) =>
-            this.settings.cardEditorHandwriting || side.strokes.length > 0;
+        // With pen mode off, a side gets a pen field only for the handwriting it already has, so
+        // saving the card keeps it
+        const ink = (side: SideState) => this.settings.cardEditorPenMode || side.strokes.length > 0;
         this.front = this.createSide(
             sidesEl,
             cloze ? t("CARD_EDITOR_CLOZE") : t("CARD_EDITOR_FRONT"),
@@ -159,8 +164,8 @@ export class CardEditorModal extends Modal {
                 ink(initial.back),
             );
         }
-        // No writing field anywhere: no pen tools
-        this.modalEl.toggleClass("sr-card-editor-no-ink", !this.sides.some((s) => s.inkEl));
+        // No pen field anywhere: no pen tools
+        this.modalEl.toggleClass("sr-card-editor-no-ink", !this.hasInk);
         this.setActiveSide(this.front);
         // New strokes follow the toolbar's size, also on a card being edited (whose file has its
         // own size) and on a restored draft (saved with the size picked then); every stroke
@@ -311,12 +316,10 @@ export class CardEditorModal extends Modal {
         });
         side.setEraser(this.eraser);
         side.el.addEventListener("pointerdown", (evt) => {
-            // With pen-only on, a finger can't draw in the ink field: such a touch is the hand
-            // resting on the screen, not a choice of side
+            // A finger can't draw in the pen field: such a touch is the hand resting on the
+            // screen, not a choice of side
             const inInk = side.inkEl?.contains(evt.target as Node) ?? false;
-            const ignored =
-                this.isPalm(evt) ||
-                (this.settings.cardEditorPenOnly && evt.pointerType === "touch" && inInk);
+            const ignored = this.isPalm(evt) || (evt.pointerType === "touch" && inInk);
             if (ignored) return;
             this.setActiveSide(side);
             // The ink field takes the focus off the text area: the soft keyboard closes before
@@ -353,10 +356,7 @@ export class CardEditorModal extends Modal {
         let blocked = false;
         const block = (evt: Event) => {
             if (evt.type === "pointerdown") {
-                blocked =
-                    this.settings.cardEditorPenOnly ||
-                    this.penDown ||
-                    Date.now() - this.lastPenAt < PALM_GUARD_MS;
+                blocked = this.hasInk;
             }
             if (!blocked) return;
             evt.preventDefault();
@@ -609,12 +609,11 @@ export class CardEditorModal extends Modal {
     }
 
     private updateButtons() {
-        const hasInk = this.sides.some((side) => side.inkEl !== null);
         const step = PEN_SIZE_STEPS[this.penSizeStep];
-        this.penSizeButton.disabled = this.busy || !hasInk;
+        this.penSizeButton.disabled = this.busy || !this.hasInk;
         for (const s of PEN_SIZE_STEPS) this.penSizeButton.toggleClass(s.cls, s === step);
         this.penSizeButton.setAttr("aria-label", `${t("CARD_EDITOR_PEN_SIZE")}: ${t(step.label)}`);
-        this.eraserButton.disabled = !hasInk;
+        this.eraserButton.disabled = !this.hasInk;
         this.eraserButton.toggleClass("is-active", this.eraser);
         this.eraserButton.setAttr("aria-pressed", this.eraser);
         this.undoButton.disabled = this.busy || this.undoStack.length === 0;
@@ -676,12 +675,11 @@ export class CardEditorModal extends Modal {
     };
 
     /**
-     * With pen-only on, a finger press while the pen is down or was just used is the palm resting
-     * on the screen, not a tap.
+     * A finger press while the pen is down or was just used is the palm resting on the screen,
+     * not a tap.
      */
     private isPalm(evt: PointerEvent): boolean {
         return (
-            this.settings.cardEditorPenOnly &&
             evt.pointerType === "touch" &&
             (this.penDown || Date.now() - this.lastPenAt < PALM_GUARD_MS)
         );

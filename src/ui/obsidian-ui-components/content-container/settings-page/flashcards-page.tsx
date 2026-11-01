@@ -526,38 +526,22 @@ export class FlashcardsPage extends SettingsPage {
                 }
             });
 
-        // The pen settings are shown only while handwriting is on
+        // The pen settings are shown only while pen mode is on
         const penSettings: HTMLElement[] = [];
         const showPenSettings = () =>
-            penSettings.forEach((el) =>
-                el.toggle(this.settingsManager.settings.cardEditorHandwriting),
-            );
+            penSettings.forEach((el) => el.toggle(this.settingsManager.settings.cardEditorPenMode));
         new SettingGroup(this.containerEl)
             .setHeading(t("GROUP_CARD_EDITOR"))
             .addSetting((setting: Setting) => {
                 setting
-                    .setName(t("CARD_EDITOR_HANDWRITING"))
-                    .setDesc(t("CARD_EDITOR_HANDWRITING_DESC"))
+                    .setName(t("CARD_EDITOR_PEN_MODE"))
+                    .setDesc(t("CARD_EDITOR_PEN_MODE_DESC"))
                     .addToggle((toggle) =>
                         toggle
-                            .setValue(this.settingsManager.settings.cardEditorHandwriting)
+                            .setValue(this.settingsManager.settings.cardEditorPenMode)
                             .onChange(async (value) => {
-                                this.settingsManager.settings.cardEditorHandwriting = value;
+                                this.settingsManager.settings.cardEditorPenMode = value;
                                 showPenSettings();
-                                await this.settingsManager.save();
-                            }),
-                    );
-            })
-            .addSetting((setting: Setting) => {
-                penSettings.push(setting.settingEl);
-                setting
-                    .setName(t("CARD_EDITOR_PEN_ONLY"))
-                    .setDesc(t("CARD_EDITOR_PEN_ONLY_DESC"))
-                    .addToggle((toggle) =>
-                        toggle
-                            .setValue(this.settingsManager.settings.cardEditorPenOnly)
-                            .onChange(async (value) => {
-                                this.settingsManager.settings.cardEditorPenOnly = value;
                                 await this.settingsManager.save();
                             }),
                     );

@@ -73,10 +73,11 @@ empty card leave no draft behind. Drafts are kept until Obsidian is closed or th
 
 ## Typing and Writing by Hand
 
-Each side has a text field at the top (about three lines; longer text scrolls inside it) and a
-writing field filling the rest of the side below it. Type in the text field with the keyboard or a
-finger, write in the writing field with the pen. Both are always there, so nothing moves while you
-type or write, and nothing needs to be switched.
+With **Pen mode** on (see [Settings](#settings)), each side has a text field at the top (about three
+lines; longer text scrolls inside it) and a writing field filling the rest of the side below it.
+Type in the text field with the keyboard or a finger, write in the writing field with the pen. Both
+are always there, so nothing moves while you type or write, and nothing needs to be switched. With
+pen mode off, each side is a text field only.
 
 - **Nothing moves**: both sides have the same fixed layout. The editor also keeps its height while
   the soft keyboard is open (it scrolls instead), so the sides don't jump.
@@ -104,10 +105,9 @@ Ink only goes where you can see the writing field. If the pen slides off an edge
 the text field, the stroke ends at the edge; coming back without lifting the pen starts a new
 stroke there. The eraser only erases inside the field, too.
 
-With **Pen only** on (the default), fingers are ignored on the writing fields, so your hand can rest
-on the screen. A finger touching one of the editor's buttons while the pen is writing, or just
-after, is ignored too, so a resting palm doesn't save or discard the card. Turn it off to write with
-a finger or a mouse.
+Fingers are ignored on the writing fields, so your hand can rest on the screen; on desktop the mouse
+writes too. A finger touching one of the editor's buttons while the pen is writing, or just after,
+is ignored too, so a resting palm doesn't save or discard the card.
 
 On phones the editor fills the screen; on desktop and tablets it opens as a large dialog. In dark
 mode, handwriting is shown in light ink. The images themselves keep dark ink on a transparent
@@ -171,16 +171,15 @@ part of the text, so nothing gets lost.
 ## Settings
 
 The settings are in the **Card editor** section of the flashcard settings. The pen settings are only
-shown while **Handwriting** is on.
+shown while **Pen mode** is on.
 
-| Setting       | Default  | Description                                                                                                                                        |
-| ------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Handwriting   | Off      | Give each side a field to write in by hand (pen, finger or mouse). Off: sides are typed only; handwriting a card already has can still be changed. |
-| Pen only      | On       | Ignore finger touches on the writing fields. Turn off to write with a finger or mouse.                                                             |
-| Image folder  | `sr-ink` | Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.                                                        |
-| Guide lines   | Lined    | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image.                                              |
-| Line spacing  | 44       | Distance between guide lines, in pixels (24–80).                                                                                                   |
-| Pen thickness | 2.5      | Stroke width for new handwriting (1–8). Existing images keep the thickness they were written with.                                                 |
+| Setting       | Default  | Description                                                                                                                                       |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pen mode      | Off      | Give each side a field to write in with a pen, such as the S Pen. Off: cards are typed only; handwriting a card already has can still be changed. |
+| Image folder  | `sr-ink` | Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.                                                       |
+| Guide lines   | Lined    | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image.                                             |
+| Line spacing  | 44       | Distance between guide lines, in pixels (24–80).                                                                                                  |
+| Pen thickness | 2.5      | Stroke width for new handwriting (1–8). Existing images keep the thickness they were written with.                                                |
 
 The card separator and the end marker are Spaced Repetition's own
 [flashcard separator settings](../user-options.md#flashcard-separators).

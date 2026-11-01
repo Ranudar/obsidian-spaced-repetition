@@ -75,7 +75,6 @@ export class SideEditor {
                 style: { size: this.penSize },
                 guide: s.cardEditorGuide,
                 guideSpacing: s.cardEditorGuideSpacing,
-                penOnly: s.cardEditorPenOnly,
                 eraserActive: () => this.eraser,
                 onChange: (_, prev) => this.onInkChange(prev),
             });

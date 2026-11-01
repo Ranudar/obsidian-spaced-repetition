@@ -268,7 +268,7 @@ describe("SettingsUtil", () => {
 
     test("card editor defaults", () => {
         expect(DEFAULT_SETTINGS).toMatchObject({
-            cardEditorPenOnly: true,
+            cardEditorPenMode: false,
             cardEditorImageFolder: "sr-ink",
             cardEditorGuide: "lined",
             cardEditorGuideSpacing: 44,

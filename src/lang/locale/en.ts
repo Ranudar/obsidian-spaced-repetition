@@ -423,12 +423,9 @@ const en: IBaseLocale = {
 
     // Card editor > settings
     GROUP_CARD_EDITOR: "Card editor",
-    CARD_EDITOR_HANDWRITING: "Handwriting",
-    CARD_EDITOR_HANDWRITING_DESC:
-        "Each side of a card gets a field to write in, for a pen such as the S Pen, a finger or a mouse. Turn off to type only; handwriting a card already has can still be changed.",
-    CARD_EDITOR_PEN_ONLY: "Pen only",
-    CARD_EDITOR_PEN_ONLY_DESC:
-        "Ignore finger touches on the writing fields, so your hand can rest on the screen. Turn off to write with a finger or mouse.",
+    CARD_EDITOR_PEN_MODE: "Pen mode",
+    CARD_EDITOR_PEN_MODE_DESC:
+        "Each side of a card gets a field to write in with a pen, such as the S Pen; fingers are ignored there, so your hand can rest on the screen. Off: cards are typed only.",
     CARD_EDITOR_IMAGE_FOLDER: "Image folder",
     CARD_EDITOR_IMAGE_FOLDER_DESC:
         "Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.",

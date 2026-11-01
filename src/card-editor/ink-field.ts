@@ -18,8 +18,6 @@ export interface InkFieldOptions {
     style: StrokeStyle;
     guide: CardEditorGuide;
     guideSpacing: number;
-    /** Ignore finger touches so the palm can rest on the screen */
-    penOnly: boolean;
     /** Returns true while the toolbar eraser is switched on */
     eraserActive: () => boolean;
     /** Called after every change with the strokes before the change (for undo) */
@@ -275,7 +273,8 @@ export class InkField {
     private onContextMenu = (e: Event) => e.preventDefault();
 
     private onDown = (e: PointerEvent) => {
-        if (this.opts.penOnly && e.pointerType === "touch") return;
+        // Pen or mouse; a finger on the screen is the hand resting on it
+        if (e.pointerType === "touch") return;
         if (this.activePointer !== null) return;
         e.preventDefault();
         this.activePointer = e.pointerId;

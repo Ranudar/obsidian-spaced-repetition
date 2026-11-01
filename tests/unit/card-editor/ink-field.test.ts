@@ -39,7 +39,6 @@ function setup(o: Partial<InkFieldOptions> = {}) {
         style: { size: 2 },
         guide: "none",
         guideSpacing: 0,
-        penOnly: false,
         eraserActive: () => eraser,
         onChange,
         ...o,
@@ -195,7 +194,6 @@ describe("InkField visible area", () => {
             style: { size: 2 },
             guide: "none",
             guideSpacing: 0,
-            penOnly: false,
             eraserActive: () => eraser,
             onChange,
         });
@@ -421,7 +419,7 @@ describe("InkField focus", () => {
     });
 
     test("pen-only: a finger draws nothing and leaves the text area focused", () => {
-        const { field, canvas, onChange } = setup({ penOnly: true });
+        const { field, canvas, onChange } = setup();
         const textArea = document.body.createEl("textarea");
         textArea.focus();
         const touch = { pointerType: "touch" };

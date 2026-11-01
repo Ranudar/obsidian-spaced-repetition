@@ -73,7 +73,7 @@ function callbacks(): Callbacks {
 }
 
 /** The tests write by hand unless they turn handwriting off */
-const SETTINGS: SRSettings = { ...DEFAULT_SETTINGS, cardEditorHandwriting: true };
+const SETTINGS: SRSettings = { ...DEFAULT_SETTINGS, cardEditorPenMode: true };
 
 function openAdd(
     draft: CardEditorSides | null = null,
@@ -232,9 +232,9 @@ describe("CardEditorModal add mode", () => {
     });
 });
 
-describe("CardEditorModal with handwriting off", () => {
+describe("CardEditorModal with pen mode off", () => {
     test("sides are text only, without pen tools", () => {
-        openAdd(null, { cardEditorHandwriting: false });
+        openAdd(null, { cardEditorPenMode: false });
         expect(inkFields()).toHaveLength(0);
         expect($(".sr-card-editor-modal").hasClass("sr-card-editor-no-ink")).toBe(true);
     });
@@ -243,7 +243,7 @@ describe("CardEditorModal with handwriting off", () => {
         openEdit(
             { front: side({ text: "Q" }), back: side({ strokes: [stroke(0)] }) },
             CardType.MultiLineBasic,
-            { cardEditorHandwriting: false },
+            { cardEditorPenMode: false },
         );
         expect(inkFields()).toHaveLength(1);
         expect($(".sr-card-editor-modal").hasClass("sr-card-editor-no-ink")).toBe(false);
@@ -481,7 +481,7 @@ describe("CardEditorModal pen only", () => {
 
     test("the palm touching a button while the pen writes doesn't press it", () => {
         jest.useFakeTimers({ now: 10_000 });
-        const { cb } = openAdd(null, { cardEditorPenOnly: true });
+        const { cb } = openAdd();
         type(0, "Q");
         type(1, "A");
         const ink = $$(".sr-card-editor-side")[1];
@@ -509,13 +509,10 @@ describe("CardEditorModal pen only", () => {
 
     test("the palm resting on the other side doesn't change the side Clear acts on", () => {
         jest.useFakeTimers({ now: 10_000 });
-        openAdd(
-            {
-                front: side({ strokes: [stroke(0)] }),
-                back: side({ strokes: [stroke(50)] }),
-            },
-            { cardEditorPenOnly: true },
-        );
+        openAdd({
+            front: side({ strokes: [stroke(0)] }),
+            back: side({ strokes: [stroke(50)] }),
+        });
         const backSide = sideEls()[1];
         const [frontInk, backInk] = inkFields();
         pointer("pointerdown", frontInk, "pen");
@@ -536,7 +533,7 @@ describe("CardEditorModal pen only", () => {
 
     test("a pen hovering over the screen doesn't block finger taps", () => {
         jest.useFakeTimers({ now: 10_000 });
-        const { cb } = openAdd(null, { cardEditorPenOnly: true });
+        const { cb } = openAdd();
         type(0, "Q");
         type(1, "A");
         pointer("pointermove", $$(".sr-card-editor-side")[1], "pen", 0);
@@ -554,13 +551,13 @@ describe("CardEditorModal pen only", () => {
         const closeOnBackground = (modal: CardEditorModal) =>
             background().addEventListener("click", () => modal.close());
 
-        const penOnly = openAdd(null, { cardEditorPenOnly: true });
+        const penOnly = openAdd();
         closeOnBackground(penOnly.modal);
         tapBackground();
         expect(penOnly.cb.closed).not.toHaveBeenCalled();
         penOnly.modal.close();
 
-        const normal = openAdd(null, { cardEditorPenOnly: false });
+        const normal = openAdd(null, { cardEditorPenMode: false });
         closeOnBackground(normal.modal);
         tapBackground();
         expect(normal.cb.closed).toHaveBeenCalled();

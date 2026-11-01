@@ -303,13 +303,13 @@ Nothing changes in the parser, scheduling or data store.
 
 ### Settings ("Card editor" section)
 
-| Key                      | Setting                                    | Default    |
-| ------------------------ | ------------------------------------------ | ---------- |
-| `cardEditorPenOnly`      | Ignore fingers on the ink fields           | `true`     |
-| `cardEditorImageFolder`  | Image folder                               | `"sr-ink"` |
-| `cardEditorGuide`        | Guide lines (lined / dotted / grid / none) | `"lined"`  |
-| `cardEditorGuideSpacing` | Line spacing (px, 24–80)                   | `44`       |
-| `cardEditorPenSize`      | Pen thickness (1–8, step 0.5)              | `2.5`      |
+| Key                      | Setting                                      | Default    |
+| ------------------------ | -------------------------------------------- | ---------- |
+| `cardEditorPenMode`      | Pen fields on the sides (off: keyboard only) | `false`    |
+| `cardEditorImageFolder`  | Image folder                                 | `"sr-ink"` |
+| `cardEditorGuide`        | Guide lines (lined / dotted / grid / none)   | `"lined"`  |
+| `cardEditorGuideSpacing` | Line spacing (px, 24–80)                     | `44`       |
+| `cardEditorPenSize`      | Pen thickness (1–8, step 0.5)                | `2.5`      |
 
 Separator and end marker are SR's own settings.
 
@@ -487,7 +487,9 @@ Switching a side between Text and Pen was awkward once it had content. Input mod
   disabled) so the saved content is what Save & next clears or Save & close closes over.
 - **Unload**: the service closes open editors on plugin unload; later saves are refused with a
   notice and nothing more is written. Unreadable or malformed ink metadata opens the side as text.
-- **Pen only** also guards the editor's buttons: a finger press while the pen is down or within
+- **Pen mode**: fingers never draw in a pen field (palm rejection). With pen mode off a side shows
+  a pen field only for handwriting it already has, so saving keeps it. The palm guard also covers
+  the editor's buttons: a finger press while the pen is down or within
   500 ms of pen use is taken for the palm and ignored.
 - **Mobile focus**: on mobile no text area is focused on open (no soft keyboard for pen users).
 - **Pencil**: a press that moves more than 10 px is not a tap. Canvas text nodes get a pencil, but

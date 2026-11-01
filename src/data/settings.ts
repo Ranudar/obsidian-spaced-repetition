@@ -75,8 +75,7 @@ export interface SRSettings {
     useCalloutsForSchedulingComments: boolean;
 
     // card editor
-    cardEditorHandwriting: boolean;
-    cardEditorPenOnly: boolean;
+    cardEditorPenMode: boolean;
     // Folder for handwritten card images; empty = Obsidian's attachment location
     cardEditorImageFolder: string;
     cardEditorGuide: CardEditorGuide;
@@ -174,8 +173,7 @@ export const DEFAULT_SETTINGS: SRSettings = {
     useCalloutsForSchedulingComments: false,
 
     // card editor
-    cardEditorHandwriting: false,
-    cardEditorPenOnly: true,
+    cardEditorPenMode: false,
     cardEditorImageFolder: "sr-ink",
     cardEditorGuide: "lined",
     cardEditorGuideSpacing: 44,
