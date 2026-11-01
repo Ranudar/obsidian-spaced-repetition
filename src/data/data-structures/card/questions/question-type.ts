@@ -95,7 +95,10 @@ class QuestionTypeMultiLineReversed implements IQuestionTypeHandler {
 class QuestionTypeCloze implements IQuestionTypeHandler {
     expand(questionText: string, settings: SRSettings): CardFrontBack[] {
         const clozecrafter = new ClozeCrafter(settings.clozePatterns);
-        const clozeNote = clozecrafter.createClozeNote(questionText);
+        // Deletions in an HTML comment (which the card keeps, see parse()) are not cards
+        const clozeNote = clozecrafter.createClozeNote(
+            questionText.replace(/<!--(?!SR:)[\s\S]*?-->/g, ""),
+        );
 
         // Determine which question formatter to use based on settings (Cloze patterns as inputs or not).
         const clozeFormatter = settings.convertClozePatternsToInputs

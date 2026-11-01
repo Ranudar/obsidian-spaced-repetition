@@ -102,3 +102,12 @@ test("CardType.Cloze", () => {
         ),
     ]);
 });
+
+test("CardType.Cloze: deletions in an HTML comment are not cards", () => {
+    const cards = CardFrontBackUtil.expand(
+        CardType.Cloze,
+        "Visible ==answer==\n<!-- ==hidden== -->",
+        { ...DEFAULT_SETTINGS, clozePatterns: ["==[123;;]answer[;;hint]=="] },
+    );
+    expect(cards).toHaveLength(1);
+});
