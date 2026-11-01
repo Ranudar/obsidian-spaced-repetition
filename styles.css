@@ -367,6 +367,7 @@ img[src*="sr-ink-"] {
   position: absolute;
   top: calc(var(--size-4-2) + 1px);
   left: calc(var(--size-4-3) + 1px);
+  right: 44px;
   font-size: var(--font-text-size);
   line-height: var(--line-height-normal);
   color: var(--text-faint);
@@ -405,7 +406,7 @@ img[src*="sr-ink-"] {
   display: none;
 }
 .sr-card-editor-text-wrap[dir="rtl"] > .sr-card-editor-text-hint {
-  left: auto;
+  left: 44px;
   right: calc(var(--size-4-3) + 1px);
 }
 .sr-card-editor-side.is-front

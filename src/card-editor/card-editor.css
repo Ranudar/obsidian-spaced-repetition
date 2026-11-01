@@ -488,6 +488,8 @@ img[src*="sr-ink-"] {
     position: absolute;
     top: calc(var(--size-4-2) + 1px);
     left: calc(var(--size-4-3) + 1px);
+    /* Clear of the preview toggle in the corner, like the text */
+    right: 44px;
     font-size: var(--font-text-size);
     line-height: var(--line-height-normal);
     color: var(--text-faint);
@@ -536,7 +538,7 @@ img[src*="sr-ink-"] {
 
 /* Right to left, the hint starts at the right, like the text */
 .sr-card-editor-text-wrap[dir="rtl"] > .sr-card-editor-text-hint {
-    left: auto;
+    left: 44px;
     right: calc(var(--size-4-3) + 1px);
 }
 
