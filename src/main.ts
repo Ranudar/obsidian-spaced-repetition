@@ -2,6 +2,7 @@ import { editorInfoField, Plugin } from "obsidian";
 
 import { CardEditorService } from "src/card-editor/card-editor-service";
 import { inkAtomicRanges } from "src/card-editor/ink-atomic-ranges";
+import { inkInputLog } from "src/card-editor/ink-input-log";
 import { PencilButtons } from "src/card-editor/pencil-buttons";
 import { CommandManager } from "src/command-manager";
 import { DataManager } from "src/data/data-manager";
@@ -56,6 +57,15 @@ export default class SRPlugin extends Plugin {
                         cardEditorService.inkRemovedInNote(links, path, () =>
                             view.state.doc.toString(),
                         );
+                }),
+            );
+            // TEMPORARY: what the keyboard sends when handwriting is deleted, see ink-input-log.ts
+            const logPath = `${this.manifest.dir}/ink-input.log`;
+            this.registerEditorExtension(
+                inkInputLog((lines) => {
+                    void this.app.vault.adapter.append(logPath, lines).catch(() => {
+                        void this.app.vault.adapter.write(logPath, lines);
+                    });
                 }),
             );
             const uiManager = new UIManager(this, settingsManager);
