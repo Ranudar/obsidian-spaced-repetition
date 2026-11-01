@@ -42,11 +42,7 @@ export class TopicPath {
     static getTopicPathOfFile(noteFile: ISRNoteTFile, settings: SRSettings): TopicPath {
         let result: TopicPath = TopicPath.emptyPath;
         if (settings.convertFoldersToDecks) {
-            const deckPath = noteFile.path.split("/");
-            deckPath.pop(); // remove filename
-            if (deckPath.length !== 0) {
-                result = new TopicPath(deckPath);
-            }
+            result = TopicPath.getFolderPathFromFilename(noteFile, settings);
         } else {
             const tagList: TopicPath[] = this.getTopicPathsFromTagList(
                 noteFile.getAllTagsFromCache(),
@@ -187,11 +183,7 @@ export class TopicPathList {
     }
 
     static convertTagListToTopicPathList(tagList: string[]): TopicPathList {
-        const result: TopicPath[] = [];
-        for (const tag of tagList) {
-            if (TopicPath.isValidTag(tag)) result.push(TopicPath.getTopicPathFromTag(tag));
-        }
-        return new TopicPathList(result);
+        return new TopicPathList(TopicPath.getTopicPathsFromTagList(tagList));
     }
 }
 
