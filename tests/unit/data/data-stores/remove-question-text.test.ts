@@ -15,19 +15,34 @@ describe("removeQuestionText", () => {
             `#flashcards\n\n${first}\n\n---\n`,
         );
         expect(
-            removeQuestionText("Q\n?\nA\n\n---\n\nnext", "Q\n?\nA", CardType.MultiLineBasic, withMarker),
+            removeQuestionText(
+                "Q\n?\nA\n\n---\n\nnext",
+                "Q\n?\nA",
+                CardType.MultiLineBasic,
+                withMarker,
+            ),
         ).toBe("next");
     });
 
     test("without an end marker set, a --- after the card is a horizontal rule and stays", () => {
         expect(
-            removeQuestionText("a\n\nQ\n?\nA\n\n---\n\nb", "Q\n?\nA", CardType.MultiLineBasic, DEFAULT_SETTINGS),
+            removeQuestionText(
+                "a\n\nQ\n?\nA\n\n---\n\nb",
+                "Q\n?\nA",
+                CardType.MultiLineBasic,
+                DEFAULT_SETTINGS,
+            ),
         ).toBe("a\n\n---\n\nb");
     });
 
     test("a single-line card leaves the end marker of the card before it", () => {
         expect(
-            removeQuestionText("Q\n?\nA\n\n---\nX::Y\nb", "X::Y", CardType.SingleLineBasic, withMarker),
+            removeQuestionText(
+                "Q\n?\nA\n\n---\nX::Y\nb",
+                "X::Y",
+                CardType.SingleLineBasic,
+                withMarker,
+            ),
         ).toBe("Q\n?\nA\n\n---\nb");
     });
 

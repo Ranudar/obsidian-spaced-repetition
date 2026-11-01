@@ -170,15 +170,17 @@ part of the text, so nothing gets lost.
 
 ## Settings
 
-The settings are in the **Card editor** section of the flashcard settings.
+The settings are in the **Card editor** section of the flashcard settings. The pen settings are only
+shown while **Handwriting** is on.
 
-| Setting       | Default  | Description                                                                                           |
-| ------------- | -------- | ----------------------------------------------------------------------------------------------------- |
-| Pen only      | On       | Ignore finger touches on the writing fields. Turn off to write with a finger or mouse.                |
-| Image folder  | `sr-ink` | Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.           |
-| Guide lines   | Lined    | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image. |
-| Line spacing  | 44       | Distance between guide lines, in pixels (24–80).                                                      |
-| Pen thickness | 2.5      | Stroke width for new handwriting (1–8). Existing images keep the thickness they were written with.    |
+| Setting       | Default  | Description                                                                                                                                        |
+| ------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Handwriting   | Off      | Give each side a field to write in by hand (pen, finger or mouse). Off: sides are typed only; handwriting a card already has can still be changed. |
+| Pen only      | On       | Ignore finger touches on the writing fields. Turn off to write with a finger or mouse.                                                             |
+| Image folder  | `sr-ink` | Where handwritten card images are saved. Leave empty to use Obsidian's attachment location.                                                        |
+| Guide lines   | Lined    | Background of the writing fields: lined, dotted, grid or none. The guides are not saved in the image.                                              |
+| Line spacing  | 44       | Distance between guide lines, in pixels (24–80).                                                                                                   |
+| Pen thickness | 2.5      | Stroke width for new handwriting (1–8). Existing images keep the thickness they were written with.                                                 |
 
 The card separator and the end marker are Spaced Repetition's own
 [flashcard separator settings](../user-options.md#flashcard-separators).

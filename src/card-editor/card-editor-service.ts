@@ -253,20 +253,24 @@ export class CardEditorService {
                 return;
             }
 
-            const result = await this.editQuestion(question, async (text) => {
-                // Replaces just the question's text, so its schedule comment stays.
-                // writeQuestion restores the question's text object if the write throws.
-                const q = question.questionText;
-                const previous = q.actualQuestion;
-                q.actualQuestion = text;
-                let written = false;
-                try {
-                    written = await question.writeQuestion(this.settings);
-                } finally {
-                    if (!written) q.actualQuestion = previous;
-                }
-                return written;
-            }, () => this.deleteFromNote(question));
+            const result = await this.editQuestion(
+                question,
+                async (text) => {
+                    // Replaces just the question's text, so its schedule comment stays.
+                    // writeQuestion restores the question's text object if the write throws.
+                    const q = question.questionText;
+                    const previous = q.actualQuestion;
+                    q.actualQuestion = text;
+                    let written = false;
+                    try {
+                        written = await question.writeQuestion(this.settings);
+                    } finally {
+                        if (!written) q.actualQuestion = previous;
+                    }
+                    return written;
+                },
+                () => this.deleteFromNote(question),
+            );
             if (result === null) return;
             this.refreshImages(result.changedImages);
             if (result.textChanged && this.plugin.isInitialized && !this.destroyed)

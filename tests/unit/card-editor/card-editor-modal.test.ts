@@ -72,13 +72,16 @@ function callbacks(): Callbacks {
     };
 }
 
+/** The tests write by hand unless they turn handwriting off */
+const SETTINGS: SRSettings = { ...DEFAULT_SETTINGS, cardEditorHandwriting: true };
+
 function openAdd(
     draft: CardEditorSides | null = null,
     settings: Partial<SRSettings> = {},
 ): { modal: CardEditorModal; cb: Callbacks } {
     const cb = callbacks();
     const opts: CardEditorOptions = { kind: "add", title: "Biology", draft, ...cb };
-    const modal = new CardEditorModal(testApp(), { ...DEFAULT_SETTINGS, ...settings }, opts);
+    const modal = new CardEditorModal(testApp(), { ...SETTINGS, ...settings }, opts);
     modal.open();
     return { modal, cb };
 }
@@ -86,6 +89,7 @@ function openAdd(
 function openEdit(
     initial: CardEditorSides,
     cardType = CardType.MultiLineBasic,
+    settings: Partial<SRSettings> = {},
 ): { modal: CardEditorModal; cb: Callbacks } {
     const cb = callbacks();
     const opts: CardEditorOptions = {
@@ -97,7 +101,7 @@ function openEdit(
         closed: cb.closed,
         delete: cb.delete,
     };
-    const modal = new CardEditorModal(testApp(), DEFAULT_SETTINGS, opts);
+    const modal = new CardEditorModal(testApp(), { ...SETTINGS, ...settings }, opts);
     modal.open();
     return { modal, cb };
 }
@@ -225,6 +229,24 @@ describe("CardEditorModal add mode", () => {
         await flush();
         expect(cb.save).toHaveBeenCalledTimes(1);
         expect(cb.closed).not.toHaveBeenCalled();
+    });
+});
+
+describe("CardEditorModal with handwriting off", () => {
+    test("sides are text only, without pen tools", () => {
+        openAdd(null, { cardEditorHandwriting: false });
+        expect(inkFields()).toHaveLength(0);
+        expect($(".sr-card-editor-modal").hasClass("sr-card-editor-no-ink")).toBe(true);
+    });
+
+    test("a side that has handwriting keeps its writing field", () => {
+        openEdit(
+            { front: side({ text: "Q" }), back: side({ strokes: [stroke(0)] }) },
+            CardType.MultiLineBasic,
+            { cardEditorHandwriting: false },
+        );
+        expect(inkFields()).toHaveLength(1);
+        expect($(".sr-card-editor-modal").hasClass("sr-card-editor-no-ink")).toBe(false);
     });
 });
 

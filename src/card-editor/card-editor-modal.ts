@@ -142,15 +142,25 @@ export class CardEditorModal extends Modal {
         for (const type of LOCKED_EVENTS) sidesEl.addEventListener(type, this.onLockedInput, true);
         const initial = this.initialSides();
         const cloze = initial.back === null;
+        // With handwriting off, a side gets a writing field only for the handwriting it already has
+        const ink = (side: SideState) =>
+            this.settings.cardEditorHandwriting || side.strokes.length > 0;
         this.front = this.createSide(
             sidesEl,
             cloze ? t("CARD_EDITOR_CLOZE") : t("CARD_EDITOR_FRONT"),
             initial.front,
-            !cloze,
+            !cloze && ink(initial.front),
         );
         if (initial.back) {
-            this.back = this.createSide(sidesEl, t("CARD_EDITOR_BACK"), initial.back, true);
+            this.back = this.createSide(
+                sidesEl,
+                t("CARD_EDITOR_BACK"),
+                initial.back,
+                ink(initial.back),
+            );
         }
+        // No writing field anywhere: no pen tools
+        this.modalEl.toggleClass("sr-card-editor-no-ink", !this.sides.some((s) => s.inkEl));
         this.setActiveSide(this.front);
         // New strokes follow the toolbar's size, also on a card being edited (whose file has its
         // own size) and on a restored draft (saved with the size picked then); every stroke
@@ -227,6 +237,7 @@ export class CardEditorModal extends Modal {
         this.eraserButton = this.iconButton(header, "eraser", t("CARD_EDITOR_ERASER"), () =>
             this.setEraser(!this.eraser),
         );
+        this.eraserButton.addClass("sr-card-editor-eraser");
         this.undoButton = this.iconButton(header, "undo-2", t("CARD_EDITOR_UNDO"), () =>
             this.undo(),
         );
@@ -598,8 +609,7 @@ export class CardEditorModal extends Modal {
     }
 
     private updateButtons() {
-        // Cloze cards have no ink field
-        const hasInk = this.back !== null;
+        const hasInk = this.sides.some((side) => side.inkEl !== null);
         const step = PEN_SIZE_STEPS[this.penSizeStep];
         this.penSizeButton.disabled = this.busy || !hasInk;
         for (const s of PEN_SIZE_STEPS) this.penSizeButton.toggleClass(s.cls, s === step);

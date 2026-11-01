@@ -356,6 +356,8 @@ export interface IBaseLocale {
 
     // Card editor > settings
     GROUP_CARD_EDITOR: string;
+    CARD_EDITOR_HANDWRITING: string;
+    CARD_EDITOR_HANDWRITING_DESC: string;
     CARD_EDITOR_PEN_ONLY: string;
     CARD_EDITOR_PEN_ONLY_DESC: string;
     CARD_EDITOR_IMAGE_FOLDER: string;

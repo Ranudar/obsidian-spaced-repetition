@@ -1,7 +1,11 @@
 import { EditorState, RangeSet, RangeValue } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 
-import { inkAtomicRanges, inkEmbedRanges, removedInkLinks } from "src/card-editor/ink-atomic-ranges";
+import {
+    inkAtomicRanges,
+    inkEmbedRanges,
+    removedInkLinks,
+} from "src/card-editor/ink-atomic-ranges";
 
 function slices(text: string): string[] {
     return inkEmbedRanges(text).map((r) => text.slice(r.from, r.to));

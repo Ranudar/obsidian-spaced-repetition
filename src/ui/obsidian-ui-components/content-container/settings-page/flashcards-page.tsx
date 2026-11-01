@@ -526,9 +526,30 @@ export class FlashcardsPage extends SettingsPage {
                 }
             });
 
+        // The pen settings are shown only while handwriting is on
+        const penSettings: HTMLElement[] = [];
+        const showPenSettings = () =>
+            penSettings.forEach((el) =>
+                el.toggle(this.settingsManager.settings.cardEditorHandwriting),
+            );
         new SettingGroup(this.containerEl)
             .setHeading(t("GROUP_CARD_EDITOR"))
             .addSetting((setting: Setting) => {
+                setting
+                    .setName(t("CARD_EDITOR_HANDWRITING"))
+                    .setDesc(t("CARD_EDITOR_HANDWRITING_DESC"))
+                    .addToggle((toggle) =>
+                        toggle
+                            .setValue(this.settingsManager.settings.cardEditorHandwriting)
+                            .onChange(async (value) => {
+                                this.settingsManager.settings.cardEditorHandwriting = value;
+                                showPenSettings();
+                                await this.settingsManager.save();
+                            }),
+                    );
+            })
+            .addSetting((setting: Setting) => {
+                penSettings.push(setting.settingEl);
                 setting
                     .setName(t("CARD_EDITOR_PEN_ONLY"))
                     .setDesc(t("CARD_EDITOR_PEN_ONLY_DESC"))
@@ -542,6 +563,7 @@ export class FlashcardsPage extends SettingsPage {
                     );
             })
             .addSetting((setting: Setting) => {
+                penSettings.push(setting.settingEl);
                 setting
                     .setName(t("CARD_EDITOR_IMAGE_FOLDER"))
                     .setDesc(t("CARD_EDITOR_IMAGE_FOLDER_DESC"))
@@ -561,6 +583,7 @@ export class FlashcardsPage extends SettingsPage {
                     );
             })
             .addSetting((setting: Setting) => {
+                penSettings.push(setting.settingEl);
                 setting.setName(t("CARD_EDITOR_GUIDE")).addDropdown((dropdown) =>
                     dropdown
                         .addOptions({
@@ -578,6 +601,7 @@ export class FlashcardsPage extends SettingsPage {
                 );
             })
             .addSetting((setting: Setting) => {
+                penSettings.push(setting.settingEl);
                 setting
                     .setName(t("CARD_EDITOR_GUIDE_SPACING"))
                     .setDesc(t("CARD_EDITOR_GUIDE_SPACING_DESC"))
@@ -593,6 +617,7 @@ export class FlashcardsPage extends SettingsPage {
                     );
             })
             .addSetting((setting: Setting) => {
+                penSettings.push(setting.settingEl);
                 setting.setName(t("CARD_EDITOR_PEN_SIZE")).addSlider((slider) =>
                     slider
                         .setLimits(1, 8, 0.5)
@@ -604,5 +629,6 @@ export class FlashcardsPage extends SettingsPage {
                         }),
                 );
             });
+        showPenSettings();
     }
 }

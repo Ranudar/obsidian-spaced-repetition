@@ -139,7 +139,10 @@ export function removeQuestionText(
     lines.splice(i, 1);
 
     const marker = settings.multilineCardEndMarker;
-    if (marker && (cardType === CardType.MultiLineBasic || cardType === CardType.MultiLineReversed)) {
+    if (
+        marker &&
+        (cardType === CardType.MultiLineBasic || cardType === CardType.MultiLineReversed)
+    ) {
         let j = i;
         while (j < lines.length && lines[j].trim() === "") j++;
         if (j < lines.length && lines[j].trim() === marker) lines.splice(i, j - i + 1);

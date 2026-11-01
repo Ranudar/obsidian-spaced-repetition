@@ -101,7 +101,6 @@ describe("InkField pen size", () => {
         ]);
         expect(field.strokes.map((s) => s.size)).toEqual([2, 4]);
     });
-
 });
 
 describe("InkField pixel eraser", () => {
@@ -146,7 +145,6 @@ describe("InkField pixel eraser", () => {
         expect(field.strokes).toHaveLength(2);
         expect(onChange).toHaveBeenCalledTimes(1);
     });
-
 });
 
 describe("InkField cancelled stroke", () => {
@@ -238,7 +236,6 @@ describe("InkField visible area", () => {
         expect(onChange).toHaveBeenCalledTimes(1);
         expect(onChange).toHaveBeenCalledWith(field, []);
     });
-
 
     test("the part of the canvas an ancestor cuts off takes no ink", () => {
         // The canvas reaches 40 px below its clipping box, as when it overflows the side box

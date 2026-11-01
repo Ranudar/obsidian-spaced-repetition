@@ -370,6 +370,12 @@ img[src*="sr-ink-"] {
     box-shadow: none;
 }
 
+/* No writing field (handwriting off, cloze): no pen tools */
+.sr-card-editor-no-ink .sr-card-editor-pen-size,
+.sr-card-editor-no-ink .sr-card-editor-eraser {
+    display: none;
+}
+
 /* Cloze cards: the text area alone fills the box */
 .sr-card-editor-side.is-text-only .sr-card-editor-side-body > .sr-card-editor-text {
     flex: 1;
