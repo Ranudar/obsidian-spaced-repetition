@@ -229,9 +229,6 @@ img[src*="sr-ink-"] {
   display: flex;
   gap: 2px;
   margin-inline-end: 28px;
-  padding: 2px;
-  border-radius: var(--radius-m);
-  background-color: var(--background-modifier-hover);
 }
 .sr-card-editor-header .sr-card-editor-nav > .sr-card-editor-icon-button {
   width: 44px;

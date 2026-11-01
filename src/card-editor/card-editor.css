@@ -283,15 +283,12 @@ img[src*="sr-ink-"] {
 }
 
 /* Clear space between Next card, the most tapped while stepping, and Delete card */
-/* Previous / next card: one group of two large buttons, clear of Delete */
+/* Previous / next card: two large buttons together, clear of Delete */
 .sr-card-editor-nav {
     flex: none;
     display: flex;
     gap: 2px;
     margin-inline-end: 28px;
-    padding: 2px;
-    border-radius: var(--radius-m);
-    background-color: var(--background-modifier-hover);
 }
 
 .sr-card-editor-header .sr-card-editor-nav > .sr-card-editor-icon-button {
