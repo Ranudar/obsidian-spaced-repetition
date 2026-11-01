@@ -11,16 +11,16 @@ import { UnitTestSRFile } from "./unit-test-file";
 import { UnitTestLinkInfoFinder } from "./unit-test-link-info-finder";
 
 export class UnitTestOsrCore extends OsrCore {
-    private buryList: string[];
     // Key: Path
     // Value: File content
     private fileMap: Map<string, UnitTestSRFile>;
     private infoFinder: UnitTestLinkInfoFinder;
 
     constructor(settings: SRSettings) {
+        const infoFinder: UnitTestLinkInfoFinder = new UnitTestLinkInfoFinder();
         super(
             new QuestionPostponementList(null, settings, [] as string[]),
-            null,
+            infoFinder,
             settings,
             async () => {
                 await new Promise<void>((resolve) => {
@@ -30,25 +30,7 @@ export class UnitTestOsrCore extends OsrCore {
             new NoteReviewQueue(),
             TextDirection.Ltr,
         );
-        this.buryList = [] as string[];
-        this.infoFinder = new UnitTestLinkInfoFinder();
-        const questionPostponementList = new QuestionPostponementList(
-            null,
-            settings,
-            this.buryList,
-        );
-        this.initUnitTestCore(
-            questionPostponementList,
-            this.infoFinder,
-            settings,
-            async () => {
-                await new Promise<void>((resolve) => {
-                    resolve();
-                });
-            },
-            new NoteReviewQueue(),
-            TextDirection.Ltr,
-        );
+        this.infoFinder = infoFinder;
     }
 
     // Needed for unit testing: Setup fileMap and the link "info finder"

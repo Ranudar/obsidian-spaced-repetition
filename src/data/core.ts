@@ -67,44 +67,6 @@ export class OsrCore {
     }
 
     /**
-     * Initializes the OSR core for unit testing.
-     *
-     * @param {QuestionPostponementList} questionPostponementList - The question postponement list.
-     * @param {IOsrVaultNoteLinkInfoFinder} osrNoteLinkInfoFinder - The OSR vault note link info finder.
-     * @param {SRSettings} settings - The settings object.
-     * @param {() => void} dataChangedHandler - A callback function that is called when the data has changed.
-     * @param {NoteReviewQueue} noteReviewQueue - The note review queue.
-     * @param {TextDirection} defaultTextDirection - The default text direction.
-     * @returns {void}
-     */
-    initUnitTestCore(
-        questionPostponementList: QuestionPostponementList,
-        osrNoteLinkInfoFinder: IOsrVaultNoteLinkInfoFinder,
-        settings: SRSettings,
-        dataChangedHandler: () => Promise<void>,
-        noteReviewQueue: NoteReviewQueue,
-        defaultTextDirection: TextDirection,
-    ) {
-        this.settings = settings;
-        this.osrNoteLinkInfoFinder = osrNoteLinkInfoFinder;
-        this.dataChangedHandler = dataChangedHandler;
-        this._noteReviewQueue = noteReviewQueue;
-        this._questionPostponementList = questionPostponementList;
-        this._dueDateFlashcardHistogram = new CardDueDateHistogram();
-        this._dueDateNoteHistogram = new NoteDueDateHistogram();
-        this.defaultTextDirection = defaultTextDirection;
-
-        const dayBoundary: IDayBoundary | null = DateUtil.strToDayBoundary(
-            this.settings.startOfDay,
-        );
-        if (dayBoundary === null) {
-            console.warn("Invalid format for start of day", this.settings.startOfDay);
-        } else {
-            globalDateProvider.setDayBoundary(dayBoundary);
-        }
-    }
-
-    /**
      * Gets the note review queue.
      *
      * @returns {NoteReviewQueue} - The note review queue.
