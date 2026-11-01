@@ -1,0 +1,1052 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
+        />
+        <title>Card editor: pen or keyboard, one at a time</title>
+        <style>
+            :root {
+                --bg: #1e1e1e;
+                --bg2: #262626;
+                --bg3: #2f2f2f;
+                --border: #3a3a3a;
+                --text: #dcddde;
+                --muted: #9a9a9a;
+                --faint: #6a6a6a;
+                --accent: #7f6df2;
+                --err: #e5534b;
+                --ink-bg: #161616;
+                --edge: 5px;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            html,
+            body {
+                margin: 0;
+                height: 100%;
+                background: #111;
+                color: var(--text);
+                font:
+                    15px/1.5 -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Roboto,
+                    sans-serif;
+            }
+            .page {
+                display: flex;
+                gap: 24px;
+                padding: 20px;
+                justify-content: center;
+                align-items: flex-start;
+                min-height: 100%;
+            }
+
+            /* MARK: controls */
+            .controls {
+                width: 340px;
+                background: var(--bg2);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 16px;
+                font-size: 13.5px;
+            }
+            .controls h1 {
+                font-size: 17px;
+                margin: 0 0 4px;
+            }
+            .controls p {
+                color: var(--muted);
+                margin: 0 0 10px;
+                font-size: 13px;
+            }
+            .controls ul {
+                color: var(--muted);
+                font-size: 13px;
+                padding-left: 18px;
+                margin: 0 0 12px;
+            }
+            .controls li {
+                margin: 3px 0;
+            }
+            .controls .chk {
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                margin: 6px 0;
+                cursor: pointer;
+            }
+            .controls button.small {
+                background: var(--bg3);
+                color: var(--text);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 5px 10px;
+                font: inherit;
+                font-size: 13px;
+                cursor: pointer;
+                margin-top: 6px;
+            }
+
+            /* MARK: phone */
+            .phone {
+                width: 400px;
+                height: 840px;
+                border-radius: 34px;
+                border: 10px solid #000;
+                background: var(--bg);
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                box-shadow: 0 10px 40px #0008;
+                position: relative;
+            }
+            .statusbar {
+                height: 24px;
+                flex: none;
+                font-size: 12px;
+                color: var(--muted);
+                padding: 3px 18px;
+                display: flex;
+                justify-content: space-between;
+            }
+            .header {
+                flex: none;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                min-height: 56px;
+                padding: 6px 6px 6px 12px;
+            }
+            .titlewrap {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .title {
+                font-weight: 600;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .meta {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 12.5px;
+                color: var(--muted);
+                min-width: 0;
+            }
+            .chip {
+                flex: none;
+                height: 22px;
+                line-height: 22px;
+                padding: 0 8px;
+                border-radius: 6px;
+                background: var(--bg3);
+                color: var(--text);
+                border: 0;
+                font: inherit;
+                font-size: 12.5px;
+            }
+            .deck {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .ib {
+                width: 40px;
+                height: 40px;
+                border: 0;
+                background: none;
+                color: var(--muted);
+                border-radius: 8px;
+                display: grid;
+                place-items: center;
+                cursor: pointer;
+                padding: 0;
+                flex: none;
+            }
+            .ib:hover:not(:disabled) {
+                background: var(--bg3);
+            }
+            .ib.on {
+                color: #fff;
+                background: var(--err);
+            }
+            .ib:disabled {
+                opacity: 0.3;
+                cursor: default;
+            }
+            .ib svg {
+                width: 20px;
+                height: 20px;
+                stroke: currentColor;
+                fill: none;
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+            .gap {
+                width: 18px;
+                flex: none;
+            }
+            /* Previous / next card (editing): two large buttons, no background, clear of Delete */
+            .nav {
+                display: none;
+                gap: 2px;
+                margin-right: 28px;
+                flex: none;
+            }
+            .editing .nav {
+                display: flex;
+            }
+            .nav .ib {
+                width: 44px;
+                height: 40px;
+            }
+            .nav .ib svg {
+                width: 24px;
+                height: 24px;
+            }
+
+            .main {
+                flex: 1;
+                min-height: 0;
+                display: grid;
+                gap: 8px;
+                padding: 0 8px 8px;
+                grid-template-columns: 1fr 12%;
+                grid-template-rows: 44px 1fr;
+                grid-template-areas: "tools ." "body right";
+            }
+            .tools {
+                grid-area: tools;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                min-width: 0;
+                position: relative;
+            }
+            .tools .ib {
+                width: 38px;
+                height: 38px;
+            }
+            .label {
+                font-size: 13px;
+                font-weight: 800;
+                letter-spacing: 0.06em;
+                margin-right: 8px;
+                min-width: 46px;
+            }
+            .dot {
+                display: inline-block;
+                border-radius: 50%;
+                background: currentColor;
+            }
+            .seg {
+                display: flex;
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                overflow: hidden;
+                flex: none;
+                margin-right: 6px;
+            }
+            .seg button {
+                border: 0;
+                background: none;
+                color: var(--muted);
+                height: 34px;
+                width: 40px;
+                padding: 0;
+                display: grid;
+                place-items: center;
+                cursor: pointer;
+            }
+            .seg button.on {
+                background: var(--accent);
+                color: #fff;
+            }
+            .seg svg {
+                width: 18px;
+                height: 18px;
+                stroke: currentColor;
+                fill: none;
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+
+            /* Asking before content is deleted */
+            .confirm {
+                position: absolute;
+                left: 0;
+                right: -60px;
+                top: 46px;
+                z-index: 5;
+                display: none;
+                padding: 12px;
+                border-radius: 12px;
+                background: var(--bg2);
+                border: 1px solid var(--border);
+                box-shadow: 0 8px 24px #000a;
+                font-size: 13.5px;
+            }
+            .confirm.show {
+                display: block;
+            }
+            .confirm .q {
+                margin-bottom: 10px;
+            }
+            .confirm .row {
+                display: flex;
+                gap: 8px;
+                justify-content: flex-end;
+            }
+            .confirm button {
+                border-radius: 8px;
+                border: 1px solid var(--border);
+                background: var(--bg3);
+                color: var(--text);
+                padding: 6px 12px;
+                font: inherit;
+                font-size: 13px;
+                cursor: pointer;
+            }
+            .confirm button.danger {
+                background: var(--err);
+                border-color: var(--err);
+                color: #fff;
+                font-weight: 600;
+            }
+
+            .body {
+                grid-area: body;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+            }
+            .zone {
+                flex: 1;
+                min-height: 0;
+                position: relative;
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                overflow: hidden;
+            }
+            .front .zone {
+                border-left: var(--edge) solid var(--accent);
+            }
+            .back .zone {
+                border-right: var(--edge) solid var(--accent);
+            }
+            .pen {
+                background: var(--ink-bg);
+                touch-action: none;
+            }
+            .pen.erasing {
+                border-top-color: var(--err);
+                border-bottom-color: var(--err);
+            }
+            .front .pen.erasing {
+                border-right-color: var(--err);
+            }
+            .back .pen.erasing {
+                border-left-color: var(--err);
+            }
+            .pen canvas {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+            }
+            .hint {
+                position: absolute;
+                left: 14px;
+                top: 8px;
+                right: 44px;
+                color: var(--faint);
+                pointer-events: none;
+            }
+            .hint b {
+                color: var(--muted);
+            }
+            .textzone {
+                display: flex;
+                background: #000;
+            }
+            textarea {
+                flex: 1;
+                min-height: 0;
+                resize: none;
+                border: 0;
+                outline: 0;
+                background: transparent;
+                color: var(--text);
+                font: inherit;
+                line-height: 1.5;
+                padding: 8px 44px 8px 12px;
+            }
+            .eye {
+                position: absolute;
+                top: 4px;
+                right: 6px;
+                width: 32px;
+                height: 32px;
+                color: var(--faint);
+            }
+
+            .right {
+                grid-area: right;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .switch {
+                flex: 1 1 0;
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                background: var(--bg3);
+                color: var(--muted);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                font: inherit;
+                cursor: pointer;
+            }
+            .switch .s {
+                font-size: 14px;
+            }
+            .switch .s.on {
+                font-weight: 800;
+                color: var(--text);
+            }
+            .switch .arrow {
+                font-size: 22px;
+                line-height: 1;
+            }
+            .saves {
+                flex: 1 1 0;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .saves button {
+                border-radius: 12px;
+                border: 1px solid var(--border);
+                font: inherit;
+                font-size: 12.5px;
+                line-height: 1.15;
+                color: var(--text);
+                background: var(--bg3);
+                cursor: pointer;
+            }
+            .saves .next {
+                flex: 2 1 0;
+                background: var(--accent);
+                border-color: var(--accent);
+                color: #fff;
+                font-weight: 700;
+            }
+            .saves .close {
+                flex: 1 1 0;
+            }
+            .editing .saves .close {
+                display: none;
+            }
+
+            .toast {
+                position: absolute;
+                left: 50%;
+                top: 70px;
+                transform: translateX(-50%);
+                background: #3a3360;
+                color: #fff;
+                padding: 6px 14px;
+                border-radius: 16px;
+                font-size: 13px;
+                opacity: 0;
+                transition: opacity 0.2s;
+                pointer-events: none;
+                z-index: 9;
+                white-space: nowrap;
+            }
+            .toast.show {
+                opacity: 1;
+            }
+
+            .kbd {
+                flex: none;
+                height: 0;
+                overflow: hidden;
+                background: #2b2b2b;
+                user-select: none;
+            }
+            .kbd.show {
+                height: 270px;
+            }
+            .kbd .sugg {
+                height: 36px;
+                display: flex;
+                justify-content: space-around;
+                align-items: center;
+                color: #e09a3c;
+                border-bottom: 1px solid #1d1d1d;
+            }
+            .kbd .row {
+                display: flex;
+                justify-content: center;
+                gap: 4px;
+                padding: 4px 3px;
+            }
+            .kbd .k {
+                flex: 1;
+                max-width: 36px;
+                height: 44px;
+                border-radius: 6px;
+                background: #3d3d3d;
+                color: #eee;
+                display: grid;
+                place-items: center;
+                font-size: 17px;
+                cursor: pointer;
+            }
+            .kbd .k.w {
+                max-width: 58px;
+                flex: 1.6;
+                font-size: 14px;
+                color: #e09a3c;
+            }
+            .kbd .k.sp {
+                max-width: 190px;
+                flex: 5;
+            }
+
+            .drawer-btn {
+                display: none;
+            }
+            @media (max-width: 760px) {
+                html,
+                body {
+                    height: auto;
+                }
+                .page {
+                    padding: 0;
+                    display: block;
+                }
+                .phone {
+                    width: 100vw;
+                    height: var(--app-h, 100dvh);
+                    border: 0;
+                    border-radius: 0;
+                    box-shadow: none;
+                }
+                .statusbar {
+                    display: none;
+                }
+                .controls {
+                    position: fixed;
+                    inset: 0 0 auto 0;
+                    max-height: 85vh;
+                    overflow: auto;
+                    z-index: 10;
+                    width: auto;
+                    border-radius: 0 0 14px 14px;
+                    transform: translateY(-105%);
+                    transition: transform 0.2s;
+                }
+                .controls.open {
+                    transform: none;
+                }
+                .drawer-btn {
+                    display: grid;
+                }
+                .kbd {
+                    display: none;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="page">
+            <aside class="controls" id="controls">
+                <h1>Pen or keyboard, one at a time</h1>
+                <p>Each side is either drawn or typed, never both.</p>
+                <ul>
+                    <li>
+                        <b>⌨ | ✎</b> next to FRONT/BACK switches the side's input; the input in use
+                        fills the side.
+                    </li>
+                    <li>
+                        Typing: pen size and eraser are greyed out; undo and clear stay where they
+                        are.
+                    </li>
+                    <li>
+                        Switching a side that has content asks first: delete it and switch, or keep
+                        it.
+                    </li>
+                    <li>Each side remembers its input for the next card.</li>
+                </ul>
+                <label class="chk"
+                    ><input type="checkbox" id="editing" /><span
+                        >Edit an existing card (‹ › and Save)</span
+                    ></label
+                >
+                <label class="chk"
+                    ><input type="checkbox" id="finger" checked /><span
+                        >A finger draws too (the plugin ignores fingers)</span
+                    ></label
+                >
+                <label class="chk"
+                    ><input type="checkbox" id="simKbd" checked /><span
+                        >Simulate the keyboard (desktop)</span
+                    ></label
+                >
+                <button class="small" id="sample">Fill with sample content</button>
+            </aside>
+
+            <div class="phone" id="phone">
+                <div class="statusbar"><span>07:22</span><span>94%</span></div>
+                <div class="header">
+                    <button class="ib drawer-btn" id="drawerBtn" title="Options">☰</button>
+                    <div class="titlewrap">
+                        <div class="title">Biology</div>
+                        <div class="meta">
+                            <button class="chip">Basic ▾</button
+                            ><span class="deck">· Deck: medicine</span>
+                        </div>
+                    </div>
+                    <div class="nav">
+                        <button class="ib" title="Previous card">
+                            <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></svg>
+                        </button>
+                        <button class="ib" title="Next card">
+                            <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg>
+                        </button>
+                    </div>
+                    <button class="ib" title="Delete card">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M3 6h18" />
+                            <path d="M19 6v14H5V6" />
+                            <path d="M8 6V4h8v2" />
+                        </svg>
+                    </button>
+                    <span class="gap"></span>
+                    <button class="ib" title="Close">
+                        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div class="main" id="main">
+                    <div class="tools">
+                        <span class="label" id="label">FRONT</span>
+                        <div class="seg">
+                            <button data-m="text" title="Type">
+                                <svg viewBox="0 0 24 24">
+                                    <rect x="2" y="6" width="20" height="12" rx="2" />
+                                    <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+                                </svg>
+                            </button>
+                            <button data-m="pen" title="Draw">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M12 20h9" />
+                                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                                </svg>
+                            </button>
+                        </div>
+                        <button class="ib" id="size" title="Pen size">
+                            <span class="dot" id="sizeDot"></span>
+                        </button>
+                        <button class="ib" id="eraser" title="Eraser">
+                            <svg viewBox="0 0 24 24">
+                                <path d="m7 21-4-4 10-10 7 7-7 7z" />
+                                <path d="M22 21H7" />
+                            </svg>
+                        </button>
+                        <button class="ib" id="undo" title="Undo">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M9 14 4 9l5-5" />
+                                <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+                            </svg>
+                        </button>
+                        <button class="ib" id="clear" title="Clear side">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="9" />
+                                <path d="m5.6 5.6 12.8 12.8" />
+                            </svg>
+                        </button>
+                        <div class="confirm" id="confirm">
+                            <div class="q" id="confirmQ"></div>
+                            <div class="row">
+                                <button id="keep">Keep</button
+                                ><button class="danger" id="doSwitch">Delete &amp; switch</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="body" id="body">
+                        <div class="zone pen" id="penZone">
+                            <canvas id="canvas"></canvas><span class="hint" id="penHint"></span>
+                        </div>
+                        <div class="zone textzone" id="textZone">
+                            <textarea id="ta" aria-label="Text of this side"></textarea
+                            ><span class="hint" id="textHint"></span
+                            ><button class="ib eye" title="Preview">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="right">
+                        <button class="switch" id="switch">
+                            <span class="s on" id="sF">Front</span><span class="arrow">⇅</span
+                            ><span class="s" id="sB">Back</span>
+                        </button>
+                        <div class="saves">
+                            <button class="next" id="saveNext">Save &amp; next</button
+                            ><button class="close" id="saveClose">Save &amp; close</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="kbd" id="kbd"></div>
+                <div class="toast" id="toast"></div>
+            </div>
+        </div>
+        <script>
+            (() => {
+                const $ = (id) => document.getElementById(id);
+                const isPhone = () => matchMedia("(max-width: 760px)").matches;
+                const SIZES = [1.6, 2.5, 4];
+                let active = 0,
+                    sizeIdx = 0,
+                    eraser = false,
+                    pending = null;
+                // The input each side starts with on a new card: the one it had last
+                let lastModes = ["text", "pen"];
+                const newCard = () => lastModes.map((mode) => ({ text: "", strokes: [], mode }));
+                let sides = newCard();
+                const undo = [[], []];
+                const side = () => sides[active];
+                const has = (s) => (s.mode === "pen" ? s.strokes.length > 0 : s.text.trim() !== "");
+
+                // MARK: switching the input of a side
+                function askMode(m) {
+                    if (m === side().mode) return;
+                    if (!has(side())) return setMode(m);
+                    const name = active === 0 ? "Front" : "Back";
+                    const what = side().mode === "pen" ? "the drawing" : "the text";
+                    $("confirmQ").innerHTML =
+                        `Delete ${what} on <b>${name}</b> and switch to ${m === "pen" ? "drawing" : "typing"}?`;
+                    pending = m;
+                    $("confirm").classList.add("show");
+                }
+                function setMode(m) {
+                    side().mode = m;
+                    side().text = "";
+                    side().strokes = [];
+                    undo[active] = [];
+                    lastModes[active] = m;
+                    eraser = false;
+                    closeConfirm();
+                    render();
+                    if (m === "text") $("ta").focus();
+                    else $("ta").blur();
+                }
+                function closeConfirm() {
+                    pending = null;
+                    $("confirm").classList.remove("show");
+                }
+                $("keep").addEventListener("click", closeConfirm);
+                $("doSwitch").addEventListener("click", () => setMode(pending));
+                for (const b of [$("keep"), $("doSwitch")])
+                    b.addEventListener("pointerdown", (e) => e.preventDefault());
+
+                // MARK: render
+                function render() {
+                    const m = side().mode;
+                    $("body").className = "body " + (active === 0 ? "front" : "back");
+                    $("label").textContent = active === 0 ? "FRONT" : "BACK";
+                    $("sF").classList.toggle("on", active === 0);
+                    $("sB").classList.toggle("on", active === 1);
+                    $("penHint").innerHTML = `Draw on <b>${active === 0 ? "front" : "back"}</b>`;
+                    $("textHint").innerHTML =
+                        `Type the <b>${active === 0 ? "question" : "answer"}</b>`;
+                    $("penZone").style.display = m === "pen" ? "" : "none";
+                    $("textZone").style.display = m === "text" ? "" : "none";
+                    $("ta").value = side().text;
+                    $("textHint").style.display = side().text ? "none" : "";
+                    $("penHint").style.display = side().strokes.length ? "none" : "";
+                    for (const b of document.querySelectorAll(".seg button"))
+                        b.classList.toggle("on", b.dataset.m === m);
+                    // Pen tools only for drawing; undo and clear keep their place
+                    $("size").disabled = m !== "pen";
+                    $("eraser").disabled = m !== "pen";
+                    $("sizeDot").style.width = $("sizeDot").style.height =
+                        SIZES[sizeIdx] * 2.4 + 3 + "px";
+                    $("eraser").classList.toggle("on", eraser && m === "pen");
+                    $("penZone").classList.toggle("erasing", eraser);
+                    $("kbd").classList.toggle(
+                        "show",
+                        m === "text" && $("simKbd").checked && !isPhone(),
+                    );
+                    document.body.classList.toggle("editing", $("editing").checked);
+                    $("saveNext").textContent = $("editing").checked ? "Save" : "Save & next";
+                    requestAnimationFrame(draw);
+                }
+
+                // MARK: ink
+                const canvas = $("canvas"),
+                    pen = $("penZone");
+                function draw() {
+                    const dpr = devicePixelRatio || 1,
+                        r = pen.getBoundingClientRect();
+                    if (!r.width) return;
+                    canvas.width = Math.round(r.width * dpr);
+                    canvas.height = Math.round(r.height * dpr);
+                    const g = canvas.getContext("2d");
+                    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+                    g.strokeStyle = "#2c2c2c";
+                    g.lineWidth = 1;
+                    for (let y = 44; y < r.height; y += 44) {
+                        g.beginPath();
+                        g.moveTo(0, y + 0.5);
+                        g.lineTo(r.width, y + 0.5);
+                        g.stroke();
+                    }
+                    g.strokeStyle = "#e6e6e6";
+                    g.lineCap = g.lineJoin = "round";
+                    for (const st of side().strokes) {
+                        g.lineWidth = st.size;
+                        g.beginPath();
+                        st.pts.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y)));
+                        g.stroke();
+                    }
+                }
+                new ResizeObserver(() => draw()).observe(pen);
+                let cur = null,
+                    before = null;
+                const pt = (e) => {
+                    const r = pen.getBoundingClientRect();
+                    return [e.clientX - r.left, e.clientY - r.top];
+                };
+                function eraseAt([x, y]) {
+                    const out = [];
+                    for (const st of side().strokes) {
+                        let run = [];
+                        for (const p of st.pts) {
+                            if (Math.hypot(p[0] - x, p[1] - y) < 10) {
+                                if (run.length > 1) out.push({ ...st, pts: run });
+                                run = [];
+                            } else run.push(p);
+                        }
+                        if (run.length > 1) out.push({ ...st, pts: run });
+                    }
+                    side().strokes = out;
+                }
+                pen.addEventListener("pointerdown", (e) => {
+                    if (e.pointerType === "touch" && !$("finger").checked) return;
+                    e.preventDefault();
+                    pen.setPointerCapture(e.pointerId);
+                    closeConfirm();
+                    before = side().strokes;
+                    if (eraser) {
+                        cur = "erase";
+                        side().strokes = [...before];
+                        eraseAt(pt(e));
+                    } else {
+                        cur = { size: SIZES[sizeIdx], pts: [pt(e)] };
+                        side().strokes = [...before, cur];
+                    }
+                    $("penHint").style.display = "none";
+                    draw();
+                });
+                pen.addEventListener("pointermove", (e) => {
+                    if (!cur) return;
+                    const p = pt(e);
+                    if (cur === "erase") eraseAt(p);
+                    else cur.pts.push(p);
+                    draw();
+                });
+                const end = () => {
+                    if (!cur) return;
+                    undo[active].push({ strokes: before });
+                    cur = null;
+                };
+                pen.addEventListener("pointerup", end);
+                pen.addEventListener("pointercancel", end);
+
+                // MARK: buttons
+                const tap = (el, fn) => {
+                    el.addEventListener("pointerdown", (e) => e.preventDefault());
+                    el.addEventListener("click", fn);
+                };
+                tap($("switch"), () => {
+                    closeConfirm();
+                    side().text = $("ta").value;
+                    active = 1 - active;
+                    eraser = false;
+                    render();
+                    if (side().mode === "text") $("ta").focus();
+                });
+                document
+                    .querySelectorAll(".seg button")
+                    .forEach((b) => tap(b, () => askMode(b.dataset.m)));
+                tap($("size"), () => {
+                    sizeIdx = (sizeIdx + 1) % SIZES.length;
+                    render();
+                });
+                tap($("eraser"), () => {
+                    eraser = !eraser;
+                    render();
+                });
+                tap($("undo"), () => {
+                    const u = undo[active].pop();
+                    if (!u) return;
+                    if (u.strokes) side().strokes = u.strokes;
+                    if (u.text !== undefined) side().text = u.text;
+                    render();
+                });
+                tap($("clear"), () => {
+                    undo[active].push({ strokes: side().strokes, text: side().text });
+                    side().strokes = [];
+                    side().text = "";
+                    render();
+                });
+                const toast = (t) => {
+                    $("toast").textContent = t;
+                    $("toast").classList.add("show");
+                    clearTimeout(toast.t);
+                    toast.t = setTimeout(() => $("toast").classList.remove("show"), 1300);
+                };
+                function save(next) {
+                    side().text = $("ta").value;
+                    const empty = sides.findIndex((s) => !has(s));
+                    if (empty >= 0) {
+                        active = empty;
+                        render();
+                        toast(`${empty ? "Back" : "Front"} is empty`);
+                        return;
+                    }
+                    sides = newCard();
+                    active = 0;
+                    undo[0] = [];
+                    undo[1] = [];
+                    render();
+                    if (side().mode === "text") $("ta").focus();
+                    toast(next ? "Saved, next card" : "Saved, editor closed");
+                }
+                tap($("saveNext"), () => save(true));
+                tap($("saveClose"), () => save(false));
+                $("ta").addEventListener("input", () => {
+                    side().text = $("ta").value;
+                    $("textHint").style.display = side().text ? "none" : "";
+                });
+
+                // MARK: keyboard (desktop simulation)
+                const rows = [
+                    "qwertzuiop",
+                    "asdfghjkl",
+                    "⇧yxcvbnm⌫",
+                    ["123", ",", "space", ".", "↵"],
+                ];
+                $("kbd").innerHTML =
+                    `<div class="sugg"><span>is</span><span>I</span><span>and</span></div>` +
+                    rows
+                        .map(
+                            (r) =>
+                                `<div class="row">${[...r].map((k) => `<div class="${k === "space" ? "k sp" : ["⇧", "⌫", "123", "↵"].includes(k) ? "k w" : "k"}" data-k="${k}">${k === "space" ? "" : k}</div>`).join("")}</div>`,
+                        )
+                        .join("");
+                $("kbd").addEventListener("pointerdown", (e) => e.preventDefault());
+                $("kbd").addEventListener("click", (e) => {
+                    const k = e.target.dataset && e.target.dataset.k,
+                        ta = $("ta");
+                    if (!k) return;
+                    ta.focus();
+                    const ins = (t) => {
+                        const p = ta.selectionStart;
+                        ta.value = ta.value.slice(0, p) + t + ta.value.slice(ta.selectionEnd);
+                        ta.selectionStart = ta.selectionEnd = p + t.length;
+                    };
+                    if (k === "⌫") {
+                        const p = ta.selectionStart;
+                        if (p > 0) {
+                            ta.value = ta.value.slice(0, p - 1) + ta.value.slice(p);
+                            ta.selectionStart = ta.selectionEnd = p - 1;
+                        }
+                    } else if (k === "space") ins(" ");
+                    else if (k === "↵") ins("\n");
+                    else if (k.length === 1 && k !== "⇧") ins(k);
+                    ta.dispatchEvent(new Event("input"));
+                });
+                if (window.visualViewport) {
+                    const fit = () => {
+                        if (!isPhone()) return;
+                        document.documentElement.style.setProperty(
+                            "--app-h",
+                            visualViewport.height + "px",
+                        );
+                        window.scrollTo(0, 0);
+                        draw();
+                    };
+                    visualViewport.addEventListener("resize", fit);
+                    fit();
+                }
+
+                // MARK: options
+                for (const id of ["simKbd", "editing"]) $(id).onchange = render;
+                $("drawerBtn").onclick = () => $("controls").classList.toggle("open");
+                document.addEventListener("pointerdown", (e) => {
+                    if (
+                        isPhone() &&
+                        !$("controls").contains(e.target) &&
+                        e.target !== $("drawerBtn")
+                    )
+                        $("controls").classList.remove("open");
+                });
+                $("sample").onclick = () => {
+                    sides[0] = {
+                        mode: "text",
+                        text: "What does the sensitivity of a test measure?",
+                        strokes: [],
+                    };
+                    sides[1] = {
+                        mode: "pen",
+                        text: "",
+                        strokes: [
+                            {
+                                size: 2.5,
+                                pts: [
+                                    [30, 60],
+                                    [60, 40],
+                                    [90, 70],
+                                    [120, 45],
+                                    [150, 70],
+                                    [180, 50],
+                                ],
+                            },
+                            {
+                                size: 2.5,
+                                pts: [
+                                    [40, 120],
+                                    [200, 118],
+                                ],
+                            },
+                        ],
+                    };
+                    render();
+                };
+                render();
+            })();
+        </script>
+    </body>
+</html>
