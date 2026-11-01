@@ -27,21 +27,21 @@ write by hand and type; one side is edited at a time.
 
 1. **Title bar**: note title, the "n added" badge (add mode), then on the right a 🗑 button and,
    with clear space between them, ✕.
-   - 🗑 is **Delete card**: add mode — an empty card closes at once, otherwise two taps
-     ("Tap again to delete", 3 s), drops the card, no draft; edit mode — two taps, deletes the
-     card from its note (existing `opts.delete()`, existing behaviour incl. ink trash, review
-     moves on). It replaces the footer's Delete card button.
-   - ✕ closes without saving (add mode keeps the draft, as today).
+    - 🗑 is **Delete card**: add mode — an empty card closes at once, otherwise two taps
+      ("Tap again to delete", 3 s), drops the card, no draft; edit mode — two taps, deletes the
+      card from its note (existing `opts.delete()`, existing behaviour incl. ink trash, review
+      moves on). It replaces the footer's Delete card button.
+    - ✕ closes without saving (add mode keeps the draft, as today).
 2. **Tool row** (left column only): the side's name in bold caps (`FRONT` / `BACK`; cloze:
    existing cloze label), then with generous spacing (≈14 px gaps, 40 px buttons):
-   - **size**: one button for the tool in use. Pen: filled dot, cycles 3 pen thicknesses
-     (small default — keep the existing PEN_SIZE_STEPS factors, default step = the small one).
-     Eraser: a ring whose diameter is **exactly** the eraser circle's diameter in the pen zone;
-     cycles 3 eraser radii (5, 9, 15 px; medium default). Pen and eraser keep their own size.
-   - **eraser** toggle (on: red/error colour, and the pen zone's border turns red),
-   - **undo** — acts on the visible side only,
-   - **clear side** — new icon (lucide `ban` / circle-slash), not a bin, so it can't be mixed
-     up with Delete card.
+    - **size**: one button for the tool in use. Pen: filled dot, cycles 3 pen thicknesses
+      (small default — keep the existing PEN_SIZE_STEPS factors, default step = the small one).
+      Eraser: a ring whose diameter is **exactly** the eraser circle's diameter in the pen zone;
+      cycles 3 eraser radii (5, 9, 15 px; medium default). Pen and eraser keep their own size.
+    - **eraser** toggle (on: red/error colour, and the pen zone's border turns red),
+    - **undo** — acts on the visible side only,
+    - **clear side** — new icon (lucide `ban` / circle-slash), not a bin, so it can't be mixed
+      up with Delete card.
 3. **Pen zone**: fixed height **245 px** (CSS variable, so it can become a setting later), full
    width of the left column, rounded box. Hint "Draw on **front**" / "Draw on **back**" (bold
    word) while empty. Eraser circle (existing cursor) follows the pen while hovering/erasing with

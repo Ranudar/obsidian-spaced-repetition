@@ -1,459 +1,1151 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
-<title>Card editor: fixed zones with the keyboard open</title>
-<style>
-  :root {
-    --bg: #1e1e1e; --bg2: #262626; --bg3: #2f2f2f; --border: #3a3a3a; --text: #dcddde;
-    --muted: #9a9a9a; --accent: #7f6df2; --err: #e5534b; --ink-bg: #232323; --line: 24px;
-    --right: 12%; --pen-h: 245px; --edge: 5px;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #111; color: var(--text);
-    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  .page { display: flex; gap: 24px; padding: 20px; justify-content: center; align-items: flex-start; min-height: 100%; }
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
+        />
+        <title>Card editor: fixed zones with the keyboard open</title>
+        <style>
+            :root {
+                --bg: #1e1e1e;
+                --bg2: #262626;
+                --bg3: #2f2f2f;
+                --border: #3a3a3a;
+                --text: #dcddde;
+                --muted: #9a9a9a;
+                --accent: #7f6df2;
+                --err: #e5534b;
+                --ink-bg: #232323;
+                --line: 24px;
+                --right: 12%;
+                --pen-h: 245px;
+                --edge: 5px;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            html,
+            body {
+                margin: 0;
+                height: 100%;
+                background: #111;
+                color: var(--text);
+                font:
+                    15px/1.5 -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Roboto,
+                    sans-serif;
+            }
+            .page {
+                display: flex;
+                gap: 24px;
+                padding: 20px;
+                justify-content: center;
+                align-items: flex-start;
+                min-height: 100%;
+            }
 
-  /* MARK: controls */
-  .controls { width: 340px; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 13.5px; }
-  .controls h1 { font-size: 17px; margin: 0 0 4px; }
-  .controls p { color: var(--muted); margin: 0 0 10px; font-size: 13px; }
-  .controls h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 4px; }
-  .controls label.r { display: block; margin: 8px 0 2px; }
-  .controls input[type=range] { width: 100%; }
-  .controls .chk { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; cursor: pointer; }
-  .controls .chk span small { display: block; color: var(--muted); }
-  .controls button { background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
-    padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; margin-top: 6px; }
+            /* MARK: controls */
+            .controls {
+                width: 340px;
+                background: var(--bg2);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 16px;
+                font-size: 13.5px;
+            }
+            .controls h1 {
+                font-size: 17px;
+                margin: 0 0 4px;
+            }
+            .controls p {
+                color: var(--muted);
+                margin: 0 0 10px;
+                font-size: 13px;
+            }
+            .controls h2 {
+                font-size: 13px;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                color: var(--muted);
+                margin: 14px 0 4px;
+            }
+            .controls label.r {
+                display: block;
+                margin: 8px 0 2px;
+            }
+            .controls input[type="range"] {
+                width: 100%;
+            }
+            .controls .chk {
+                display: flex;
+                gap: 8px;
+                align-items: flex-start;
+                margin: 6px 0;
+                cursor: pointer;
+            }
+            .controls .chk span small {
+                display: block;
+                color: var(--muted);
+            }
+            .controls button {
+                background: var(--bg3);
+                color: var(--text);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 5px 10px;
+                font: inherit;
+                font-size: 13px;
+                cursor: pointer;
+                margin-top: 6px;
+            }
 
-  /* MARK: phone frame */
-  .phone { width: 400px; height: 840px; border-radius: 34px; border: 10px solid #000; background: var(--bg);
-    overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 10px 40px #0008; position: relative; }
-  .statusbar { height: 24px; flex: 0 0 auto; font-size: 12px; color: var(--muted); padding: 3px 18px; display: flex; justify-content: space-between; }
+            /* MARK: phone frame */
+            .phone {
+                width: 400px;
+                height: 840px;
+                border-radius: 34px;
+                border: 10px solid #000;
+                background: var(--bg);
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                box-shadow: 0 10px 40px #0008;
+                position: relative;
+            }
+            .statusbar {
+                height: 24px;
+                flex: 0 0 auto;
+                font-size: 12px;
+                color: var(--muted);
+                padding: 3px 18px;
+                display: flex;
+                justify-content: space-between;
+            }
 
-  .titlebar { flex: 0 0 auto; height: 40px; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 12px; }
-  .title { font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .badge { font-size: 12px; color: var(--muted); background: var(--bg3); border-radius: 10px; padding: 1px 8px; }
-  .badge:empty { display: none; }
-  .gap { width: 18px; }
-  .ib { width: 36px; height: 36px; border: 0; background: none; color: var(--muted); border-radius: 8px;
-    display: grid; place-items: center; cursor: pointer; padding: 0; position: relative; }
-  .ib:hover { background: var(--bg3); }
-  .ib.on { color: #fff; background: var(--err); }
-  .ib:disabled { opacity: .35; cursor: default; }
-  .ib svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .ib.armed { color: #fff; background: var(--err); width: auto; padding: 0 8px; font-size: 12px; }
+            .titlebar {
+                flex: 0 0 auto;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 0 6px 0 12px;
+            }
+            .title {
+                font-weight: 600;
+                flex: 1;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .badge {
+                font-size: 12px;
+                color: var(--muted);
+                background: var(--bg3);
+                border-radius: 10px;
+                padding: 1px 8px;
+            }
+            .badge:empty {
+                display: none;
+            }
+            .gap {
+                width: 18px;
+            }
+            .ib {
+                width: 36px;
+                height: 36px;
+                border: 0;
+                background: none;
+                color: var(--muted);
+                border-radius: 8px;
+                display: grid;
+                place-items: center;
+                cursor: pointer;
+                padding: 0;
+                position: relative;
+            }
+            .ib:hover {
+                background: var(--bg3);
+            }
+            .ib.on {
+                color: #fff;
+                background: var(--err);
+            }
+            .ib:disabled {
+                opacity: 0.35;
+                cursor: default;
+            }
+            .ib svg {
+                width: 20px;
+                height: 20px;
+                stroke: currentColor;
+                fill: none;
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+            .ib.armed {
+                color: #fff;
+                background: var(--err);
+                width: auto;
+                padding: 0 8px;
+                font-size: 12px;
+            }
 
-  /* MARK: the grid: tool row + pen zone on top, text zone below; the right column spans both */
-  .main { flex: 1; min-height: 0; display: grid; gap: 8px; padding: 0 8px 8px;
-    grid-template-columns: 1fr var(--right);
-    grid-template-rows: 40px var(--pen-h) 1fr;
-    grid-template-areas: "tools ." "pen switch" "text saves"; }
-  .mirror .main { grid-template-columns: var(--right) 1fr; grid-template-areas: ". tools" "switch pen" "saves text"; }
-  /* The side shows as a broad edge on both fields, following their rounded corners: on the right
+            /* MARK: the grid: tool row + pen zone on top, text zone below; the right column spans both */
+            .main {
+                flex: 1;
+                min-height: 0;
+                display: grid;
+                gap: 8px;
+                padding: 0 8px 8px;
+                grid-template-columns: 1fr var(--right);
+                grid-template-rows: 40px var(--pen-h) 1fr;
+                grid-template-areas: "tools ." "pen switch" "text saves";
+            }
+            .mirror .main {
+                grid-template-columns: var(--right) 1fr;
+                grid-template-areas: ". tools" "switch pen" "saves text";
+            }
+            /* The side shows as a broad edge on both fields, following their rounded corners: on the right
      for the front, on the left for the back */
-  .pen, textarea { border-right: var(--edge) solid var(--accent) !important; }
-  .back .pen, .back textarea { border-right: 1px solid var(--border) !important; border-left: var(--edge) solid var(--accent) !important; }
-  .back .pen { border-right-width: 2px !important; }
-  .tools { grid-area: tools; display: flex; align-items: center; gap: 14px; min-width: 0; }
-  .tools .ib { width: 40px; height: 40px; }
-  .sidelabel { font-size: 15px; font-weight: 800; letter-spacing: .06em; margin-right: auto; color: var(--text); }
-  .dot { display: inline-block; border-radius: 50%; background: currentColor; }
-  .pen { grid-area: pen; min-height: 0; position: relative; background: var(--ink-bg); border: 2px solid var(--border);
-    border-radius: 12px; overflow: hidden; touch-action: none; }
-  .pen.erasing { border-color: var(--err); }
-  .pen canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .pen .cursor { position: absolute; box-sizing: border-box; border: 1.5px solid #fff; border-radius: 50%; pointer-events: none;
-    box-shadow: 0 0 0 1px #000a; transform: translate(-50%, -50%); display: none; }
-  .dot.ring { background: none; border: 1.5px solid currentColor; box-sizing: border-box; }
-  .pen .ph { position: absolute; left: 12px; top: 8px; color: #6a6a6a; font-size: 14px; pointer-events: none; }
-  .ph b { color: #8a8a8a; }
-  .textwrap { grid-area: text; min-height: 0; position: relative; display: flex; }
-  .textwrap .ph { position: absolute; left: 13px; top: 9px; color: #6a6a6a; line-height: var(--line); pointer-events: none; }
-  .pen .dbg { position: absolute; left: 6px; right: 6px; bottom: 4px; font: 10.5px/1.3 ui-monospace, Menlo, monospace;
-    color: #e0b350; pointer-events: none; display: none; white-space: pre; overflow: hidden; }
-  .showdbg .pen .dbg { display: block; }
-  textarea { flex: 1; min-height: 0; width: 100%; resize: none; border: 1px solid var(--border);
-    border-radius: 12px; outline: 0; background: var(--bg); color: var(--text); font: inherit;
-    line-height: var(--line); padding: 8px 12px; overflow-y: auto; }
-  textarea:focus { border-color: #5a5a5a; }
-  textarea::placeholder { color: #666; }
-  .flash { animation: flash .9s; }
-  @keyframes flash { 0%, 60% { box-shadow: 0 0 0 3px var(--err); } 100% { box-shadow: none; } }
+            .pen,
+            textarea {
+                border-right: var(--edge) solid var(--accent) !important;
+            }
+            .back .pen,
+            .back textarea {
+                border-right: 1px solid var(--border) !important;
+                border-left: var(--edge) solid var(--accent) !important;
+            }
+            .back .pen {
+                border-right-width: 2px !important;
+            }
+            .tools {
+                grid-area: tools;
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                min-width: 0;
+            }
+            .tools .ib {
+                width: 40px;
+                height: 40px;
+            }
+            .sidelabel {
+                font-size: 15px;
+                font-weight: 800;
+                letter-spacing: 0.06em;
+                margin-right: auto;
+                color: var(--text);
+            }
+            .dot {
+                display: inline-block;
+                border-radius: 50%;
+                background: currentColor;
+            }
+            .pen {
+                grid-area: pen;
+                min-height: 0;
+                position: relative;
+                background: var(--ink-bg);
+                border: 2px solid var(--border);
+                border-radius: 12px;
+                overflow: hidden;
+                touch-action: none;
+            }
+            .pen.erasing {
+                border-color: var(--err);
+            }
+            .pen canvas {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+            }
+            .pen .cursor {
+                position: absolute;
+                box-sizing: border-box;
+                border: 1.5px solid #fff;
+                border-radius: 50%;
+                pointer-events: none;
+                box-shadow: 0 0 0 1px #000a;
+                transform: translate(-50%, -50%);
+                display: none;
+            }
+            .dot.ring {
+                background: none;
+                border: 1.5px solid currentColor;
+                box-sizing: border-box;
+            }
+            .pen .ph {
+                position: absolute;
+                left: 12px;
+                top: 8px;
+                color: #6a6a6a;
+                font-size: 14px;
+                pointer-events: none;
+            }
+            .ph b {
+                color: #8a8a8a;
+            }
+            .textwrap {
+                grid-area: text;
+                min-height: 0;
+                position: relative;
+                display: flex;
+            }
+            .textwrap .ph {
+                position: absolute;
+                left: 13px;
+                top: 9px;
+                color: #6a6a6a;
+                line-height: var(--line);
+                pointer-events: none;
+            }
+            .pen .dbg {
+                position: absolute;
+                left: 6px;
+                right: 6px;
+                bottom: 4px;
+                font:
+                    10.5px/1.3 ui-monospace,
+                    Menlo,
+                    monospace;
+                color: #e0b350;
+                pointer-events: none;
+                display: none;
+                white-space: pre;
+                overflow: hidden;
+            }
+            .showdbg .pen .dbg {
+                display: block;
+            }
+            textarea {
+                flex: 1;
+                min-height: 0;
+                width: 100%;
+                resize: none;
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                outline: 0;
+                background: var(--bg);
+                color: var(--text);
+                font: inherit;
+                line-height: var(--line);
+                padding: 8px 12px;
+                overflow-y: auto;
+            }
+            textarea:focus {
+                border-color: #5a5a5a;
+            }
+            textarea::placeholder {
+                color: #666;
+            }
+            .flash {
+                animation: flash 0.9s;
+            }
+            @keyframes flash {
+                0%,
+                60% {
+                    box-shadow: 0 0 0 3px var(--err);
+                }
+                100% {
+                    box-shadow: none;
+                }
+            }
 
-  .switch { grid-area: switch; border: 1px solid var(--border); border-radius: 12px; background: var(--bg2); color: var(--text);
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
-    font: inherit; padding: 6px 2px; user-select: none; overflow: hidden; }
-  .switch .s { font-size: 14px; font-weight: 400; color: var(--muted); }
-  .switch .s.active { font-weight: 800; color: var(--text); }
-  .switch .arrow { color: var(--muted); font-size: 22px; line-height: 1; }
-  .saves { grid-area: saves; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-  .saves button { border-radius: 12px; border: 1px solid var(--border); font: inherit; font-size: 12.5px; line-height: 1.2;
-    cursor: pointer; padding: 4px 2px; color: var(--text); background: var(--bg3); }
-  .saves .next { flex: 2 1 0; background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
-  .saves .close { flex: 1 1 0; }
-  .saves .wait { opacity: .55; }
+            .switch {
+                grid-area: switch;
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                background: var(--bg2);
+                color: var(--text);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                cursor: pointer;
+                font: inherit;
+                padding: 6px 2px;
+                user-select: none;
+                overflow: hidden;
+            }
+            .switch .s {
+                font-size: 14px;
+                font-weight: 400;
+                color: var(--muted);
+            }
+            .switch .s.active {
+                font-weight: 800;
+                color: var(--text);
+            }
+            .switch .arrow {
+                color: var(--muted);
+                font-size: 22px;
+                line-height: 1;
+            }
+            .saves {
+                grid-area: saves;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .saves button {
+                border-radius: 12px;
+                border: 1px solid var(--border);
+                font: inherit;
+                font-size: 12.5px;
+                line-height: 1.2;
+                cursor: pointer;
+                padding: 4px 2px;
+                color: var(--text);
+                background: var(--bg3);
+            }
+            .saves .next {
+                flex: 2 1 0;
+                background: var(--accent);
+                border-color: var(--accent);
+                color: #fff;
+                font-weight: 700;
+            }
+            .saves .close {
+                flex: 1 1 0;
+            }
+            .saves .wait {
+                opacity: 0.55;
+            }
 
-  .toast { position: absolute; left: 50%; top: 66px; transform: translateX(-50%); background: #3a3360; color: #fff;
-    padding: 6px 14px; border-radius: 16px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none;
-    white-space: nowrap; z-index: 5; }
-  .toast.show { opacity: 1; }
-  .toast.warn { background: #6b2a27; }
+            .toast {
+                position: absolute;
+                left: 50%;
+                top: 66px;
+                transform: translateX(-50%);
+                background: #3a3360;
+                color: #fff;
+                padding: 6px 14px;
+                border-radius: 16px;
+                font-size: 13px;
+                opacity: 0;
+                transition: opacity 0.2s;
+                pointer-events: none;
+                white-space: nowrap;
+                z-index: 5;
+            }
+            .toast.show {
+                opacity: 1;
+            }
+            .toast.warn {
+                background: #6b2a27;
+            }
 
-  .kbd { flex: 0 0 auto; height: 280px; background: #2b2b2b; user-select: none; }
-  .kbd.off { display: none; }
-  .kbd .sugg { height: 38px; display: flex; justify-content: space-around; align-items: center; color: #e09a3c; border-bottom: 1px solid #1d1d1d; }
-  .kbd .row { display: flex; justify-content: center; gap: 4px; padding: 4px 3px; }
-  .kbd .k { flex: 1; max-width: 36px; height: 46px; border-radius: 6px; background: #3d3d3d; color: #eee;
-    display: grid; place-items: center; font-size: 17px; cursor: pointer; }
-  .kbd .k.w { max-width: 58px; flex: 1.6; font-size: 14px; color: #e09a3c; }
-  .kbd .k.sp { max-width: 190px; flex: 5; }
+            .kbd {
+                flex: 0 0 auto;
+                height: 280px;
+                background: #2b2b2b;
+                user-select: none;
+            }
+            .kbd.off {
+                display: none;
+            }
+            .kbd .sugg {
+                height: 38px;
+                display: flex;
+                justify-content: space-around;
+                align-items: center;
+                color: #e09a3c;
+                border-bottom: 1px solid #1d1d1d;
+            }
+            .kbd .row {
+                display: flex;
+                justify-content: center;
+                gap: 4px;
+                padding: 4px 3px;
+            }
+            .kbd .k {
+                flex: 1;
+                max-width: 36px;
+                height: 46px;
+                border-radius: 6px;
+                background: #3d3d3d;
+                color: #eee;
+                display: grid;
+                place-items: center;
+                font-size: 17px;
+                cursor: pointer;
+            }
+            .kbd .k.w {
+                max-width: 58px;
+                flex: 1.6;
+                font-size: 14px;
+                color: #e09a3c;
+            }
+            .kbd .k.sp {
+                max-width: 190px;
+                flex: 5;
+            }
 
-  .drawer-btn { display: none; }
-  @media (max-width: 760px) {
-    html, body { height: auto; }
-    .page { padding: 0; display: block; }
-    .phone { width: 100vw; height: var(--app-h, 100dvh); border: 0; border-radius: 0; box-shadow: none; }
-    .statusbar { display: none; }
-    .controls { position: fixed; inset: 0 0 auto 0; max-height: 85vh; overflow: auto; z-index: 10; width: auto;
-      border-radius: 0 0 14px 14px; transform: translateY(-105%); transition: transform .2s; }
-    .controls.open { transform: none; }
-    .drawer-btn { display: grid; }
-    .kbd { display: none; }
-  }
-</style>
-</head>
-<body>
-<div class="page">
-  <aside class="controls" id="controls">
-    <h1>Fixed zones</h1>
-    <p>One side at a time. The pen zone is pinned at the top with a fixed height; the text zone fills the rest above the keyboard. Tap the text zone to open the keyboard; drawing and the buttons keep it open.</p>
+            .drawer-btn {
+                display: none;
+            }
+            @media (max-width: 760px) {
+                html,
+                body {
+                    height: auto;
+                }
+                .page {
+                    padding: 0;
+                    display: block;
+                }
+                .phone {
+                    width: 100vw;
+                    height: var(--app-h, 100dvh);
+                    border: 0;
+                    border-radius: 0;
+                    box-shadow: none;
+                }
+                .statusbar {
+                    display: none;
+                }
+                .controls {
+                    position: fixed;
+                    inset: 0 0 auto 0;
+                    max-height: 85vh;
+                    overflow: auto;
+                    z-index: 10;
+                    width: auto;
+                    border-radius: 0 0 14px 14px;
+                    transform: translateY(-105%);
+                    transition: transform 0.2s;
+                }
+                .controls.open {
+                    transform: none;
+                }
+                .drawer-btn {
+                    display: grid;
+                }
+                .kbd {
+                    display: none;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="page">
+            <aside class="controls" id="controls">
+                <h1>Fixed zones</h1>
+                <p>
+                    One side at a time. The pen zone is pinned at the top with a fixed height; the
+                    text zone fills the rest above the keyboard. Tap the text zone to open the
+                    keyboard; drawing and the buttons keep it open.
+                </p>
 
-    <h2>Layout</h2>
-    <label class="r" for="penH">Pen zone height: <b id="hv">245 px</b></label>
-    <input type="range" id="penH" min="160" max="380" step="5" value="245">
-    <label class="r" for="right">Right column width: <b id="rv">12%</b></label>
-    <input type="range" id="right" min="8" max="20" value="12">
-    <label class="chk"><input type="checkbox" id="mirror"><span>Buttons on the left (left-handed)</span></label>
+                <h2>Layout</h2>
+                <label class="r" for="penH">Pen zone height: <b id="hv">245 px</b></label>
+                <input type="range" id="penH" min="160" max="380" step="5" value="245" />
+                <label class="r" for="right">Right column width: <b id="rv">12%</b></label>
+                <input type="range" id="right" min="8" max="20" value="12" />
+                <label class="chk"
+                    ><input type="checkbox" id="mirror" /><span
+                        >Buttons on the left (left-handed)</span
+                    ></label
+                >
 
-    <h2>Behaviour</h2>
-    <label class="r" for="edgeW">Side edge width: <b id="ev">5 px</b></label>
-    <input type="range" id="edgeW" min="2" max="10" value="5">
-    <label class="chk"><input type="checkbox" id="guide" checked><span>Save on an empty side jumps there<small>instead of a disabled button</small></span></label>
-    <label class="chk"><input type="checkbox" id="palm" checked><span>Palm guard<small>buttons ignore fingers while the pen writes and 500 ms after; saves need a short tap</small></span></label>
+                <h2>Behaviour</h2>
+                <label class="r" for="edgeW">Side edge width: <b id="ev">5 px</b></label>
+                <input type="range" id="edgeW" min="2" max="10" value="5" />
+                <label class="chk"
+                    ><input type="checkbox" id="guide" checked /><span
+                        >Save on an empty side jumps there<small
+                            >instead of a disabled button</small
+                        ></span
+                    ></label
+                >
+                <label class="chk"
+                    ><input type="checkbox" id="palm" checked /><span
+                        >Palm guard<small
+                            >buttons ignore fingers while the pen writes and 500 ms after; saves
+                            need a short tap</small
+                        ></span
+                    ></label
+                >
 
-    <h2>Testing</h2>
-    <label class="chk"><input type="checkbox" id="dbg" checked><span>Show what the pen sends<small>type, buttons, button, pressure: press the S Pen side button while drawing</small></span></label>
-    <label class="chk"><input type="checkbox" id="finger"><span>A finger draws too<small>off like in the plugin: fingers are the palm</small></span></label>
-    <label class="chk"><input type="checkbox" id="simKbd" checked><span>Simulate the keyboard (desktop)</span></label>
-    <button id="sample">Fill with sample text</button>
-  </aside>
+                <h2>Testing</h2>
+                <label class="chk"
+                    ><input type="checkbox" id="dbg" checked /><span
+                        >Show what the pen sends<small
+                            >type, buttons, button, pressure: press the S Pen side button while
+                            drawing</small
+                        ></span
+                    ></label
+                >
+                <label class="chk"
+                    ><input type="checkbox" id="finger" /><span
+                        >A finger draws too<small
+                            >off like in the plugin: fingers are the palm</small
+                        ></span
+                    ></label
+                >
+                <label class="chk"
+                    ><input type="checkbox" id="simKbd" checked /><span
+                        >Simulate the keyboard (desktop)</span
+                    ></label
+                >
+                <button id="sample">Fill with sample text</button>
+            </aside>
 
-  <div class="phone" id="phone">
-    <div class="statusbar"><span>07:22</span><span>94%</span></div>
-    <div class="titlebar">
-      <button class="ib drawer-btn" id="drawerBtn" title="Options">☰</button>
-      <span class="title">Biology</span><span class="badge" id="badge"></span>
-      <button class="ib" id="del" title="Delete card"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14H5V6"/><path d="M8 6V4h8v2"/><path d="M10 11v5M14 11v5"/></svg></button>
-      <span class="gap"></span>
-      <button class="ib" id="close" title="Close"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-    </div>
-    <div class="main" id="main">
-      <div class="tools">
-        <span class="sidelabel" id="sideLabel">FRONT</span>
-        <button class="ib" id="size" title="Pen size"><span class="dot" id="sizeDot"></span></button>
-        <button class="ib" id="eraser" title="Eraser"><svg viewBox="0 0 24 24"><path d="m7 21-4-4 10-10 7 7-7 7z"/><path d="M22 21H7"/></svg></button>
-        <button class="ib" id="undo" title="Undo on this side"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-        <button class="ib" id="clear" title="Clear this side"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg></button>
-      </div>
-      <div class="pen" id="pen"><canvas id="canvas"></canvas><span class="ph" id="ph"></span><div class="cursor" id="cursor"></div><div class="dbg" id="dbgLine">pen: –</div></div>
-      <div class="textwrap"><textarea id="ta" aria-label="Text of this side"></textarea><span class="ph" id="tph"></span></div>
-      <button class="switch" id="switch" title="Front ⇄ Back">
-        <span class="s" id="sF">Front</span><span class="arrow">⇅</span><span class="s" id="sB">Back</span>
-      </button>
-      <div class="saves">
-        <button class="next" id="saveNext">Save<br>&amp;<br>next</button>
-        <button class="close" id="saveClose">Save<br>&amp;<br>close</button>
-      </div>
-    </div>
-    <div class="kbd" id="kbd"></div>
-    <div class="toast" id="toast"></div>
-  </div>
-</div>
-<script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const isPhone = () => matchMedia("(max-width: 760px)").matches;
-  const SIZES = [1.6, 2.5, 4]; // pen: small (default), medium, large
-  const ERASER_SIZES = [5, 9, 15]; // eraser radius: small, medium (default), large; fits the button
-  const PALM_MS = 500, TAP_MS = 450, TAP_SLOP = 12;
-  const newCard = () => ({ sides: [{ text: "", strokes: [] }, { text: "", strokes: [] }] });
-  let card = newCard(), active = 0, sizeIdx = 0, eraserIdx = 1, eraser = false, added = 0;
-  let penDown = false, lastPenAt = 0, delArmedAt = 0;
-  const undo = [[], []];
+            <div class="phone" id="phone">
+                <div class="statusbar"><span>07:22</span><span>94%</span></div>
+                <div class="titlebar">
+                    <button class="ib drawer-btn" id="drawerBtn" title="Options">☰</button>
+                    <span class="title">Biology</span><span class="badge" id="badge"></span>
+                    <button class="ib" id="del" title="Delete card">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M3 6h18" />
+                            <path d="M19 6v14H5V6" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M10 11v5M14 11v5" />
+                        </svg>
+                    </button>
+                    <span class="gap"></span>
+                    <button class="ib" id="close" title="Close">
+                        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div class="main" id="main">
+                    <div class="tools">
+                        <span class="sidelabel" id="sideLabel">FRONT</span>
+                        <button class="ib" id="size" title="Pen size">
+                            <span class="dot" id="sizeDot"></span>
+                        </button>
+                        <button class="ib" id="eraser" title="Eraser">
+                            <svg viewBox="0 0 24 24">
+                                <path d="m7 21-4-4 10-10 7 7-7 7z" />
+                                <path d="M22 21H7" />
+                            </svg>
+                        </button>
+                        <button class="ib" id="undo" title="Undo on this side">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M9 14 4 9l5-5" />
+                                <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+                            </svg>
+                        </button>
+                        <button class="ib" id="clear" title="Clear this side">
+                            <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="9" />
+                                <path d="m5.6 5.6 12.8 12.8" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="pen" id="pen">
+                        <canvas id="canvas"></canvas><span class="ph" id="ph"></span>
+                        <div class="cursor" id="cursor"></div>
+                        <div class="dbg" id="dbgLine">pen: –</div>
+                    </div>
+                    <div class="textwrap">
+                        <textarea id="ta" aria-label="Text of this side"></textarea
+                        ><span class="ph" id="tph"></span>
+                    </div>
+                    <button class="switch" id="switch" title="Front ⇄ Back">
+                        <span class="s" id="sF">Front</span><span class="arrow">⇅</span
+                        ><span class="s" id="sB">Back</span>
+                    </button>
+                    <div class="saves">
+                        <button class="next" id="saveNext">Save<br />&amp;<br />next</button>
+                        <button class="close" id="saveClose">Save<br />&amp;<br />close</button>
+                    </div>
+                </div>
+                <div class="kbd" id="kbd"></div>
+                <div class="toast" id="toast"></div>
+            </div>
+        </div>
+        <script>
+            (() => {
+                const $ = (id) => document.getElementById(id);
+                const isPhone = () => matchMedia("(max-width: 760px)").matches;
+                const SIZES = [1.6, 2.5, 4]; // pen: small (default), medium, large
+                const ERASER_SIZES = [5, 9, 15]; // eraser radius: small, medium (default), large; fits the button
+                const PALM_MS = 500,
+                    TAP_MS = 450,
+                    TAP_SLOP = 12;
+                const newCard = () => ({
+                    sides: [
+                        { text: "", strokes: [] },
+                        { text: "", strokes: [] },
+                    ],
+                });
+                let card = newCard(),
+                    active = 0,
+                    sizeIdx = 0,
+                    eraserIdx = 1,
+                    eraser = false,
+                    added = 0;
+                let penDown = false,
+                    lastPenAt = 0,
+                    delArmedAt = 0;
+                const undo = [[], []];
 
-  const side = () => card.sides[active];
-  const has = (s) => s.text.trim() !== "" || s.strokes.length > 0;
+                const side = () => card.sides[active];
+                const has = (s) => s.text.trim() !== "" || s.strokes.length > 0;
 
-  // MARK: rendering
-  function show() {
-    $("ta").value = side().text;
-    $("sideLabel").textContent = active === 0 ? "FRONT" : "BACK";
-    $("ph").innerHTML = `Draw on <b>${active === 0 ? "front" : "back"}</b>`;
-    $("tph").innerHTML = `Type the <b>${active === 0 ? "question" : "answer"}</b>`;
-    $("main").classList.toggle("back", active === 1);
-    $("sF").classList.toggle("active", active === 0);
-    $("sB").classList.toggle("active", active === 1);
-    draw(); update();
-  }
-  function update() {
-    const ready = card.sides.every(has);
-    for (const b of [$("saveNext"), $("saveClose")]) {
-      b.classList.toggle("wait", !ready);
-      b.disabled = !ready && !$("guide").checked;
-    }
-    $("undo").disabled = undo[active].length === 0;
-    $("clear").disabled = !has(side());
-    $("badge").textContent = added ? `${added} added` : "";
-    // The size button sets the size of the tool in use
-    // The eraser's ring is exactly the size of its circle in the pen zone
-    const dotPx = eraser ? ERASER_SIZES[eraserIdx] * 2 : SIZES[sizeIdx] * 2.4 + 3;
-    $("sizeDot").style.width = $("sizeDot").style.height = dotPx + "px";
-    $("sizeDot").classList.toggle("ring", eraser);
-    $("size").title = eraser ? "Eraser size" : "Pen size";
-    const d = ERASER_SIZES[eraserIdx] * 2;
-    $("cursor").style.width = $("cursor").style.height = d + "px";
-    if (!eraser) $("cursor").style.display = "none";
-    $("eraser").classList.toggle("on", eraser);
-    $("pen").classList.toggle("erasing", eraser);
-    $("ph").style.display = side().strokes.length ? "none" : "";
-    $("tph").style.display = $("ta").value ? "none" : "";
-  }
-  function toast(t, warn) {
-    const el = $("toast"); el.textContent = t; el.classList.toggle("warn", !!warn); el.classList.add("show");
-    clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 1400);
-  }
-  function flash(el) { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+                // MARK: rendering
+                function show() {
+                    $("ta").value = side().text;
+                    $("sideLabel").textContent = active === 0 ? "FRONT" : "BACK";
+                    $("ph").innerHTML = `Draw on <b>${active === 0 ? "front" : "back"}</b>`;
+                    $("tph").innerHTML = `Type the <b>${active === 0 ? "question" : "answer"}</b>`;
+                    $("main").classList.toggle("back", active === 1);
+                    $("sF").classList.toggle("active", active === 0);
+                    $("sB").classList.toggle("active", active === 1);
+                    draw();
+                    update();
+                }
+                function update() {
+                    const ready = card.sides.every(has);
+                    for (const b of [$("saveNext"), $("saveClose")]) {
+                        b.classList.toggle("wait", !ready);
+                        b.disabled = !ready && !$("guide").checked;
+                    }
+                    $("undo").disabled = undo[active].length === 0;
+                    $("clear").disabled = !has(side());
+                    $("badge").textContent = added ? `${added} added` : "";
+                    // The size button sets the size of the tool in use
+                    // The eraser's ring is exactly the size of its circle in the pen zone
+                    const dotPx = eraser ? ERASER_SIZES[eraserIdx] * 2 : SIZES[sizeIdx] * 2.4 + 3;
+                    $("sizeDot").style.width = $("sizeDot").style.height = dotPx + "px";
+                    $("sizeDot").classList.toggle("ring", eraser);
+                    $("size").title = eraser ? "Eraser size" : "Pen size";
+                    const d = ERASER_SIZES[eraserIdx] * 2;
+                    $("cursor").style.width = $("cursor").style.height = d + "px";
+                    if (!eraser) $("cursor").style.display = "none";
+                    $("eraser").classList.toggle("on", eraser);
+                    $("pen").classList.toggle("erasing", eraser);
+                    $("ph").style.display = side().strokes.length ? "none" : "";
+                    $("tph").style.display = $("ta").value ? "none" : "";
+                }
+                function toast(t, warn) {
+                    const el = $("toast");
+                    el.textContent = t;
+                    el.classList.toggle("warn", !!warn);
+                    el.classList.add("show");
+                    clearTimeout(toast.t);
+                    toast.t = setTimeout(() => el.classList.remove("show"), 1400);
+                }
+                function flash(el) {
+                    el.classList.remove("flash");
+                    void el.offsetWidth;
+                    el.classList.add("flash");
+                }
 
-  // MARK: buttons, with the palm guard
-  // Buttons never take the focus from the text zone, so the keyboard stays open
-  function button(el, action, { tapOnly = false } = {}) {
-    let down = null;
-    el.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      down = { x: e.clientX, y: e.clientY, t: e.timeStamp, type: e.pointerType };
-    });
-    el.addEventListener("pointerup", (e) => {
-      const d = down; down = null;
-      if (!d || el.disabled) return;
-      if ($("palm").checked && d.type === "touch") {
-        if (penDown || Date.now() - lastPenAt < PALM_MS) { toast("ignored: palm while writing", true); return; }
-        if (tapOnly && (e.timeStamp - d.t > TAP_MS || Math.hypot(e.clientX - d.x, e.clientY - d.y) > TAP_SLOP)) {
-          toast("ignored: not a short tap", true); return;
-        }
-      }
-      action();
-    });
-    el.addEventListener("pointercancel", () => (down = null));
-  }
+                // MARK: buttons, with the palm guard
+                // Buttons never take the focus from the text zone, so the keyboard stays open
+                function button(el, action, { tapOnly = false } = {}) {
+                    let down = null;
+                    el.addEventListener("pointerdown", (e) => {
+                        e.preventDefault();
+                        down = { x: e.clientX, y: e.clientY, t: e.timeStamp, type: e.pointerType };
+                    });
+                    el.addEventListener("pointerup", (e) => {
+                        const d = down;
+                        down = null;
+                        if (!d || el.disabled) return;
+                        if ($("palm").checked && d.type === "touch") {
+                            if (penDown || Date.now() - lastPenAt < PALM_MS) {
+                                toast("ignored: palm while writing", true);
+                                return;
+                            }
+                            if (
+                                tapOnly &&
+                                (e.timeStamp - d.t > TAP_MS ||
+                                    Math.hypot(e.clientX - d.x, e.clientY - d.y) > TAP_SLOP)
+                            ) {
+                                toast("ignored: not a short tap", true);
+                                return;
+                            }
+                        }
+                        action();
+                    });
+                    el.addEventListener("pointercancel", () => (down = null));
+                }
 
-  button($("switch"), () => { side().text = $("ta").value; active = 1 - active; show(); });
-  button($("size"), () => {
-    if (eraser) eraserIdx = (eraserIdx + 1) % ERASER_SIZES.length;
-    else sizeIdx = (sizeIdx + 1) % SIZES.length;
-    update();
-  });
-  button($("eraser"), () => { eraser = !eraser; update(); });
-  button($("undo"), () => { if (undo[active].length) side().strokes = undo[active].pop(); draw(); update(); });
-  button($("clear"), () => { undo[active].push(side().strokes); card.sides[active] = { text: "", strokes: [] }; $("ta").value = ""; draw(); update(); });
-  function save(next) {
-    const empty = card.sides.findIndex((s) => !has(s));
-    if (empty >= 0) {
-      if (active !== empty) { side().text = $("ta").value; active = empty; show(); }
-      flash($("pen")); flash($("ta"));
-      toast(`${empty === 0 ? "Front" : "Back"} is empty`, true);
-      return;
-    }
-    added++; card = newCard(); active = 0; undo[0] = []; undo[1] = []; show();
-    toast(next ? "Card saved, next card" : "Card saved, editor closed");
-  }
-  button($("saveNext"), () => save(true), { tapOnly: true });
-  button($("saveClose"), () => save(false), { tapOnly: true });
-  button($("close"), () => toast("Closed; the unsaved card is kept as a draft"));
-  button($("del"), () => {
-    const del = $("del");
-    if (!has(card.sides[0]) && !has(card.sides[1])) { toast("Empty card closed"); return; }
-    if (Date.now() - delArmedAt < 3000) {
-      delArmedAt = 0; del.classList.remove("armed"); del.innerHTML = del.dataset.icon;
-      card = newCard(); active = 0; show(); toast("Card deleted");
-      return;
-    }
-    delArmedAt = Date.now(); del.dataset.icon ??= del.innerHTML; del.classList.add("armed"); del.textContent = "Tap again to delete";
-    setTimeout(() => { if (Date.now() - delArmedAt >= 3000) { del.classList.remove("armed"); del.innerHTML = del.dataset.icon; } }, 3100);
-  });
-  $("ta").addEventListener("input", () => { side().text = $("ta").value; update(); });
+                button($("switch"), () => {
+                    side().text = $("ta").value;
+                    active = 1 - active;
+                    show();
+                });
+                button($("size"), () => {
+                    if (eraser) eraserIdx = (eraserIdx + 1) % ERASER_SIZES.length;
+                    else sizeIdx = (sizeIdx + 1) % SIZES.length;
+                    update();
+                });
+                button($("eraser"), () => {
+                    eraser = !eraser;
+                    update();
+                });
+                button($("undo"), () => {
+                    if (undo[active].length) side().strokes = undo[active].pop();
+                    draw();
+                    update();
+                });
+                button($("clear"), () => {
+                    undo[active].push(side().strokes);
+                    card.sides[active] = { text: "", strokes: [] };
+                    $("ta").value = "";
+                    draw();
+                    update();
+                });
+                function save(next) {
+                    const empty = card.sides.findIndex((s) => !has(s));
+                    if (empty >= 0) {
+                        if (active !== empty) {
+                            side().text = $("ta").value;
+                            active = empty;
+                            show();
+                        }
+                        flash($("pen"));
+                        flash($("ta"));
+                        toast(`${empty === 0 ? "Front" : "Back"} is empty`, true);
+                        return;
+                    }
+                    added++;
+                    card = newCard();
+                    active = 0;
+                    undo[0] = [];
+                    undo[1] = [];
+                    show();
+                    toast(next ? "Card saved, next card" : "Card saved, editor closed");
+                }
+                button($("saveNext"), () => save(true), { tapOnly: true });
+                button($("saveClose"), () => save(false), { tapOnly: true });
+                button($("close"), () => toast("Closed; the unsaved card is kept as a draft"));
+                button($("del"), () => {
+                    const del = $("del");
+                    if (!has(card.sides[0]) && !has(card.sides[1])) {
+                        toast("Empty card closed");
+                        return;
+                    }
+                    if (Date.now() - delArmedAt < 3000) {
+                        delArmedAt = 0;
+                        del.classList.remove("armed");
+                        del.innerHTML = del.dataset.icon;
+                        card = newCard();
+                        active = 0;
+                        show();
+                        toast("Card deleted");
+                        return;
+                    }
+                    delArmedAt = Date.now();
+                    del.dataset.icon ??= del.innerHTML;
+                    del.classList.add("armed");
+                    del.textContent = "Tap again to delete";
+                    setTimeout(() => {
+                        if (Date.now() - delArmedAt >= 3000) {
+                            del.classList.remove("armed");
+                            del.innerHTML = del.dataset.icon;
+                        }
+                    }, 3100);
+                });
+                $("ta").addEventListener("input", () => {
+                    side().text = $("ta").value;
+                    update();
+                });
 
-  // MARK: ink
-  const canvas = $("canvas"), pen = $("pen");
-  function draw() {
-    const dpr = devicePixelRatio || 1, r = pen.getBoundingClientRect();
-    if (canvas.width !== Math.round(r.width * dpr) || canvas.height !== Math.round(r.height * dpr)) {
-      canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
-    }
-    const g = canvas.getContext("2d");
-    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height);
-    g.strokeStyle = "#333"; g.lineWidth = 1;
-    for (let y = 44; y < r.height; y += 44) { g.beginPath(); g.moveTo(0, y + .5); g.lineTo(r.width, y + .5); g.stroke(); }
-    g.strokeStyle = "#e6e6e6"; g.lineCap = g.lineJoin = "round";
-    for (const st of side().strokes) {
-      g.lineWidth = st.size; g.beginPath();
-      st.pts.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
-    }
-  }
-  new ResizeObserver(draw).observe(pen);
-  let cur = null, before = null;
-  const pt = (e) => { const r = pen.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  function eraseAt([x, y]) {
-    const R = ERASER_SIZES[eraserIdx], out = [];
-    for (const st of side().strokes) {
-      let run = [];
-      for (const p of st.pts) {
-        if (Math.hypot(p[0] - x, p[1] - y) < R) { if (run.length > 1) out.push({ ...st, pts: run }); run = []; }
-        else run.push(p);
-      }
-      if (run.length > 1 || (run.length === 1 && st.pts.length === 1)) out.push({ ...st, pts: run });
-    }
-    side().strokes = out;
-  }
-  // The last events, each line shown once with a count, so a short button press isn't missed
-  const dbgLines = [];
-  function dbg(line) {
-    if (!$("dbg").checked) return;
-    const last = dbgLines[dbgLines.length - 1];
-    if (last && last.line === line) last.n++;
-    else dbgLines.push({ line, n: 1 });
-    while (dbgLines.length > 7) dbgLines.shift();
-    $("dbgLine").textContent = dbgLines.map((l) => (l.n > 1 ? `${l.line} ×${l.n}` : l.line)).join("\n");
-  }
-  function logPen(e) {
-    dbg(`${e.type.replace("pointer", "")} ${e.pointerType} buttons=${e.buttons} button=${e.button} p=${(e.pressure || 0).toFixed(1)} w=${Math.round(e.width)}${e.altKey || e.ctrlKey || e.shiftKey || e.metaKey ? " mod" : ""}`);
-  }
-  for (const type of ["contextmenu", "auxclick", "keydown", "mousedown"]) {
-    window.addEventListener(type, (e) =>
-      dbg(`${type} ${e.key ?? ""}${e.key !== undefined ? " code=" + e.keyCode : " button=" + e.button}`), true);
-  }
-  pen.addEventListener("contextmenu", (e) => e.preventDefault());
-  // Any button besides the tip (the side button, the eraser end) erases while held
-  const wantsErase = (e) => eraser || (e.buttons & ~1) !== 0 || (e.button > 0 && e.button !== -1);
-  pen.addEventListener("pointerdown", (e) => {
-    logPen(e);
-    hoverPressed = 0; lastContactAt = Date.now();
-    if (e.pointerType === "touch" && !$("finger").checked) return;
-    e.preventDefault(); // keeps the focus (and the keyboard) in the text zone
-    pen.setPointerCapture(e.pointerId);
-    if (e.pointerType !== "touch") { penDown = true; lastPenAt = Date.now(); }
-    before = side().strokes;
-    if (wantsErase(e)) { cur = "erase"; side().strokes = [...before]; eraseAt(pt(e)); moveCursor(e); }
-    else { cur = { size: SIZES[sizeIdx], pts: [pt(e)] }; side().strokes = [...before, cur]; }
-    draw(); update();
-  });
-  // The S Pen's side button, pressed while the pen hovers: Chrome reports buttons going from 0 to 1
-  // with no pressure and no pointerdown. A press toggles the eraser.
-  // Not right after the tip touched or lifted (Chrome may report buttons=1 then), and only after
-  // two hover samples in a row with the button pressed.
-  let hoverPressed = 0, lastContactAt = 0, toggled = false;
-  function sideButton(e) {
-    if (e.pointerType !== "pen" || cur || Date.now() - lastContactAt < 250) { hoverPressed = 0; return; }
-    const pressed = (e.buttons & 1) !== 0 && !(e.pressure > 0);
-    if (!pressed) { hoverPressed = 0; toggled = false; return; }
-    if (++hoverPressed >= 2 && !toggled) {
-      toggled = true;
-      eraser = !eraser; update();
-    }
-  }
-  pen.addEventListener("pointerover", sideButton);
-  function moveCursor(e) {
-    const c = $("cursor");
-    if (!(eraser || cur === "erase") || e.pointerType === "touch") { c.style.display = "none"; return; }
-    const [x, y] = pt(e);
-    c.style.left = x + "px"; c.style.top = y + "px"; c.style.display = "block";
-  }
-  pen.addEventListener("pointerleave", () => { if (cur !== "erase") $("cursor").style.display = "none"; });
-  pen.addEventListener("pointermove", (e) => {
-    logPen(e);
-    moveCursor(e);
-    sideButton(e);
-    if (e.pointerType !== "touch") lastPenAt = Date.now();
-    if (!cur) return;
-    const p = pt(e), r = pen.getBoundingClientRect();
-    if (p[0] < 0 || p[1] < 0 || p[0] > r.width || p[1] > r.height) return;
-    if (cur === "erase") eraseAt(p); else cur.pts.push(p);
-    draw();
-  });
-  const end = (e) => {
-    logPen(e);
-    if (e.pointerType !== "touch") { penDown = false; lastPenAt = Date.now(); lastContactAt = Date.now(); }
-    if (!cur) return;
-    undo[active].push(before); cur = null; update();
-    if (!eraser) $("cursor").style.display = "none";
-  };
-  pen.addEventListener("pointerup", end); pen.addEventListener("pointercancel", end);
-  // Fingers on the page also show the palm guard working
-  document.addEventListener("pointerdown", (e) => { if (e.pointerType === "pen") lastPenAt = Date.now(); }, true);
+                // MARK: ink
+                const canvas = $("canvas"),
+                    pen = $("pen");
+                function draw() {
+                    const dpr = devicePixelRatio || 1,
+                        r = pen.getBoundingClientRect();
+                    if (
+                        canvas.width !== Math.round(r.width * dpr) ||
+                        canvas.height !== Math.round(r.height * dpr)
+                    ) {
+                        canvas.width = Math.round(r.width * dpr);
+                        canvas.height = Math.round(r.height * dpr);
+                    }
+                    const g = canvas.getContext("2d");
+                    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+                    g.clearRect(0, 0, r.width, r.height);
+                    g.strokeStyle = "#333";
+                    g.lineWidth = 1;
+                    for (let y = 44; y < r.height; y += 44) {
+                        g.beginPath();
+                        g.moveTo(0, y + 0.5);
+                        g.lineTo(r.width, y + 0.5);
+                        g.stroke();
+                    }
+                    g.strokeStyle = "#e6e6e6";
+                    g.lineCap = g.lineJoin = "round";
+                    for (const st of side().strokes) {
+                        g.lineWidth = st.size;
+                        g.beginPath();
+                        st.pts.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y)));
+                        g.stroke();
+                    }
+                }
+                new ResizeObserver(draw).observe(pen);
+                let cur = null,
+                    before = null;
+                const pt = (e) => {
+                    const r = pen.getBoundingClientRect();
+                    return [e.clientX - r.left, e.clientY - r.top];
+                };
+                function eraseAt([x, y]) {
+                    const R = ERASER_SIZES[eraserIdx],
+                        out = [];
+                    for (const st of side().strokes) {
+                        let run = [];
+                        for (const p of st.pts) {
+                            if (Math.hypot(p[0] - x, p[1] - y) < R) {
+                                if (run.length > 1) out.push({ ...st, pts: run });
+                                run = [];
+                            } else run.push(p);
+                        }
+                        if (run.length > 1 || (run.length === 1 && st.pts.length === 1))
+                            out.push({ ...st, pts: run });
+                    }
+                    side().strokes = out;
+                }
+                // The last events, each line shown once with a count, so a short button press isn't missed
+                const dbgLines = [];
+                function dbg(line) {
+                    if (!$("dbg").checked) return;
+                    const last = dbgLines[dbgLines.length - 1];
+                    if (last && last.line === line) last.n++;
+                    else dbgLines.push({ line, n: 1 });
+                    while (dbgLines.length > 7) dbgLines.shift();
+                    $("dbgLine").textContent = dbgLines
+                        .map((l) => (l.n > 1 ? `${l.line} ×${l.n}` : l.line))
+                        .join("\n");
+                }
+                function logPen(e) {
+                    dbg(
+                        `${e.type.replace("pointer", "")} ${e.pointerType} buttons=${e.buttons} button=${e.button} p=${(e.pressure || 0).toFixed(1)} w=${Math.round(e.width)}${e.altKey || e.ctrlKey || e.shiftKey || e.metaKey ? " mod" : ""}`,
+                    );
+                }
+                for (const type of ["contextmenu", "auxclick", "keydown", "mousedown"]) {
+                    window.addEventListener(
+                        type,
+                        (e) =>
+                            dbg(
+                                `${type} ${e.key ?? ""}${e.key !== undefined ? " code=" + e.keyCode : " button=" + e.button}`,
+                            ),
+                        true,
+                    );
+                }
+                pen.addEventListener("contextmenu", (e) => e.preventDefault());
+                // Any button besides the tip (the side button, the eraser end) erases while held
+                const wantsErase = (e) =>
+                    eraser || (e.buttons & ~1) !== 0 || (e.button > 0 && e.button !== -1);
+                pen.addEventListener("pointerdown", (e) => {
+                    logPen(e);
+                    hoverPressed = 0;
+                    lastContactAt = Date.now();
+                    if (e.pointerType === "touch" && !$("finger").checked) return;
+                    e.preventDefault(); // keeps the focus (and the keyboard) in the text zone
+                    pen.setPointerCapture(e.pointerId);
+                    if (e.pointerType !== "touch") {
+                        penDown = true;
+                        lastPenAt = Date.now();
+                    }
+                    before = side().strokes;
+                    if (wantsErase(e)) {
+                        cur = "erase";
+                        side().strokes = [...before];
+                        eraseAt(pt(e));
+                        moveCursor(e);
+                    } else {
+                        cur = { size: SIZES[sizeIdx], pts: [pt(e)] };
+                        side().strokes = [...before, cur];
+                    }
+                    draw();
+                    update();
+                });
+                // The S Pen's side button, pressed while the pen hovers: Chrome reports buttons going from 0 to 1
+                // with no pressure and no pointerdown. A press toggles the eraser.
+                // Not right after the tip touched or lifted (Chrome may report buttons=1 then), and only after
+                // two hover samples in a row with the button pressed.
+                let hoverPressed = 0,
+                    lastContactAt = 0,
+                    toggled = false;
+                function sideButton(e) {
+                    if (e.pointerType !== "pen" || cur || Date.now() - lastContactAt < 250) {
+                        hoverPressed = 0;
+                        return;
+                    }
+                    const pressed = (e.buttons & 1) !== 0 && !(e.pressure > 0);
+                    if (!pressed) {
+                        hoverPressed = 0;
+                        toggled = false;
+                        return;
+                    }
+                    if (++hoverPressed >= 2 && !toggled) {
+                        toggled = true;
+                        eraser = !eraser;
+                        update();
+                    }
+                }
+                pen.addEventListener("pointerover", sideButton);
+                function moveCursor(e) {
+                    const c = $("cursor");
+                    if (!(eraser || cur === "erase") || e.pointerType === "touch") {
+                        c.style.display = "none";
+                        return;
+                    }
+                    const [x, y] = pt(e);
+                    c.style.left = x + "px";
+                    c.style.top = y + "px";
+                    c.style.display = "block";
+                }
+                pen.addEventListener("pointerleave", () => {
+                    if (cur !== "erase") $("cursor").style.display = "none";
+                });
+                pen.addEventListener("pointermove", (e) => {
+                    logPen(e);
+                    moveCursor(e);
+                    sideButton(e);
+                    if (e.pointerType !== "touch") lastPenAt = Date.now();
+                    if (!cur) return;
+                    const p = pt(e),
+                        r = pen.getBoundingClientRect();
+                    if (p[0] < 0 || p[1] < 0 || p[0] > r.width || p[1] > r.height) return;
+                    if (cur === "erase") eraseAt(p);
+                    else cur.pts.push(p);
+                    draw();
+                });
+                const end = (e) => {
+                    logPen(e);
+                    if (e.pointerType !== "touch") {
+                        penDown = false;
+                        lastPenAt = Date.now();
+                        lastContactAt = Date.now();
+                    }
+                    if (!cur) return;
+                    undo[active].push(before);
+                    cur = null;
+                    update();
+                    if (!eraser) $("cursor").style.display = "none";
+                };
+                pen.addEventListener("pointerup", end);
+                pen.addEventListener("pointercancel", end);
+                // Fingers on the page also show the palm guard working
+                document.addEventListener(
+                    "pointerdown",
+                    (e) => {
+                        if (e.pointerType === "pen") lastPenAt = Date.now();
+                    },
+                    true,
+                );
 
-  // MARK: keyboard
-  const rows = ["qwertzuiop", "asdfghjkl", "⇧yxcvbnm⌫", ["123", ",", "space", ".", "↵"]];
-  $("kbd").innerHTML = `<div class="sugg"><span>is</span><span>I</span><span>and</span></div>` + rows.map((r) =>
-    `<div class="row">${[...r].map((k) => {
-      const cls = k === "space" ? "k sp" : ["⇧", "⌫", "123", "↵"].includes(k) ? "k w" : "k";
-      return `<div class="${cls}" data-k="${k}">${k === "space" ? "" : k}</div>`;
-    }).join("")}</div>`).join("");
-  $("kbd").addEventListener("pointerdown", (e) => e.preventDefault());
-  $("kbd").addEventListener("click", (e) => {
-    const k = e.target.dataset && e.target.dataset.k, ta = $("ta");
-    if (!k) return;
-    ta.focus();
-    const ins = (t) => { const p = ta.selectionStart; ta.value = ta.value.slice(0, p) + t + ta.value.slice(ta.selectionEnd); ta.selectionStart = ta.selectionEnd = p + t.length; };
-    if (k === "⌫") { const p = ta.selectionStart; if (p > 0) { ta.value = ta.value.slice(0, p - 1) + ta.value.slice(p); ta.selectionStart = ta.selectionEnd = p - 1; } }
-    else if (k === "space") ins(" ");
-    else if (k === "↵") ins("\n");
-    else if (k.length === 1 && k !== "⇧") ins(k);
-    ta.dispatchEvent(new Event("input"));
-  });
-  $("simKbd").onchange = () => $("kbd").classList.toggle("off", !$("simKbd").checked);
+                // MARK: keyboard
+                const rows = [
+                    "qwertzuiop",
+                    "asdfghjkl",
+                    "⇧yxcvbnm⌫",
+                    ["123", ",", "space", ".", "↵"],
+                ];
+                $("kbd").innerHTML =
+                    `<div class="sugg"><span>is</span><span>I</span><span>and</span></div>` +
+                    rows
+                        .map(
+                            (r) =>
+                                `<div class="row">${[...r]
+                                    .map((k) => {
+                                        const cls =
+                                            k === "space"
+                                                ? "k sp"
+                                                : ["⇧", "⌫", "123", "↵"].includes(k)
+                                                  ? "k w"
+                                                  : "k";
+                                        return `<div class="${cls}" data-k="${k}">${k === "space" ? "" : k}</div>`;
+                                    })
+                                    .join("")}</div>`,
+                        )
+                        .join("");
+                $("kbd").addEventListener("pointerdown", (e) => e.preventDefault());
+                $("kbd").addEventListener("click", (e) => {
+                    const k = e.target.dataset && e.target.dataset.k,
+                        ta = $("ta");
+                    if (!k) return;
+                    ta.focus();
+                    const ins = (t) => {
+                        const p = ta.selectionStart;
+                        ta.value = ta.value.slice(0, p) + t + ta.value.slice(ta.selectionEnd);
+                        ta.selectionStart = ta.selectionEnd = p + t.length;
+                    };
+                    if (k === "⌫") {
+                        const p = ta.selectionStart;
+                        if (p > 0) {
+                            ta.value = ta.value.slice(0, p - 1) + ta.value.slice(p);
+                            ta.selectionStart = ta.selectionEnd = p - 1;
+                        }
+                    } else if (k === "space") ins(" ");
+                    else if (k === "↵") ins("\n");
+                    else if (k.length === 1 && k !== "⇧") ins(k);
+                    ta.dispatchEvent(new Event("input"));
+                });
+                $("simKbd").onchange = () => $("kbd").classList.toggle("off", !$("simKbd").checked);
 
-  // On a phone: the editor is as tall as the visible area above the real keyboard
-  if (window.visualViewport) {
-    const fit = () => {
-      if (!isPhone()) return;
-      document.documentElement.style.setProperty("--app-h", visualViewport.height + "px");
-      window.scrollTo(0, 0); draw();
-    };
-    visualViewport.addEventListener("resize", fit); fit();
-  }
+                // On a phone: the editor is as tall as the visible area above the real keyboard
+                if (window.visualViewport) {
+                    const fit = () => {
+                        if (!isPhone()) return;
+                        document.documentElement.style.setProperty(
+                            "--app-h",
+                            visualViewport.height + "px",
+                        );
+                        window.scrollTo(0, 0);
+                        draw();
+                    };
+                    visualViewport.addEventListener("resize", fit);
+                    fit();
+                }
 
-  // MARK: controls
-  const root = document.documentElement.style;
-  $("penH").oninput = () => { root.setProperty("--pen-h", $("penH").value + "px"); $("hv").textContent = $("penH").value + " px"; draw(); };
-  $("right").oninput = () => { root.setProperty("--right", $("right").value + "%"); $("rv").textContent = $("right").value + "%"; draw(); };
-  $("mirror").onchange = () => document.body.classList.toggle("mirror", $("mirror").checked);
-  $("dbg").onchange = () => document.body.classList.toggle("showdbg", $("dbg").checked);
-  $("guide").onchange = show;
-  $("edgeW").oninput = () => { root.setProperty("--edge", $("edgeW").value + "px"); $("ev").textContent = $("edgeW").value + " px"; };
-  document.body.classList.toggle("showdbg", $("dbg").checked);
-  $("drawerBtn").onclick = () => $("controls").classList.toggle("open");
-  document.addEventListener("pointerdown", (e) => {
-    if (isPhone() && !$("controls").contains(e.target) && e.target !== $("drawerBtn")) $("controls").classList.remove("open");
-  });
-  $("sample").onclick = () => {
-    card.sides[0].text = "What does the sensitivity of a test measure?";
-    card.sides[1].text = "The true positive rate:\nP(positive | sick) = TP / (TP + FN)\n\nHigh sensitivity: few sick people are missed.\nUsed to rule a disease out (SnNout).";
-    show();
-  };
-  if (!isPhone()) $("ta").focus();
-  show();
-})();
-</script>
-</body>
+                // MARK: controls
+                const root = document.documentElement.style;
+                $("penH").oninput = () => {
+                    root.setProperty("--pen-h", $("penH").value + "px");
+                    $("hv").textContent = $("penH").value + " px";
+                    draw();
+                };
+                $("right").oninput = () => {
+                    root.setProperty("--right", $("right").value + "%");
+                    $("rv").textContent = $("right").value + "%";
+                    draw();
+                };
+                $("mirror").onchange = () =>
+                    document.body.classList.toggle("mirror", $("mirror").checked);
+                $("dbg").onchange = () =>
+                    document.body.classList.toggle("showdbg", $("dbg").checked);
+                $("guide").onchange = show;
+                $("edgeW").oninput = () => {
+                    root.setProperty("--edge", $("edgeW").value + "px");
+                    $("ev").textContent = $("edgeW").value + " px";
+                };
+                document.body.classList.toggle("showdbg", $("dbg").checked);
+                $("drawerBtn").onclick = () => $("controls").classList.toggle("open");
+                document.addEventListener("pointerdown", (e) => {
+                    if (
+                        isPhone() &&
+                        !$("controls").contains(e.target) &&
+                        e.target !== $("drawerBtn")
+                    )
+                        $("controls").classList.remove("open");
+                });
+                $("sample").onclick = () => {
+                    card.sides[0].text = "What does the sensitivity of a test measure?";
+                    card.sides[1].text =
+                        "The true positive rate:\nP(positive | sick) = TP / (TP + FN)\n\nHigh sensitivity: few sick people are missed.\nUsed to rule a disease out (SnNout).";
+                    show();
+                };
+                if (!isPhone()) $("ta").focus();
+                show();
+            })();
+        </script>
+    </body>
 </html>
