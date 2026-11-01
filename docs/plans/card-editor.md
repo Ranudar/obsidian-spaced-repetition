@@ -38,8 +38,8 @@ Already done on `main` (not part of this work): the edit dialog splits cards wit
 │ │  ink field                                           │ │
 │ └──────────────────────────────────────────────────────┘ │
 ├──────────────────────────────────────────────────────────┤
-│ Discard                        Save & close   Save & next │  add mode
-│ Cancel                                             Save   │  edit mode
+│ Delete card                    Save & close   Save & next │  add mode
+│ Delete card                                        Save   │  edit mode
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -68,7 +68,7 @@ Already done on `main` (not part of this work): the edit dialog splits cards wit
    (frontmatter, card with its schedule comment, code block, paragraph), or at the end of the note in
    reading view / when no editor is open; the fields clear, the counter goes up, focus returns to the
    front side's text area on desktop (on mobile nothing is focused, so no soft keyboard). Consecutive cards are inserted one after the other.
-   **Save & close**: insert and close. **Discard**: first tap arms it ("Tap again to discard"),
+   **Save & close**: insert and close. **Delete card**: first tap arms it ("Tap again to delete"),
    second tap within 3 s clears the card and closes.
 6. Closing with the back gesture / Esc / ✕ keeps the unsaved card as a draft (text and strokes);
    the next **Add card** restores it. An empty card leaves no draft.
@@ -96,7 +96,7 @@ The blank line before the end marker stops `---` from turning the line above int
 4. **Save**: changed handwriting overwrites its SVG; the card text is written only if it
    changed (typed text changed, handwriting added to a side or erased from it). The review window redraws the card with
    the new content. The schedule stays.
-5. **Cancel** / ✕ / back gesture: nothing is written.
+5. ✕ / Esc / back gesture: nothing is written. **Delete card** (two taps) removes the card.
 
 ### F3 Edit a card from the note
 
@@ -361,7 +361,7 @@ Feedback from the S22 Ultra (Obsidian Android, dark mode, S Pen) and what change
 
 1. **Counter in the header**: "N card(s) added" in the footer pushed Save & next off-screen. It is
    now a compact badge next to the note title ("2 added", hidden at 0). The footer holds only
-   Discard (left) · Save & close · Save & next (primary, right), with compact sizing on phones so
+   Delete card (left) · Save & close · Save & next (primary, right), with compact sizing on phones so
    all three fit at 360 CSS px.
 2. **No layout shift on mode switch**: the hint line under a side is gone; a dot badge
    (absolutely positioned) on the inactive mode button marks a hidden draft. Text and ink fields
@@ -437,7 +437,7 @@ Switching a side between Text and Pen was awkward once it had content. Input mod
 - **No stroke refit on edit**: strokes are loaded as stored (Pen Cards' `fitStrokes` on edit was not
   ported).
 - **Save & close** is disabled like Save & next while a side is empty; an empty card is closed with
-  ✕, Esc or Discard.
+  ✕, Esc or Delete card.
 - **Blank lines in text sides**: without an end marker a blank line would end the card, so blank
   lines typed in a side (outside code blocks) are saved as a `<br>` line.
 - **Separator line**: an edit keeps the separator line as written (e.g. with extra spaces) and the
@@ -457,7 +457,14 @@ Switching a side between Text and Pen was awkward once it had content. Input mod
 - **Image refresh** uses the query parameter `sr-ink` (Pen Cards used `pc`). Images that Obsidian adds
   after rendering are caught by a short-lived MutationObserver; live-preview editors are re-checked on
   `layout-change` and `active-leaf-change`.
-- **Discard** arms first on an empty card too, as in F1; nothing is lost either way.
+- **Delete card** replaces Discard (add) and Cancel (edit); closing without saving is the ✕.
+  On an empty new card it closes at once; otherwise it arms first. In edit mode it removes the card
+  with its schedule and end marker line from the note (also the review's own Delete Card) and
+  trashes the card's ink images no other note refers to.
+- **Backspace on Android**: the keyboard's delete next to an ink embed only fires `beforeinput`,
+  and Chrome may move the cursor over the image instead of deleting it. A delete next to an ink
+  embed therefore deletes it a moment later if the note's text didn't change. An ink embed the
+  user removes from a note is trashed after 2 s unless it is back or referenced elsewhere.
 - **Erased ink** (formerly ink → text) trashes the SVG only when no other note or card links to it (Obsidian's
   `resolvedLinks`, with this card's links counted by the file they resolve to, not by name), the
   new text has no link resolving to it, and no `.md` or `.canvas` file refers to it when read

@@ -15,15 +15,15 @@ strokes, so you can open a handwritten card later and keep writing, erase or und
 3. Fill in the front and the back, typing, writing by hand or both.
 4. Choose how to continue:
 
-| Button       | What it does                                                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Save & next  | Inserts the card and clears both sides, so you can write the next one right away.                                                     |
-| Save & close | Inserts the card and closes the editor.                                                                                               |
-| Discard      | The first tap changes the button to "Tap again to discard". A second tap within 3 seconds throws the card away and closes the editor. |
+| Button       | What it does                                                                                                                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Save & next  | Inserts the card and clears both sides, so you can write the next one right away.                                                                                                             |
+| Save & close | Inserts the card and closes the editor.                                                                                                                                                       |
+| Delete card  | Throws the card away and closes the editor. On an empty card one tap does it; otherwise the first tap changes the button to "Tap again to delete", and a second tap within 3 seconds deletes. |
 
-The buttons sit in one row at the bottom, **Discard** on the left and **Save & next** (the main
-button) on the right; they fit on small phone screens too. The save buttons stay disabled until both
-sides have content. `Ctrl/Cmd + Enter` does the same as **Save & next**.
+The buttons sit in one row at the bottom, **Delete card** on the left and **Save & next** (the main
+button) on the right; they fit on small phone screens too. The save buttons stay disabled, and look
+it, until both sides have content. `Ctrl/Cmd + Enter` does the same as **Save & next**.
 
 Once you have saved a card, a small badge next to the note's name in the header counts the cards
 added in this session (for example "2 added").
@@ -68,7 +68,7 @@ counts and in review.
 ### Drafts
 
 Closing the editor with `Esc`, the close button or the back gesture keeps the unsaved card as a
-draft, including any handwriting. The next **Add card** opens with that draft. **Discard** and an
+draft, including any handwriting. The next **Add card** opens with that draft. **Delete card** and an
 empty card leave no draft behind. Drafts are kept until Obsidian is closed or the plugin is reloaded.
 
 ## Typing and Writing by Hand
@@ -122,7 +122,10 @@ same editor, with the note's name in the header and both sides, each with its ty
 handwriting, ready to change.
 
 - **Save** writes the changes, keeps the card's review schedule and shows the updated card.
-- **Cancel**, `Esc`, the close button or the back gesture closes without writing anything.
+- **Delete card** (two taps) removes the card from its note, with its schedule and its end marker
+  line, and moves its handwriting images to the trash unless another note still shows them. During
+  review, the next card is shown.
+- `Esc`, the close button or the back gesture closes without writing anything.
 
 The note is only written when the card text changed, for example when you edited typed text, wrote
 on a side that had no handwriting yet or erased all of a side's handwriting. If you only changed
@@ -141,11 +144,12 @@ After saving, every visible copy of a changed image reloads. When the card text 
 is updated and Spaced Repetition rescans your notes.
 
 In live preview, a handwriting embed counts as one unit: with the cursor right after it, one
-`Backspace` deletes the whole embed, and `Delete` before it does the same. The cursor jumps over it in
-one step. If the image fills its line, put the cursor at the start of the next line: the first
-`Backspace` joins the lines, the second deletes the embed. With the cursor inside the embed's
-text, `Backspace` or `Delete` also deletes the whole embed. The image file itself stays in the
-vault. An embed written in inline code or a code block is plain text and is edited as such.
+`Backspace` deletes the whole embed, and `Delete` before it does the same, also with the Android
+keyboard. The cursor jumps over it in one step. With the cursor inside the embed's text,
+`Backspace` or `Delete` also deletes the whole embed. About two seconds later the image file goes to
+the trash, unless the embed is back by then (undo, paste) or another note still shows it; cutting
+the embed keeps the file. An embed written in inline code or a code block is plain text and is
+edited as such.
 
 Inside the review window, the pencil does the same as the **Edit** button. If the image is not part
 of any card in the note, a notice says so. Images in Canvas text nodes get a pencil, but can't be
