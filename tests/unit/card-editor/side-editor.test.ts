@@ -1,5 +1,5 @@
 import { Stroke } from "src/card-editor/core/strokes";
-import { SideEditor, SideEditorOptions, SideState } from "src/card-editor/side-editor";
+import { SideEditor, SideEditorOptions, SideState, wordAt } from "src/card-editor/side-editor";
 import { DEFAULT_SETTINGS, SRSettings } from "src/data/settings";
 import { TextDirection } from "src/utils/strings";
 
@@ -202,5 +202,16 @@ describe("SideEditor inkChanged", () => {
         // e.g. the eraser removed a stroke and undo restored it, as a new array
         side.setStrokes([a, b]);
         expect(side.inkChanged).toBe(false);
+    });
+});
+
+describe("wordAt", () => {
+    test("the word the cursor is in or right after; null outside a word", () => {
+        const text = "The heart has four chambers.";
+        expect(wordAt(text, 16)).toEqual([14, 18]);
+        expect(wordAt(text, 18)).toEqual([14, 18]);
+        expect(wordAt(text, 0)).toEqual([0, 3]);
+        expect(wordAt("a  b", 2)).toBeNull();
+        expect(wordAt("Größe", 2)).toEqual([0, 5]);
     });
 });

@@ -111,6 +111,9 @@ export class SideEditor {
         this.textArea.setAttr("aria-label", opts.label);
         this.textArea.addEventListener("input", this.onTextInput);
         this.textArea.addEventListener("keydown", this.onTextKeyDown);
+        // No Android selection toolbar (Cut, Translate, AI...) over the editor, like in Obsidian's
+        // own editor: the selection stays, marking a cloze is a tap on the highlighter
+        this.textArea.addEventListener("contextmenu", preventDefault);
         this.textArea.addEventListener("pointerdown", this.onTextPointerDown);
         renderHint(this.textWrap.createDiv({ cls: "sr-card-editor-text-hint" }), opts.textHint);
         this.previewEl = this.textWrap.createDiv({ cls: "sr-card-editor-preview" });
@@ -248,10 +251,19 @@ export class SideEditor {
      * Puts open and close around the selected text, like typing it: the cursor then goes after
      * close, or between the two when nothing was selected
      */
+    /**
+     * Wraps the selection in open/close. Without a selection, the word the cursor is in (or right
+     * after) is wrapped, so a tap in a word is enough; outside a word, an empty pair is inserted
+     * with the cursor inside.
+     */
     wrapSelection(open: string, close: string): void {
         const ta = this.textArea;
-        const start = ta.selectionStart ?? ta.value.length;
-        const end = ta.selectionEnd ?? start;
+        let start = ta.selectionStart ?? ta.value.length;
+        let end = ta.selectionEnd ?? start;
+        if (start === end) {
+            const word = wordAt(ta.value, start);
+            if (word !== null) [start, end] = word;
+        }
         ta.setRangeText(open + ta.value.substring(start, end) + close, start, end, "end");
         if (start === end) ta.setSelectionRange(start + open.length, start + open.length);
         this.onTextInput();
@@ -279,6 +291,7 @@ export class SideEditor {
         if (this.flashTimer !== null) activeWindow.clearTimeout(this.flashTimer);
         this.textArea.removeEventListener("input", this.onTextInput);
         this.textArea.removeEventListener("keydown", this.onTextKeyDown);
+        this.textArea.removeEventListener("contextmenu", preventDefault);
         this.textArea.removeEventListener("pointerdown", this.onTextPointerDown);
         this.previewEl.removeEventListener("pointerdown", this.onPreviewPointerDown);
         this.previewEl.removeEventListener("click", this.onPreviewClick);
@@ -357,3 +370,15 @@ function withOwnSizes(state: SideState): SideState {
 function sameStrokes(a: Stroke[], b: Stroke[]): boolean {
     return a.length === b.length && a.every((s, i) => s === b[i]);
 }
+
+/** The word at position pos (inside it or right after it), as [start, end]; null outside a word */
+export function wordAt(text: string, pos: number): [number, number] | null {
+    const isWordChar = (c: string | undefined) => c !== undefined && /[\p{L}\p{N}_'-]/u.test(c);
+    let start = pos;
+    let end = pos;
+    while (isWordChar(text[start - 1])) start--;
+    while (isWordChar(text[end])) end++;
+    return start === end ? null : [start, end];
+}
+
+const preventDefault = (e: Event) => e.preventDefault();

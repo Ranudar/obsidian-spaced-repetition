@@ -1077,7 +1077,7 @@ describe("CardEditorModal card types", () => {
         expect(sideEls()).toHaveLength(1);
     });
 
-    test("Mark as cloze wraps the selection, or puts the cursor inside an empty one", () => {
+    test("Mark as cloze wraps the selection, the word at the cursor, or inserts an empty one", () => {
         openAdd(null, { clozePatterns: ["{{[123::]answer[::hint]}}"] });
         pick("Cloze");
         const ta = textAreas()[0];
@@ -1087,9 +1087,16 @@ describe("CardEditorModal card types", () => {
         expect(ta.value).toBe("The heart has {{four}} chambers");
         expect(ta.selectionStart).toBe(22);
 
+        // No selection: the word the cursor is in
+        ta.setSelectionRange(5, 5);
+        iconButton("Mark as cloze").click();
+        expect(ta.value).toBe("The {{heart}} has {{four}} chambers");
+
+        // Outside a word: an empty one, the cursor inside
+        type(0, ta.value + " ");
         ta.setSelectionRange(ta.value.length, ta.value.length);
         iconButton("Mark as cloze").click();
-        expect(ta.value).toBe("The heart has {{four}} chambers{{}}");
+        expect(ta.value).toBe("The {{heart}} has {{four}} chambers {{}}");
         expect(ta.selectionStart).toBe(ta.value.length - 2);
     });
 
