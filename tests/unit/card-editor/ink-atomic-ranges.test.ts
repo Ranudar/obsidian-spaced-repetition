@@ -306,3 +306,64 @@ describe("removeStaleInk", () => {
         view.destroy();
     });
 });
+
+describe("a keyboard's delete next to an ink embed (Android)", () => {
+    // jsdom has no layout; scrolling the cursor into view measures text
+    beforeAll(() => {
+        Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList;
+        Range.prototype.getBoundingClientRect ??= () => new DOMRect();
+    });
+
+    const doc = "Q\n![[sr-ink-a-front.svg]]\n?";
+    const embedEnd = doc.indexOf("\n?");
+
+    function setup(): EditorView {
+        jest.useFakeTimers();
+        const view = new EditorView({
+            state: EditorState.create({
+                doc,
+                selection: { anchor: embedEnd },
+                extensions: [inkAtomicRanges()],
+            }),
+            parent: document.body,
+        });
+        view.contentDOM.dispatchEvent(
+            new InputEvent("beforeinput", { inputType: "deleteContentBackward", cancelable: true }),
+        );
+        return view;
+    }
+
+    afterEach(() => jest.useRealTimers());
+
+    test("deletes the embed when Chrome only moved the cursor over the image", () => {
+        const view = setup();
+        // What Chrome did on the device: the cursor before the image, the text as it was
+        view.dispatch({ selection: { anchor: 2 }, userEvent: "select" });
+        jest.advanceTimersByTime(100);
+        expect(view.state.doc.toString()).toBe("Q\n\n?");
+        expect(view.state.selection.main.head).toBe(2);
+        view.destroy();
+    });
+
+    test("does nothing more when the embed was deleted meanwhile", () => {
+        const view = setup();
+        view.dispatch({ changes: { from: 2, to: embedEnd }, userEvent: "delete.backward" });
+        jest.advanceTimersByTime(100);
+        expect(view.state.doc.toString()).toBe("Q\n\n?");
+        view.destroy();
+    });
+
+    test("nothing next to the cursor: nothing deleted", () => {
+        jest.useFakeTimers();
+        const view = new EditorView({
+            state: EditorState.create({ doc, selection: { anchor: doc.length }, extensions: [inkAtomicRanges()] }),
+            parent: document.body,
+        });
+        view.contentDOM.dispatchEvent(
+            new InputEvent("beforeinput", { inputType: "deleteContentBackward", cancelable: true }),
+        );
+        jest.advanceTimersByTime(100);
+        expect(view.state.doc.toString()).toBe(doc);
+        view.destroy();
+    });
+});

@@ -172,15 +172,10 @@ export function setStaleInkListener(listener: ((names: string[]) => void) | null
     onStaleInk = listener;
 }
 
-/**
- * Deletes the whole ink embed the cursor is in or, toward the deletion, next to. The atomic ranges
- * alone don't cover a cursor inside an embed (a tap on Android, Find, the Editor API put it
- * there): Backspace would delete only from the embed's start to the cursor and leave the rest as
- * broken text.
- */
-function deleteInk(view: EditorView, forward: boolean): boolean {
+/** The ink embed the cursor is in or, toward the deletion, next to; null if none */
+function inkAtCursor(view: EditorView, forward: boolean): TextRange | null {
     const { ranges, main } = view.state.selection;
-    if (ranges.length !== 1 || !main.empty) return false;
+    if (ranges.length !== 1 || !main.empty) return null;
     const pos = main.head;
     let hit: TextRange | null = null;
     view.plugin(inkAtomicRangesPlugin)?.ranges.between(pos, pos, (from, to) => {
@@ -189,6 +184,50 @@ function deleteInk(view: EditorView, forward: boolean): boolean {
             return false;
         }
     });
+    return hit;
+}
+
+const BACKWARD_DELETES = ["deleteContentBackward", "deleteWordBackward", "deleteSoftLineBackward"];
+const FORWARD_DELETES = ["deleteContentForward", "deleteWordForward", "deleteSoftLineForward"];
+/** How long after a keyboard's delete next to an ink embed the embed is deleted if nothing was */
+const KEYBOARD_DELETE_WAIT_MS = 60;
+
+/**
+ * A keyboard's delete next to an ink embed (Android: no key event, only beforeinput). Chrome on
+ * Android may not delete the embed's image but move the cursor over it instead, so the note's
+ * text stays as it is. Then, a moment later, the embed is deleted here. If the text changed
+ * meanwhile (Chrome deleted the image, which the editor reads as deleting the embed, or the key
+ * handlers did), nothing more is done.
+ */
+function onBeforeInput(event: InputEvent, view: EditorView): boolean {
+    const forward = FORWARD_DELETES.includes(event.inputType);
+    if (!forward && !BACKWARD_DELETES.includes(event.inputType)) return false;
+    const hit = inkAtCursor(view, forward);
+    if (hit === null) return false;
+    const doc = view.state.doc;
+    const text = doc.sliceString(hit.from, hit.to);
+    view.dom.ownerDocument.defaultView?.setTimeout(() => {
+        if (view.state.doc !== doc || !view.dom.isConnected) return;
+        if (view.state.doc.sliceString(hit.from, hit.to) !== text) return;
+        view.dispatch({
+            changes: hit,
+            selection: { anchor: hit.from },
+            scrollIntoView: true,
+            userEvent: forward ? "delete.forward" : "delete.backward",
+        });
+    }, KEYBOARD_DELETE_WAIT_MS);
+    // The editor's own handling goes on as usual
+    return false;
+}
+
+/**
+ * Deletes the whole ink embed the cursor is in or, toward the deletion, next to. The atomic ranges
+ * alone don't cover a cursor inside an embed (a tap on Android, Find, the Editor API put it
+ * there): Backspace would delete only from the embed's start to the cursor and leave the rest as
+ * broken text.
+ */
+function deleteInk(view: EditorView, forward: boolean): boolean {
+    const hit = inkAtCursor(view, forward);
     if (hit === null) return false;
     const { from, to } = hit;
     view.dispatch({
@@ -236,6 +275,7 @@ export function inkAtomicRanges(
             if (links.length > 0) onInkRemoved(links, update.view);
         }),
         inkAtomicRangesPlugin,
+        EditorView.domEventHandlers({ beforeinput: onBeforeInput }),
         EditorView.atomicRanges.of(
             (view) => view.plugin(inkAtomicRangesPlugin)?.ranges ?? RangeSet.empty,
         ),
