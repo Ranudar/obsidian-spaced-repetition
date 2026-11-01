@@ -110,27 +110,7 @@ export abstract class SettingsPage {
     /**
      * Destroys the SettingsPage. Run any cleanup code here.
      */
-    public destroy(): void {
-        this.removeScrollListener();
-    }
-
-    /**
-     * Removes the scroll listener from the SettingsPage.
-     */
-    public removeScrollListener(): void {
-        this.containerEl.removeEventListener("scroll", (_) => {
-            this.scrollListener(this.containerEl.scrollTop);
-        });
-    }
-
-    /**
-     * Adds the scroll listener to the SettingsPage.
-     */
-    public addScrollListener(): void {
-        this.containerEl.addEventListener("scroll", (_) => {
-            this.scrollListener(this.containerEl.scrollTop);
-        });
-    }
+    public destroy(): void {}
 
     /**
      * Renders the SettingsPage. Run any UI code here.
@@ -143,7 +123,6 @@ export abstract class SettingsPage {
     public show(): void {
         if (this.pageContainerEl.hasClass("sr-is-hidden")) {
             this.pageContainerEl.removeClass("sr-is-hidden");
-            this.addScrollListener();
             if (this.render) this.render();
         }
     }
@@ -154,7 +133,6 @@ export abstract class SettingsPage {
     public hide(): void {
         if (!this.pageContainerEl.hasClass("sr-is-hidden")) {
             this.pageContainerEl.addClass("sr-is-hidden");
-            this.removeScrollListener();
         }
     }
 

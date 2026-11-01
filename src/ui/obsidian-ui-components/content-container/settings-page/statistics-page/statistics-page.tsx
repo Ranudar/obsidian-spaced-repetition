@@ -90,9 +90,6 @@ export class StatisticsPage extends SettingsPage {
      */
     destroy(): void {
         this.destroyCharts();
-        this.containerEl.removeEventListener("scroll", (_) => {
-            this.scrollListener(this.containerEl.scrollTop);
-        });
     }
 
     destroyCharts(): void {
