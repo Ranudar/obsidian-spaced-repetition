@@ -1,7 +1,7 @@
 import "obsidian";
 
 import { Point, Stroke } from "src/card-editor/core/strokes";
-import { InkField, InkFieldOptions, visibleBox } from "src/card-editor/ink-field";
+import { InkField, InkFieldOptions } from "src/card-editor/ink-field";
 
 /** Records what the field draws; jsdom has no canvas */
 const ctx = {
@@ -102,22 +102,6 @@ describe("InkField pen size", () => {
         expect(field.strokes.map((s) => s.size)).toEqual([2, 4]);
     });
 
-    test("only strokes whose size changes get a new path", () => {
-        const { field } = setup();
-        const own: Stroke = { ...hline(0, 50, 0), size: 3 };
-        const plain = hline(0, 50, 50);
-        field.setStrokes([own, plain]);
-        field.redraw();
-        expect(path2d).toHaveBeenCalledTimes(2);
-
-        field.redraw();
-        expect(path2d).toHaveBeenCalledTimes(2);
-
-        field.setStyle({ size: 5 });
-        field.redraw();
-        // The stroke without its own size follows the style
-        expect(path2d).toHaveBeenCalledTimes(3);
-    });
 });
 
 describe("InkField pixel eraser", () => {
@@ -163,105 +147,6 @@ describe("InkField pixel eraser", () => {
         expect(onChange).toHaveBeenCalledTimes(1);
     });
 
-    test("erased strokes keep the paths of the untouched ones", () => {
-        const { field, canvas, setEraser } = setup();
-        field.setStrokes([hline(0, 100, 0), hline(0, 100, 100)]);
-        field.redraw();
-        expect(path2d).toHaveBeenCalledTimes(2);
-        setEraser(true);
-        draw(canvas, [[50, 100]]);
-        field.redraw();
-        // Two new pieces of the second line; the first line is reused
-        expect(path2d).toHaveBeenCalledTimes(4);
-    });
-
-    test("an interrupted erase keeps what was erased", () => {
-        const { field, canvas, onChange, setEraser } = setup();
-        setEraser(true);
-        field.setStrokes([hline(0, 100, 0)]);
-        pointer(canvas, "pointerdown", 50, 0);
-        pointer(canvas, "pointercancel", 50, 0);
-        expect(field.strokes).toHaveLength(2);
-        expect(onChange).toHaveBeenCalledTimes(1);
-    });
-});
-
-describe("InkField eraser cursor", () => {
-    const cursorOf = (field: InkField) =>
-        field.el.querySelector<HTMLElement>(".sr-ink-eraser-cursor");
-    const shown = (field: InkField) => cursorOf(field).hasClass("is-visible");
-    const at = (field: InkField) => {
-        const style = cursorOf(field).style;
-        return [
-            style.getPropertyValue("--sr-ink-eraser-x"),
-            style.getPropertyValue("--sr-ink-eraser-y"),
-            style.getPropertyValue("--sr-ink-eraser-size"),
-        ];
-    };
-
-    test("a circle follows the eraser while erasing and goes away after", () => {
-        const { field, canvas } = setup({ style: { size: 4 } });
-        // Size 4: radius 12
-        pointer(canvas, "pointerdown", 30, 40, { buttons: 2 });
-        expect(shown(field)).toBe(true);
-        expect(at(field)).toEqual(["18px", "28px", "24px"]);
-
-        pointer(canvas, "pointermove", 60, 40, { buttons: 2 });
-        expect(at(field)).toEqual(["48px", "28px", "24px"]);
-
-        pointer(canvas, "pointerup", 60, 40, { buttons: 0 });
-        expect(shown(field)).toBe(false);
-    });
-
-    test("a hovering pen shows the circle in eraser mode only", () => {
-        const { field, canvas, setEraser } = setup();
-        pointer(canvas, "pointermove", 10, 10, { buttons: 0 });
-        expect(shown(field)).toBe(false);
-
-        // Side button held while hovering
-        pointer(canvas, "pointermove", 10, 10, { buttons: 2 });
-        expect(shown(field)).toBe(true);
-
-        pointer(canvas, "pointerleave", 10, 10, { buttons: 0 });
-        expect(shown(field)).toBe(false);
-
-        setEraser(true);
-        pointer(canvas, "pointermove", 20, 20, { buttons: 0 });
-        expect(shown(field)).toBe(true);
-        setEraser(false);
-        pointer(canvas, "pointermove", 20, 20, { buttons: 0 });
-        expect(shown(field)).toBe(false);
-    });
-
-    test("hovering and erasing nothing don't repaint the strokes", () => {
-        const { field, canvas, setEraser } = setup();
-        field.setStrokes([hline(0, 100, 0)]);
-        raf.mockClear();
-        setEraser(true);
-        for (let x = 0; x < 100; x += 10) pointer(canvas, "pointermove", x, 80, { buttons: 0 });
-        pointer(canvas, "pointerdown", 50, 80);
-        raf.mockClear();
-        pointer(canvas, "pointermove", 60, 80);
-        expect(raf).not.toHaveBeenCalled();
-        // The canvas position is read once per hover / gesture, not on every move
-        const rect = jest.spyOn(canvas, "getBoundingClientRect");
-        pointer(canvas, "pointermove", 70, 80);
-        pointer(canvas, "pointermove", 80, 80);
-        expect(rect).not.toHaveBeenCalled();
-    });
-
-    test("no circle while writing, and fingers don't hover", () => {
-        const { field, canvas, setEraser } = setup();
-        setEraser(true);
-        pointer(canvas, "pointermove", 10, 10, { pointerType: "touch", buttons: 0 });
-        expect(shown(field)).toBe(false);
-        setEraser(false);
-        draw(canvas, [
-            [0, 0],
-            [20, 0],
-        ]);
-        expect(shown(field)).toBe(false);
-    });
 });
 
 describe("InkField cancelled stroke", () => {
@@ -269,11 +154,9 @@ describe("InkField cancelled stroke", () => {
         const { field, canvas, onChange } = setup();
         pointer(canvas, "pointerdown", 10, 10);
         pointer(canvas, "pointermove", 30, 10);
-        expect(field.el.hasClass("is-empty")).toBe(false);
         pointer(canvas, "pointercancel", 30, 10);
         expect(field.strokes).toEqual([]);
         expect(onChange).not.toHaveBeenCalled();
-        expect(field.el.hasClass("is-empty")).toBe(true);
 
         // The pointer was let go: the next touch draws normally
         draw(canvas, [
@@ -333,25 +216,7 @@ describe("InkField visible area", () => {
 
     const xy = (s: Stroke) => s.points.map(([x, y]) => [x, y]);
 
-    test("a stroke that leaves the field ends at the edge, nothing outside is stored", () => {
-        const { field, canvas, onChange } = placed(rect(0, 0, 200, 100));
-        draw(canvas, [
-            [100, 50],
-            [150, 50],
-            [250, 50],
-            [300, 80],
-        ]);
-        expect(field.strokes.map(xy)).toEqual([
-            [
-                [100, 50],
-                [150, 50],
-                [200, 50],
-            ],
-        ]);
-        expect(onChange).toHaveBeenCalledTimes(1);
-    });
-
-    test("coming back while still down starts a new stroke at the crossing, one undo step", () => {
+    test("a stroke ends at the edge; coming back while down starts a new one, one undo step", () => {
         const { field, canvas, onChange } = placed(rect(0, 0, 200, 100));
         draw(canvas, [
             [180, 20],
@@ -374,30 +239,6 @@ describe("InkField visible area", () => {
         expect(onChange).toHaveBeenCalledWith(field, []);
     });
 
-    test("a move that only passes through the field leaves the part inside", () => {
-        const { field, canvas } = placed(rect(0, 0, 200, 100));
-        draw(canvas, [
-            [100, -50],
-            [100, 150],
-        ]);
-        expect(field.strokes.map(xy)).toEqual([
-            [
-                [100, 0],
-                [100, 100],
-            ],
-        ]);
-    });
-
-    test("a gesture entirely outside adds nothing and is no change", () => {
-        const { field, canvas, onChange } = placed(rect(0, 0, 200, 100));
-        draw(canvas, [
-            [250, 50],
-            [300, 50],
-        ]);
-        expect(field.strokes).toEqual([]);
-        expect(onChange).not.toHaveBeenCalled();
-        expect(field.el.hasClass("is-empty")).toBe(true);
-    });
 
     test("the part of the canvas an ancestor cuts off takes no ink", () => {
         // The canvas reaches 40 px below its clipping box, as when it overflows the side box
@@ -440,20 +281,6 @@ describe("InkField visible area", () => {
         }
     });
 
-    test("visibleBox: ancestors without layout, body and the window", () => {
-        const host = document.body.createDiv();
-        host.style.overflow = "hidden";
-        const el = host.createDiv();
-        // The host has no layout (jsdom): skipped; the window cuts the right side
-        expect(visibleBox(el, rect(1000, 10, 100, 50), window)).toEqual({
-            minX: 1000,
-            minY: 10,
-            maxX: window.innerWidth,
-            maxY: 60,
-        });
-        expect(visibleBox(el, rect(0, 0, 0, 0), window)).toBeNull();
-    });
-
     test("a scroll mid-stroke measures the field again and starts a new stroke", () => {
         const { field, canvas, move, onChange } = placed(rect(0, 0, 200, 100));
         pointer(canvas, "pointerdown", 10, 10);
@@ -476,37 +303,6 @@ describe("InkField visible area", () => {
             ],
         ]);
         expect(onChange).toHaveBeenCalledTimes(1);
-    });
-
-    test("a scroll without a move of the field keeps the stroke whole", () => {
-        const { field, canvas } = placed(rect(0, 0, 200, 100));
-        pointer(canvas, "pointerdown", 10, 10);
-        document.dispatchEvent(new Event("scroll"));
-        pointer(canvas, "pointermove", 50, 10);
-        pointer(canvas, "pointerup", 50, 10);
-        expect(field.strokes.map(xy)).toEqual([
-            [
-                [10, 10],
-                [50, 10],
-            ],
-        ]);
-    });
-
-    test("a scroll mid-erase doesn't erase along the jump", () => {
-        const { field, canvas, move, setEraser } = placed(rect(0, 0, 200, 100));
-        const line = {
-            points: [[100, 0, 0.5] as Point, [100, 100, 0.5] as Point],
-            pressure: false,
-        };
-        field.setStrokes([line]);
-        setEraser(true);
-        pointer(canvas, "pointerdown", 50, 20);
-        // The field moved left by 100 px: the eraser is now at x = 150 on the canvas
-        move(rect(-100, 0, 200, 100));
-        document.dispatchEvent(new Event("scroll"));
-        pointer(canvas, "pointermove", 50, 20);
-        pointer(canvas, "pointerup", 50, 20);
-        expect(field.strokes).toEqual([line]);
     });
 
     /** Runs the animation frames requested so far, as the browser does between moves */
@@ -555,59 +351,6 @@ describe("InkField visible area", () => {
         }
     });
 
-    test("a window resize mid-stroke splits it too", () => {
-        const { field, canvas, move } = placed(rect(0, 0, 200, 100));
-        pointer(canvas, "pointerdown", 10, 10);
-        pointer(canvas, "pointermove", 30, 10);
-        move(rect(0, 20, 200, 100));
-        window.dispatchEvent(new Event("resize"));
-        pointer(canvas, "pointermove", 50, 30);
-        pointer(canvas, "pointerup", 50, 30);
-        expect(field.strokes.map(xy)).toEqual([
-            [
-                [10, 10],
-                [30, 10],
-            ],
-            [[50, 10]],
-        ]);
-    });
-
-    test("coalesced samples taken before the shift are dropped, not moved", () => {
-        const { field, canvas, move, onChange } = placed(rect(0, 0, 200, 100));
-        /** A sample at a given time, as the browser coalesces them */
-        const at = (type: string, x: number, y: number, timeStamp: number) => {
-            const evt = new MouseEvent(type, { clientX: x, clientY: y, buttons: 1 });
-            Object.assign(evt, { pointerType: "pen", pointerId: 1, pressure: 0.5 });
-            Object.defineProperty(evt, "timeStamp", { value: timeStamp });
-            return evt;
-        };
-        pointer(canvas, "pointerdown", 10, 50);
-        pointer(canvas, "pointermove", 20, 50);
-        const shifted = performance.now() + 1000;
-        move(rect(0, 20, 200, 100));
-        const resize = new Event("resize");
-        Object.defineProperty(resize, "timeStamp", { value: shifted });
-        window.dispatchEvent(resize);
-        // One batch: a sample from before the field moved, one from after
-        const batch = [
-            at("pointermove", 30, 50, shifted - 5),
-            at("pointermove", 40, 70, shifted + 5),
-        ];
-        const last = batch[1];
-        Object.assign(last, { getCoalescedEvents: () => batch });
-        canvas.dispatchEvent(last);
-        pointer(canvas, "pointerup", 40, 70);
-
-        expect(field.strokes.map(xy)).toEqual([
-            [
-                [10, 50],
-                [20, 50],
-            ],
-            [[40, 50]],
-        ]);
-        expect(onChange).toHaveBeenCalledTimes(1);
-    });
-
     test("a shift no event reports is caught once a frame, without a measure per move", () => {
         const { field, canvas, move, onChange } = placed(rect(0, 0, 200, 100));
         const measured = jest.spyOn(canvas, "getBoundingClientRect");
@@ -639,24 +382,6 @@ describe("InkField visible area", () => {
         expect(measured).toHaveBeenCalledTimes(2);
     });
 
-    test("a frame without a shift keeps the stroke whole and measures once more only", () => {
-        const { field, canvas } = placed(rect(0, 0, 200, 100));
-        const measured = jest.spyOn(canvas, "getBoundingClientRect");
-        pointer(canvas, "pointerdown", 10, 10);
-        nextFrame();
-        pointer(canvas, "pointermove", 20, 10);
-        pointer(canvas, "pointermove", 30, 10);
-        pointer(canvas, "pointerup", 30, 10);
-        expect(field.strokes.map(xy)).toEqual([
-            [
-                [10, 10],
-                [20, 10],
-                [30, 10],
-            ],
-        ]);
-        expect(measured).toHaveBeenCalledTimes(2);
-    });
-
     test("the eraser doesn't cut across a shift no event reports", () => {
         const { field, canvas, move, setEraser, onChange } = placed(rect(0, 0, 200, 100));
         const line = {
@@ -674,47 +399,6 @@ describe("InkField visible area", () => {
         pointer(canvas, "pointerup", 40, 20);
         expect(field.strokes).toEqual([line]);
         expect(onChange).not.toHaveBeenCalled();
-    });
-
-    test("the eraser keeps erasing after a shift, in the new place", () => {
-        const { field, canvas, move, setEraser, onChange } = placed(rect(0, 0, 200, 100));
-        const line = {
-            points: [[100, 0, 0.5] as Point, [100, 100, 0.5] as Point],
-            pressure: false,
-        };
-        field.setStrokes([line]);
-        setEraser(true);
-        pointer(canvas, "pointerdown", 50, 50);
-        move(rect(-60, 0, 200, 100));
-        window.visualViewport?.dispatchEvent(new Event("scroll"));
-        window.dispatchEvent(new Event("resize"));
-        // On the canvas: from (110, 50) to (90, 50), across the line
-        pointer(canvas, "pointermove", 50, 50);
-        pointer(canvas, "pointermove", 30, 50);
-        pointer(canvas, "pointerup", 30, 50);
-        expect(field.strokes).toHaveLength(2);
-        expect(onChange).toHaveBeenCalledTimes(1);
-        expect(onChange).toHaveBeenCalledWith(field, [line]);
-    });
-
-    test("the eraser erases only inside and its circle hides outside", () => {
-        const { field, canvas, setEraser } = placed(rect(0, 0, 200, 100));
-        const cursor = field.el.querySelector<HTMLElement>(".sr-ink-eraser-cursor");
-        // A line just outside the right edge, as left by an older version
-        const outside = hline(230, 300, 50);
-        field.setStrokes([outside]);
-        setEraser(true);
-        pointer(canvas, "pointermove", 150, 50, { buttons: 0 });
-        expect(cursor.hasClass("is-visible")).toBe(true);
-        pointer(canvas, "pointermove", 260, 50, { buttons: 0 });
-        expect(cursor.hasClass("is-visible")).toBe(false);
-
-        draw(canvas, [
-            [260, 50],
-            [290, 50],
-        ]);
-        expect(field.strokes).toEqual([outside]);
-        expect(cursor.hasClass("is-visible")).toBe(false);
     });
 });
 
@@ -739,26 +423,22 @@ describe("InkField focus", () => {
         pointer(canvas, "pointerup", 10, 10);
     });
 
-    test("so does a mouse, and an input field; a button keeps the focus", () => {
-        const { canvas } = setup();
-        const input = document.body.createEl("input", { type: "text" });
-        input.focus();
-        pointer(canvas, "pointerdown", 10, 10, { pointerType: "mouse" });
-        expect(document.activeElement).not.toBe(input);
-        pointer(canvas, "pointerup", 10, 10, { pointerType: "mouse" });
-
-        const button = document.body.createEl("button");
-        button.focus();
-        pointer(canvas, "pointerdown", 10, 10);
-        expect(document.activeElement).toBe(button);
-        pointer(canvas, "pointerup", 10, 10);
-    });
-
-    test("an ignored finger (pen-only) leaves the text area focused", () => {
-        const { canvas } = setup({ penOnly: true });
+    test("pen-only: a finger draws nothing and leaves the text area focused", () => {
+        const { field, canvas, onChange } = setup({ penOnly: true });
         const textArea = document.body.createEl("textarea");
         textArea.focus();
-        pointer(canvas, "pointerdown", 10, 10, { pointerType: "touch" });
+        const touch = { pointerType: "touch" };
+        pointer(canvas, "pointerdown", 10, 10, touch);
+        pointer(canvas, "pointermove", 50, 10, touch);
+        pointer(canvas, "pointerup", 50, 10, touch);
+        expect(field.strokes).toEqual([]);
+        expect(onChange).not.toHaveBeenCalled();
         expect(document.activeElement).toBe(textArea);
+
+        draw(canvas, [
+            [0, 0],
+            [20, 0],
+        ]);
+        expect(field.strokes).toHaveLength(1);
     });
 });

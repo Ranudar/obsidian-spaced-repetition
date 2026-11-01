@@ -11,15 +11,9 @@ describe("removeQuestionText", () => {
         expect(removeQuestionText(note, first, CardType.MultiLineBasic, withMarker)).toBe(
             "#flashcards\n\nQ2\n?\nA2\n\n---\n",
         );
-    });
-
-    test("the last card of the note", () => {
         expect(removeQuestionText(note, "Q2\n?\nA2", CardType.MultiLineBasic, withMarker)).toBe(
             `#flashcards\n\n${first}\n\n---\n`,
         );
-    });
-
-    test("the first line of the note", () => {
         expect(
             removeQuestionText("Q\n?\nA\n\n---\n\nnext", "Q\n?\nA", CardType.MultiLineBasic, withMarker),
         ).toBe("next");
@@ -35,12 +29,6 @@ describe("removeQuestionText", () => {
         expect(
             removeQuestionText("Q\n?\nA\n\n---\nX::Y\nb", "X::Y", CardType.SingleLineBasic, withMarker),
         ).toBe("Q\n?\nA\n\n---\nb");
-    });
-
-    test("a card sharing its line with other text: only the card goes", () => {
-        expect(
-            removeQuestionText("- X::Y\nb", "X::Y", CardType.SingleLineBasic, withMarker),
-        ).toBe("- \nb");
     });
 
     test("null when the card is not in the note", () => {

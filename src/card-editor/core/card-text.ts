@@ -41,12 +41,6 @@ export function inkEmbedPath(sideText: string): string | null {
     return isInkFileName(fileNameOf(path)) ? path : null;
 }
 
-/** File name if the side is exactly one embed of an ink SVG, else null (see inkEmbedPath) */
-export function inkEmbedFileName(sideText: string): string | null {
-    const path = inkEmbedPath(sideText);
-    return path === null ? null : fileNameOf(path);
-}
-
 function fileNameOf(path: string): string {
     return path.substring(path.lastIndexOf("/") + 1);
 }
@@ -62,11 +56,6 @@ export function inkEmbedPaths(text: string): string[] {
         if (path !== null) paths.push(path);
     }
     return paths;
-}
-
-/** File names of all ink SVGs embedded anywhere in the text. */
-export function inkEmbedFileNames(text: string): string[] {
-    return inkEmbedPaths(text).map(fileNameOf);
 }
 
 // Links and embeds of any file: [[…]], ![[…]], [text](…), ![alt](…)

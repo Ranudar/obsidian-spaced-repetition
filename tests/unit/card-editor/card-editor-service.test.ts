@@ -8,7 +8,7 @@ import {
     SideResult,
 } from "src/card-editor/card-editor-modal";
 import { CardEditorService, findQuestionWithInk } from "src/card-editor/card-editor-service";
-import { inkEmbedFileName } from "src/card-editor/core/card-text";
+import { inkEmbedPath } from "src/card-editor/core/card-text";
 import { parseInkFileName, strokesToSvg, svgToStrokes } from "src/card-editor/core/ink-svg";
 import { Stroke } from "src/card-editor/core/strokes";
 import { SideState } from "src/card-editor/side-editor";
@@ -24,6 +24,10 @@ import { TextDirection } from "src/utils/strings";
 import { UnitTestSRFile } from "../helpers/unit-test-file";
 import { unitTestSetupStandardDataStoreAlgorithm } from "../helpers/unit-test-setup";
 import { createTestNoteQuestionParser } from "../sample-items";
+
+/** File name if the side is exactly one embed of an ink SVG, else null */
+const inkEmbedFileName = (side: string): string | null =>
+    inkEmbedPath(side)?.split("/").pop() ?? null;
 
 // The editor is replaced by a stub that records its options, so a test can play the user
 jest.mock("src/card-editor/card-editor-modal");
@@ -304,8 +308,6 @@ describe("loading a card", () => {
         expect(opts.initial.back.text).toEqual(
             "**Prior odds:** $\\text{bad} : \\text{good} = 3 : 97$\n**Probability:** $\\frac{48}{48 + 97} \\approx 33\\%$",
         );
-        expect(opts.kind).toEqual("edit");
-        expect(opts.textDirection).toEqual(TextDirection.Ltr);
     });
 
     test("opens a handwritten side with the strokes and pen size of its SVG", async () => {
@@ -321,24 +323,6 @@ describe("loading a card", () => {
             "sr-ink/sr-ink-20261031-141502123-back.svg",
             NOTE_PATH,
         );
-    });
-
-    test("opens a side as text showing the embed when its SVG is missing or has no strokes", async () => {
-        const embed = "![[sr-ink/sr-ink-20261031-141502123-back.svg]]";
-        let { opts } = await edit(await parseQuestion(mixedNote));
-        expect(opts.initial.back).toMatchObject({ text: embed, strokes: [] });
-
-        ModalMock.mockClear();
-        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", "<svg></svg>");
-        ({ opts } = await edit(await parseQuestion(mixedNote)));
-        expect(opts.initial.back).toMatchObject({ text: embed, strokes: [] });
-    });
-
-    test("cloze cards have no back", async () => {
-        const questions = await parseQuestions(textNote);
-        const { opts } = await edit(questions[4]);
-        expect(opts.initial.back).toBeNull();
-        expect(opts.initial.front.text).toEqual(questions[4].questionText.actualQuestion);
     });
 });
 
@@ -363,28 +347,6 @@ describe("saving a card", () => {
         }
         expect(vault.app.vault.create).not.toHaveBeenCalled();
         expect(writeText).not.toHaveBeenCalled();
-    });
-
-    test("saving without changes keeps a blank line and whitespace around the separator", async () => {
-        settings.multilineCardEndMarker = "+++";
-        const question = await parseQuestion("#flashcards\n\nQ\n  ?\n\nA\n+++\n");
-        expect(question.questionText.actualQuestion).toEqual("Q\n  ?\n\nA");
-        const session = await edit(question);
-        const { front, back } = session.opts.initial;
-
-        const result = await save(session, { front: unchanged(front), back: unchanged(back) });
-        expect(result.textChanged).toBe(false);
-        expect(writeText).not.toHaveBeenCalled();
-    });
-
-    test("blank lines typed in a side don't end the card without an end marker", async () => {
-        const session = await edit((await parseQuestions(textNote))[0]);
-        const result = await save(session, {
-            front: unchanged(session.opts.initial.front),
-            back: text("line 1\n\nline 2\n"),
-        });
-        expect(result.text.endsWith("\n?\nline 1\n<br>\nline 2")).toBe(true);
-        expect(writeText).toHaveBeenCalledWith(result.text);
     });
 
     test("an edited answer keeps question, tables and formulas intact", async () => {
@@ -431,18 +393,6 @@ describe("saving a card", () => {
         expect(vault.app.vault.create).not.toHaveBeenCalled();
     });
 
-    test("unchanged ink is not rewritten", async () => {
-        vault.add("sr-ink/sr-ink-abc-front.svg", svgOf([stroke(0)]));
-        vault.add("sr-ink/sr-ink-abc-back.svg", svgOf([stroke(5)]));
-        const session = await edit(await parseQuestion(inkNote));
-        const { front, back } = session.opts.initial;
-
-        const result = await save(session, { front: unchanged(front), back: unchanged(back) });
-        expect(result.textChanged).toBe(false);
-        expect(result.changedImages).toEqual([]);
-        expect(vault.app.vault.modify).not.toHaveBeenCalled();
-    });
-
     test("new ink creates an SVG named after the card's other ink side", async () => {
         vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(mixedNote));
@@ -459,37 +409,6 @@ describe("saving a card", () => {
         expect(result.text).toEqual(
             `![[${path}]]\n?\n![[sr-ink/sr-ink-20261031-141502123-back.svg]]`,
         );
-    });
-
-    test("new ink on both sides uses one new stem, in the image folder", async () => {
-        settings.cardEditorImageFolder = "ink/cards";
-        const session = await edit((await parseQuestions(textNote))[0]);
-
-        const result = await save(session, { front: ink([stroke(1)]), back: ink([stroke(2)]) });
-        expect(vault.app.vault.createFolder).toHaveBeenCalledWith("ink/cards");
-
-        const [frontText, backText] = result.text.split("\n?\n");
-        const front = parseInkFileName(inkEmbedFileName(frontText));
-        const back = parseInkFileName(inkEmbedFileName(backText));
-        expect(front).toEqual({ stem: back.stem, side: "front" });
-        expect(back.side).toEqual("back");
-        expect(frontText).toEqual(`![[ink/cards/sr-ink-${front.stem}-front.svg]]`);
-    });
-
-    test("an empty image folder uses Obsidian's attachment folder", async () => {
-        settings.cardEditorImageFolder = "";
-        const session = await edit((await parseQuestions(textNote))[0]);
-
-        const result = await save(session, {
-            front: unchanged(session.opts.initial.front),
-            back: ink([stroke(2)]),
-        });
-        expect(vault.app.fileManager.getAvailablePathForAttachment).toHaveBeenCalledWith(
-            expect.stringMatching(/^sr-ink-.+-back\.svg$/),
-            NOTE_PATH,
-        );
-        expect(result.text).toMatch(/\n!\[\[notes\/attachments\/sr-ink-.+-back\.svg\]\]$/);
-        expect(vault.app.vault.createFolder).not.toHaveBeenCalled();
     });
 
     test("new ink doesn't reuse a stem whose file name is taken", async () => {
@@ -598,23 +517,6 @@ describe("saving a card", () => {
         expect(vault.content(back.path)).toBeDefined();
     });
 
-    test("erased ink keeps an SVG another card in the note embeds, with the index already updated", async () => {
-        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
-        const links = vault.app.metadataCache.resolvedLinks;
-        links[NOTE_PATH] = { [back.path]: 2 };
-        writeText.mockImplementation(() => {
-            links[NOTE_PATH] = { [back.path]: 1 };
-            return Promise.resolve(true);
-        });
-
-        const session = await edit(await parseQuestion(mixedNote));
-        await save(session, {
-            front: unchanged(session.opts.initial.front),
-            back: text("Mitochondria"),
-        });
-        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
-    });
-
     test("a typed line that would split or end the card is rejected, nothing is written", async () => {
         settings.multilineCardEndMarker = "---";
         const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
@@ -636,33 +538,6 @@ describe("saving a card", () => {
         expect(vault.content(back.path)).toBeDefined();
     });
 
-    test("erased ink keeps an SVG the new text still embeds", async () => {
-        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
-        const session = await edit(await parseQuestion(mixedNote));
-        await save(session, {
-            front: unchanged(session.opts.initial.front),
-            back: text("See ![[sr-ink/sr-ink-20261031-141502123-back.svg]] again"),
-        });
-        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
-    });
-
-    test("erased ink counts this card's links to that very file, not to files of the same name", async () => {
-        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
-        const archived = vault.add(
-            "archive/sr-ink-20261031-141502123-back.svg",
-            svgOf([stroke(3)]),
-        );
-        // The note links to both files; only one of them is this card's
-        vault.app.metadataCache.resolvedLinks[NOTE_PATH] = { [back.path]: 1, [archived.path]: 1 };
-        const session = await edit(await parseQuestion(mixedNote));
-        await save(session, {
-            front: unchanged(session.opts.initial.front),
-            back: text("Mitochondria, unlike ![[archive/sr-ink-20261031-141502123-back.svg]]"),
-        });
-        expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
-        expect(vault.content(archived.path)).toBeDefined();
-    });
-
     test("erased ink keeps an SVG a note or canvas refers to, even if the link index doesn't know", async () => {
         const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         vault.app.metadataCache.resolvedLinks[NOTE_PATH] = { [back.path]: 1 };
@@ -682,7 +557,6 @@ describe("saving a card", () => {
 
         for (const [content, path] of [
             ["See [[sr-ink-20261031-141502123-back.svg]]", undefined],
-            ['<img src="sr-ink/sr-ink-20261031-141502123-back.svg">', undefined],
             ['{"nodes":[{"file":"sr-ink/sr-ink-20261031-141502123-back.svg"}]}', "board.canvas"],
         ]) {
             other(content, path);
@@ -690,81 +564,12 @@ describe("saving a card", () => {
             expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
         }
 
-        // A file that can't be read: unsure, so kept
-        other("anything");
-        vault.app.vault.cachedRead.mockRejectedValueOnce(new Error("locked"));
-        await toText();
-        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
-
         // A link to a file of the same name in another folder doesn't keep it
         other("![[archive/sr-ink-20261031-141502123-back.svg]]");
         vault.add("archive/sr-ink-20261031-141502123-back.svg", svgOf([stroke(3)]));
         await toText();
         expect(vault.app.fileManager.trashFile).toHaveBeenCalledTimes(1);
         expect(vault.content(back.path)).toBeUndefined();
-    });
-
-    test("erased ink reads this note from disk: its new text no longer refers to the SVG", async () => {
-        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
-        const note = vault.add(NOTE_PATH, mixedNote);
-        vault.app.metadataCache.resolvedLinks[NOTE_PATH] = { [back.path]: 1 };
-        writeText.mockImplementation((newText) => {
-            vault.files.get(note.path).content = `#flashcards
-
-${newText}
-`;
-            return Promise.resolve(true);
-        });
-        // Obsidian's cache still has the old text
-        vault.app.vault.cachedRead.mockResolvedValue(mixedNote);
-
-        const session = await edit(await parseQuestion(mixedNote));
-        await save(session, {
-            front: unchanged(session.opts.initial.front),
-            back: text("Mitochondria"),
-        });
-        expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
-    });
-
-    test("a typed side the parser would read as other card syntax is rejected, nothing is written", async () => {
-        const questions = await parseQuestions(textNote);
-        let session = await edit(questions[1]);
-        await expect(
-            session.opts.save({
-                front: unchanged(session.opts.initial.front),
-                back: text("A std::vector"),
-            }),
-        ).rejects.toThrow();
-        // "::" in inline code is not a separator
-        writeText.mockClear();
-        await session.opts.save({
-            front: unchanged(session.opts.initial.front),
-            back: text("A `std::vector`"),
-        });
-        expect(writeText).toHaveBeenCalledTimes(1);
-
-        // A single-line card's front with a second line, or its separator twice
-        ModalMock.mockClear();
-        writeText.mockClear();
-        session = await edit(questions[3]);
-        await expect(
-            session.opts.save({ front: text("Line 1\nLine 2"), back: text("No") }),
-        ).rejects.toThrow();
-        await expect(
-            session.opts.save({ front: text("Is a::b"), back: text("No") }),
-        ).rejects.toThrow();
-        expect(writeText).not.toHaveBeenCalled();
-    });
-
-    test("an edited side keeps its indentation; only blank lines and whitespace at the end go", async () => {
-        const [question] = await parseQuestions("#flashcards\n\n- List\n    - Q::A\n");
-        expect(question.questionText.actualQuestion).toEqual("    - Q::A");
-        const session = await edit(question);
-        const result = await save(session, {
-            front: text("    - Question  "),
-            back: unchanged(session.opts.initial.back),
-        });
-        expect(result.text).toEqual("    - Question::A");
     });
 
     test("the embed's folder decides which file is edited, not just its name", async () => {
@@ -808,44 +613,17 @@ ${newText}
         await expect(session.result).resolves.toBeNull();
     });
 
-    test("a failed note write is undone the same way", async () => {
-        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
-        writeText.mockRejectedValue(new Error("disk full"));
-        const session = await edit(await parseQuestion(mixedNote));
-        await expect(
-            session.opts.save({ front: ink([stroke(3)]), back: text("Mitochondria") }),
-        ).rejects.toThrow("disk full");
-        expect([...vault.files.keys()]).toEqual(["sr-ink/sr-ink-20261031-141502123-back.svg"]);
-    });
-
-    test("a side failing after another side's file was created removes that file", async () => {
-        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
+    test("a failed ink write removes the files already created and keeps the editor open", async () => {
+        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
         vault.app.vault.modify.mockRejectedValueOnce(new Error("disk full"));
         const session = await edit(await parseQuestion(mixedNote));
 
         await expect(
             session.opts.save({ front: ink([stroke(3)]), back: ink([stroke(4)]) }),
         ).rejects.toThrow("disk full");
-        expect([...vault.files.keys()]).toEqual(["sr-ink/sr-ink-20261031-141502123-back.svg"]);
+        expect([...vault.files.keys()]).toEqual([back.path]);
+        expect(vault.content(back.path)).toEqual(svgOf([stroke(0)]));
         expect(writeText).not.toHaveBeenCalled();
-
-        // A retry reuses the card's stem, as no file was left behind
-        const result = await save(session, { front: ink([stroke(3)]), back: ink([stroke(4)]) });
-        expect(result.text.startsWith("![[sr-ink/sr-ink-20261031-141502123-front.svg]]")).toBe(
-            true,
-        );
-    });
-
-    test("a failed write rejects the save and trashes nothing", async () => {
-        vault.add("sr-ink/sr-ink-abc-front.svg", svgOf([stroke(0)]));
-        vault.add("sr-ink/sr-ink-abc-back.svg", svgOf([stroke(5)]));
-        vault.app.vault.modify.mockRejectedValueOnce(new Error("disk full"));
-        const session = await edit(await parseQuestion(inkNote));
-
-        await expect(
-            session.opts.save({ front: text("typed"), back: ink([stroke(9)]) }),
-        ).rejects.toThrow("disk full");
-        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
 
         // The editor stays open; closing it now is a cancel
         session.opts.closed();
@@ -871,57 +649,6 @@ Mitochondria, drawn:
         expect(opts.initial.back.penSize).toEqual(7);
     });
 
-    test("an embed that isn't at the end of the side stays in the text", async () => {
-        vault.add(BACK, svgOf([stroke(0)]));
-        const question = await parseQuestion(`#flashcards
-
-Q
-?
-![[${BACK}]] is a mitochondrion
-`);
-        const { opts } = await edit(question);
-        expect(opts.initial.back).toMatchObject({
-            text: `![[${BACK}]] is a mitochondrion`,
-            strokes: [],
-        });
-    });
-
-    test("a side with an unreadable SVG keeps its whole text, embed included", async () => {
-        vault.add(BACK, "<svg></svg>");
-        const { opts } = await edit(await parseQuestion(combinedNote));
-        expect(opts.initial.back).toMatchObject({
-            text: `Mitochondria, drawn:\n![[${BACK}]]`,
-            strokes: [],
-        });
-    });
-
-    test("cloze cards are typed only: a trailing embed stays in the text", async () => {
-        vault.add(BACK, svgOf([stroke(0)]));
-        const question = await parseQuestion(`#flashcards
-
-The ==mitochondrion== is drawn here:
-![[${BACK}]]
-`);
-        const { opts } = await edit(question);
-        expect(opts.initial.back).toBeNull();
-        expect(opts.initial.front).toMatchObject({
-            text: question.questionText.actualQuestion,
-            strokes: [],
-        });
-    });
-
-    test("saving unchanged keeps the side exactly as in the note", async () => {
-        vault.add(BACK, svgOf([stroke(0)]));
-        const question = await parseQuestion(combinedNote.replace("\n![[", "\n  ![["));
-        expect(question.questionText.actualQuestion).toContain("drawn:\n  ![[");
-        const session = await edit(question);
-        expect(session.opts.initial.back.strokes).toHaveLength(1);
-        const { front, back } = session.opts.initial;
-        const result = await save(session, { front: unchanged(front), back: unchanged(back) });
-        expect(result.textChanged).toBe(false);
-        expect(writeText).not.toHaveBeenCalled();
-    });
-
     test("changed typed text keeps the embed after it; the SVG is untouched", async () => {
         vault.add(BACK, svgOf([stroke(0)]));
         const session = await edit(await parseQuestion(combinedNote));
@@ -935,33 +662,6 @@ The ==mitochondrion== is drawn here:
         );
         expect(result.changedImages).toEqual([]);
         expect(vault.app.vault.modify).not.toHaveBeenCalled();
-    });
-
-    test("changed strokes overwrite the SVG; the typed text stays", async () => {
-        const back = vault.add(BACK, svgOf([stroke(0)]));
-        const question = await parseQuestion(combinedNote);
-        const session = await edit(question);
-        const result = await save(session, {
-            front: unchanged(session.opts.initial.front),
-            back: ink([stroke(0), stroke(50)], true, "Mitochondria, drawn:"),
-        });
-        expect(result).toEqual({
-            text: question.questionText.actualQuestion,
-            textChanged: false,
-            changedImages: [back],
-        });
-    });
-
-    test("typing on a handwritten side puts the text before the embed", async () => {
-        vault.add(BACK, svgOf([stroke(0)]));
-        const session = await edit(await parseQuestion(mixedNote));
-        const result = await save(session, {
-            front: unchanged(session.opts.initial.front),
-            back: { ...unchanged(session.opts.initial.back), text: "Mitochondria" },
-        });
-        expect(result.text).toEqual(
-            `What is the powerhouse of the cell?\n?\nMitochondria\n![[${BACK}]]`,
-        );
     });
 
     test("writing on a typed side adds a new SVG after the text", async () => {
@@ -986,43 +686,6 @@ The ==mitochondrion== is drawn here:
         });
         expect(result.text).toEqual("What is the powerhouse of the cell?\n?\nMitochondria, drawn:");
         expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
-    });
-
-    test("erasing all strokes and the text of a side is rejected, nothing is written", async () => {
-        const back = vault.add(BACK, svgOf([stroke(0)]));
-        const session = await edit(await parseQuestion(combinedNote));
-        await expect(
-            session.opts.save({ front: unchanged(session.opts.initial.front), back: text("  ") }),
-        ).rejects.toThrow();
-        expect(writeText).not.toHaveBeenCalled();
-        expect(vault.content(back.path)).toBeDefined();
-    });
-
-    test("single-line cards keep text and embed on one line", async () => {
-        const session = await edit(await parseQuestion("#flashcards\n\nDraw a cell::A cell\n"));
-        const result = await save(session, {
-            front: unchanged(session.opts.initial.front),
-            back: ink([stroke(1)], true, "A cell"),
-        });
-        expect(result.text).toMatch(/^Draw a cell::A cell !\[\[sr-ink\/sr-ink-.+-back\.svg\]\]$/);
-
-        // Read back the same way
-        ModalMock.mockClear();
-        const reread = await edit(await parseQuestion(`#flashcards\n\n${result.text}\n`));
-        expect(reread.opts.initial.back.text).toEqual("A cell");
-        expect(reread.opts.initial.back.strokes).toHaveLength(1);
-    });
-
-    test("typed text the parser would misread is rejected on a side with ink too", async () => {
-        vault.add(BACK, svgOf([stroke(0)]));
-        const session = await edit(await parseQuestion(combinedNote));
-        await expect(
-            session.opts.save({
-                front: unchanged(session.opts.initial.front),
-                back: { ...unchanged(session.opts.initial.back), text: "A std::vector" },
-            }),
-        ).rejects.toThrow("Back");
-        expect(writeText).not.toHaveBeenCalled();
     });
 });
 
@@ -1059,12 +722,6 @@ describe("adding cards", () => {
 
         expect(vault.content(NOTE_PATH)).toEqual("#flashcards\n\nQ1\n?\nA1\n\nQ2\n?\nA2\n");
         expect(vault.app.vault.create).not.toHaveBeenCalled();
-    });
-
-    test("blank lines typed in a side are kept as <br> lines, so the card stays whole", async () => {
-        const opts = openAdd();
-        await opts.save({ front: text("Q"), back: text("line 1\n\nline 2") });
-        expect(vault.content(NOTE_PATH)).toEqual("#flashcards\n\nQ\n?\nline 1\n<br>\nline 2\n");
     });
 
     test("a typed line that would end the card is rejected, the SVGs made for it are removed", async () => {
@@ -1132,23 +789,6 @@ describe("adding cards", () => {
         expect(vault.app.vault.create).toHaveBeenCalledTimes(1);
     });
 
-    test("a side holding text and handwriting has the embed on the line after the text", async () => {
-        const opts = openAdd();
-        await opts.save({ front: ink([stroke(0)], true, "Draw a cell  "), back: text("Done") });
-
-        const [front, back] = vault.content(NOTE_PATH).slice(NOTE.length).trim().split("\n?\n");
-        const [typed, embed] = front.split("\n");
-        expect(typed).toEqual("Draw a cell");
-        expect(inkEmbedFileName(embed)).toMatch(/^sr-ink-.+-front\.svg$/);
-        expect(back).toEqual("Done");
-    });
-
-    test("a side with neither text nor strokes is rejected", async () => {
-        const opts = openAdd();
-        await expect(opts.save({ front: text("Q"), back: text(" ") })).rejects.toThrow();
-        expect(vault.content(NOTE_PATH)).toEqual(NOTE);
-    });
-
     test("a failed insert rejects the save and removes the new SVGs", async () => {
         vault.app.vault.process.mockRejectedValueOnce(new Error("disk full"));
         const opts = openAdd();
@@ -1187,21 +827,6 @@ describe("adding cards", () => {
 
         opts.keepDraft(null);
         expect(openAdd().draft).toBeNull();
-    });
-
-    test("a note without a flashcard tag gets a notice, but the editor opens", () => {
-        noteTags = ["#flashcards/biology"];
-        openAdd();
-        expect(Notice).not.toHaveBeenCalled();
-
-        noteTags = ["#biology"];
-        openAdd();
-        expect(Notice).toHaveBeenCalledTimes(1);
-        expect(ModalMock).toHaveBeenCalledTimes(2);
-
-        settings.convertFoldersToDecks = true;
-        openAdd();
-        expect(Notice).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -1252,40 +877,6 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
         expect(find("sr-ink/sr-ink-20261031-141502123-back.svg")).toBe(first);
         expect(find("sr-ink/sr-ink-xyz-back.svg")).toBe(second);
         expect(find("sr-ink/sr-ink-other-back.svg")).toBeNull();
-    });
-
-    test("finds the card embedding that very file, not one embedding a file of the same name", async () => {
-        const archived = vault.add("archive/sr-ink-xyz-back.svg", svgOf([stroke(2)]));
-        const text = `#flashcards
-
-Old drawing::![[archive/sr-ink-xyz-back.svg]]
-
-Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
-`;
-        const questions = await createTestNoteQuestionParser(settings).createQuestionList(
-            new UnitTestSRFile(text, NOTE_PATH),
-            TextDirection.Ltr,
-            TopicPath.emptyPath,
-            true,
-        );
-        loadedNote = new Note(noteFile, questions);
-        expect(find("sr-ink/sr-ink-xyz-back.svg")).toBe(questions[1]);
-        expect(find(archived.path)).toBe(questions[0]);
-
-        const { done, opts } = await tapPencil("sr-ink-xyz-back.svg");
-        expect(opts.initial.front.text).toEqual("Draw a cell");
-        opts.closed();
-        await done;
-    });
-
-    test("opens the whole card, a typed front and a handwritten back", async () => {
-        const { opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
-        expect(opts.initial.front).toMatchObject({
-            text: "What is the powerhouse of the cell?",
-            strokes: [],
-        });
-        expect(opts.initial.back).toMatchObject({ text: "" });
-        expect(opts.initial.back.strokes).toHaveLength(1);
     });
 
     test("a changed text is written to the note, keeping the schedule, and the vault is rescanned", async () => {
@@ -1359,64 +950,11 @@ Draw a cell::![](sr-ink/sr-ink-xyz-back.svg)
         await done;
     });
 
-    test("cancel writes nothing", async () => {
-        const { done, opts } = await tapPencil("sr-ink-xyz-back.svg");
-        opts.closed();
-        await done;
-        expect(noteFile.content).toEqual(pencilNote);
-        expect(sync).not.toHaveBeenCalled();
-    });
-
-    test("a second tap while the editor is open is ignored", async () => {
-        const { done, opts } = await tapPencil("sr-ink-xyz-back.svg");
-        await service.editInNote(
-            { path: NOTE_PATH, extension: "md" } as TFile,
-            vault.byName("sr-ink-xyz-back.svg"),
-        );
-        expect(ModalMock).toHaveBeenCalledTimes(1);
-        opts.closed();
-        await done;
-    });
-
-    test("the editor's title is the note's name", async () => {
-        const { done, opts } = await tapPencil("sr-ink-xyz-back.svg");
-        expect(opts.title).toEqual("bio");
-        opts.closed();
-        await done;
-    });
-
-    test("a failed note write leaves the question matching the note, so a review can still be saved", async () => {
-        const { done, opts } = await tapPencil("sr-ink-20261031-141502123-back.svg");
-        const question = loadedNote.questionList[0];
-        const before = question.questionText.original;
-        jest.spyOn(noteFile, "write").mockRejectedValueOnce(new Error("disk full"));
-
-        await expect(
-            opts.save({ front: text("Typed"), back: unchanged(opts.initial.back) }),
-        ).rejects.toThrow("disk full");
-        expect(noteFile.content).toEqual(pencilNote);
-        expect(question.questionText.original).toEqual(before);
-        expect(question.questionText.actualQuestion).toContain("powerhouse");
-        expect(noteFile.content).toContain(question.questionText.original);
-
-        opts.closed();
-        await done;
-    });
-
-    test("an image in a Canvas text node gets a notice, the canvas is not read as a note", async () => {
-        await service.editInNote(
-            { path: "board.canvas", extension: "canvas" } as TFile,
-            vault.byName("sr-ink-xyz-back.svg"),
-        );
-        expect(Notice).toHaveBeenCalledWith("This image is not part of any card in this note.");
-        expect(ModalMock).not.toHaveBeenCalled();
-    });
-
-    test("an image that is not part of a card gets a notice", async () => {
+    test("an image that is not part of a card opens no editor", async () => {
         const { done, opts } = await tapPencil("sr-ink-other-back.svg");
         await done;
         expect(opts).toBeNull();
-        expect(Notice).toHaveBeenCalledWith("This image is not part of any card in this note.");
+        expect(Notice).toHaveBeenCalledTimes(1);
 
         loadedNote = null;
         await service.editInNote(

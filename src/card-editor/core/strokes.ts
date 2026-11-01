@@ -93,17 +93,6 @@ export function outlineBounds(outlines: number[][][]): Box | null {
     return box;
 }
 
-/** True when the eraser at (x, y) with the given radius touches the stroke's center line. */
-export function strokeHit(stroke: Stroke, x: number, y: number, radius: number): boolean {
-    const pts = stroke.points;
-    const r2 = radius * radius;
-    if (pts.length === 1) return pointSegmentDist2(x, y, pts[0], pts[0]) <= r2;
-    for (let i = 0; i < pts.length - 1; i++) {
-        if (pointSegmentDist2(x, y, pts[i], pts[i + 1]) <= r2) return true;
-    }
-    return false;
-}
-
 // MARK: pixel eraser
 
 /** Eraser radius in CSS pixels for a pen size: a thicker pen gets a bigger eraser */
