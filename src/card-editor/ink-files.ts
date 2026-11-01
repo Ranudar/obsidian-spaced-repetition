@@ -99,17 +99,18 @@ export class InkFiles {
      * Whether a note or canvas in the vault still refers to the file: a link or embed resolving to
      * it, or its name anywhere else (e.g. in an HTML <img> or a canvas file node). Reads the files
      * themselves, as Obsidian's link index may lag behind. The note at sourcePath was just written,
-     * so it is read from disk. Resolves to true when unsure, e.g. when a file can't be read.
+     * so it is read from disk, unless its text is given (an editor's, not saved yet). Resolves to
+     * true when unsure, e.g. when a file can't be read.
      */
-    async isReferenced(file: TFile, sourcePath: string): Promise<boolean> {
+    async isReferenced(file: TFile, sourcePath: string, sourceText?: string): Promise<boolean> {
         const vault = this.app.vault;
         try {
             for (const other of vault.getFiles()) {
                 if (other.extension !== "md" && other.extension !== "canvas") continue;
                 const text =
-                    other.path === sourcePath
-                        ? await vault.read(other)
-                        : await vault.cachedRead(other);
+                    other.path !== sourcePath
+                        ? await vault.cachedRead(other)
+                        : (sourceText ?? (await vault.read(other)));
                 if (this.refersTo(text, other.path, file)) return true;
             }
             return false;

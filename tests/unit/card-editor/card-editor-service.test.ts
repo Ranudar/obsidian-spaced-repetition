@@ -194,14 +194,17 @@ interface Session {
 
 /** Writes the note in edit(): records the text, resolves to whether the card was found */
 let writeText: jest.Mock<Promise<boolean>, [string]>;
+/** Deletes the card in edit(): resolves to whether the card was found */
+let deleteQuestion: jest.Mock<Promise<boolean>, []>;
 
 beforeEach(() => {
     writeText = jest.fn((_text: string) => Promise.resolve(true));
+    deleteQuestion = jest.fn(() => Promise.resolve(true));
 });
 
 /** Opens the editor for a question and waits until it is shown */
 async function edit(question: Question): Promise<Session> {
-    const result = service.editQuestion(question, writeText);
+    const result = service.editQuestion(question, writeText, deleteQuestion);
     for (let i = 0; i < 20 && ModalMock.mock.calls.length === 0; i++) await Promise.resolve();
     expect(ModalMock).toHaveBeenCalledTimes(1);
     // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -518,6 +521,30 @@ describe("saving a card", () => {
             changedImages: [],
         });
         expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
+    });
+
+    test("Delete card deletes the card and moves its SVGs to the trash", async () => {
+        const back = vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        const session = await edit(await parseQuestion(mixedNote));
+        await session.opts.delete();
+        session.opts.closed();
+        await expect(session.result).resolves.toEqual({
+            text: "",
+            textChanged: true,
+            changedImages: [],
+            deleted: true,
+        });
+        expect(deleteQuestion).toHaveBeenCalledTimes(1);
+        expect(writeText).not.toHaveBeenCalled();
+        expect(vault.app.fileManager.trashFile).toHaveBeenCalledWith(back);
+    });
+
+    test("Delete card keeps the SVGs when the card is no longer in the note", async () => {
+        vault.add("sr-ink/sr-ink-20261031-141502123-back.svg", svgOf([stroke(0)]));
+        deleteQuestion.mockResolvedValueOnce(false);
+        const session = await edit(await parseQuestion(mixedNote));
+        await expect(session.opts.delete()).rejects.toThrow();
+        expect(vault.app.fileManager.trashFile).not.toHaveBeenCalled();
     });
 
     test("erased ink keeps an SVG that other cards or notes still embed", async () => {
@@ -1428,13 +1455,13 @@ describe("unloading the plugin", () => {
 
         ModalMock.mockClear();
         service.openAdd(note, null);
-        await expect(service.editQuestion(question, writeText)).resolves.toBeNull();
+        await expect(service.editQuestion(question, writeText, deleteQuestion)).resolves.toBeNull();
         expect(ModalMock).not.toHaveBeenCalled();
     });
 
     /** Like edit(), with another editor open already */
     async function edit2(question: Question): Promise<Session> {
-        const result = service.editQuestion(question, writeText);
+        const result = service.editQuestion(question, writeText, deleteQuestion);
         for (let i = 0; i < 20 && ModalMock.mock.calls.length < 2; i++) await Promise.resolve();
         const opts = ModalMock.mock.calls[1][2];
         if (opts.kind !== "edit") throw new Error("not opened for editing");

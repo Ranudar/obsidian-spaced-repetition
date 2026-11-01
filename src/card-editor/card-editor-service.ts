@@ -35,6 +35,7 @@ import { SettingsUtil, SRSettings } from "src/data/settings";
 import { SettingsManager } from "src/data/settings-manager";
 import { t } from "src/lang/helpers";
 import type SRPlugin from "src/main";
+import { MultiLineTextFinder } from "src/utils/strings";
 
 export interface EditQuestionResult {
     /** The new question text (actual question, without topic path and schedule) */
@@ -43,6 +44,8 @@ export interface EditQuestionResult {
     textChanged: boolean;
     /** Ink files overwritten in place; images showing them need a refresh */
     changedImages: TFile[];
+    /** The card was deleted from its note */
+    deleted?: true;
 }
 
 /**
@@ -50,6 +53,15 @@ export interface EditQuestionResult {
  * Resolves to false, writing nothing, when the card's text is no longer in the note.
  */
 export type WriteQuestionText = (text: string) => Promise<boolean>;
+
+/**
+ * Removes the question, with its schedule, from the note.
+ * Resolves to false, writing nothing, when the card's text is no longer in the note.
+ */
+export type DeleteQuestion = () => Promise<boolean>;
+
+/** How long after handwriting was removed from a note its image goes to the trash */
+const INK_TRASH_DELAY_MS = 2000;
 
 /** A side of an existing card, as found in the note */
 interface LoadedSide {
@@ -168,6 +180,7 @@ export class CardEditorService {
     async editQuestion(
         question: Question,
         writeText: WriteQuestionText,
+        deleteQuestion: DeleteQuestion,
     ): Promise<EditQuestionResult | null> {
         if (this.destroyed) return null;
         const cardType = question.questionType;
@@ -200,6 +213,11 @@ export class CardEditorService {
                 save: async (r: CardEditorResult) => {
                     this.assertActive();
                     result = await this.saveCard(r, card, writeText);
+                },
+                delete: async () => {
+                    this.assertActive();
+                    await this.deleteCard(card, deleteQuestion);
+                    result = { text: "", textChanged: true, changedImages: [], deleted: true };
                 },
                 closed: () => {
                     this.modals.delete(modal);
@@ -248,7 +266,7 @@ export class CardEditorService {
                     if (!written) q.actualQuestion = previous;
                 }
                 return written;
-            });
+            }, () => this.deleteFromNote(question));
             if (result === null) return;
             this.refreshImages(result.changedImages);
             if (result.textChanged && this.plugin.isInitialized && !this.destroyed)
@@ -259,6 +277,69 @@ export class CardEditorService {
         } finally {
             this.editingInNote = false;
         }
+    }
+
+    /** Removes the question's text, with its schedule, from its note */
+    private async deleteFromNote(question: Question): Promise<boolean> {
+        const file = question.note.file;
+        const newText = MultiLineTextFinder.findAndReplace(
+            await file.read(),
+            question.questionText.original,
+            "",
+        );
+        if (newText === null) return false;
+        await file.write(newText);
+        return true;
+    }
+
+    /**
+     * Deletes the card from its note, then moves its ink images to the trash, except those other
+     * cards or notes still refer to
+     */
+    private async deleteCard(card: LoadedCard, deleteQuestion: DeleteQuestion): Promise<void> {
+        const files = [card.front.file, card.back?.file ?? null].filter(
+            (f): f is TFile => f !== null,
+        );
+        // Counted before the note is written, see saveCard()
+        const linksOutside = new Map(
+            files.map((f) => [f, this.linksOutsideCard(f, card.original, card.sourcePath)]),
+        );
+        if (!(await deleteQuestion())) throw new Error(t("CARD_EDITOR_TEXT_NOT_FOUND"));
+        for (const file of files) {
+            if (linksOutside.get(file) > 0) continue;
+            if (await this.inkFiles.isReferenced(file, card.sourcePath)) continue;
+            await this.inkFiles
+                .trash(file)
+                .catch((e) => console.error("SR: removing the ink image failed", e));
+        }
+    }
+
+    /**
+     * Handwriting the user removed from a note in the editor (e.g. with Backspace): its image goes
+     * to the trash after a moment, unless the note shows it again by then (undo, paste) or another
+     * card or note refers to it. noteText: the note's text in the editor now, saved or not.
+     */
+    inkRemovedInNote(links: string[], sourcePath: string, noteText: () => string): void {
+        if (this.destroyed) return;
+        const files = links
+            .map((link) => this.inkFiles.resolve(link, sourcePath))
+            .filter((f): f is TFile => f !== null);
+        if (files.length === 0) return;
+        activeWindow.setTimeout(() => {
+            void (async () => {
+                for (const file of files) {
+                    if (this.destroyed) return;
+                    const text = noteText();
+                    if (await this.inkFiles.isReferenced(file, sourcePath, text)) continue;
+                    try {
+                        await this.inkFiles.trash(file);
+                        new Notice(t("CARD_EDITOR_INK_TRASHED", { name: file.name }));
+                    } catch (e) {
+                        console.error("SR: removing the ink image failed", e);
+                    }
+                }
+            })();
+        }, INK_TRASH_DELAY_MS);
     }
 
     /** Writes unsaved typing in editors showing the note, so the card is read as it is on screen */

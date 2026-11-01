@@ -51,6 +51,7 @@ interface Callbacks {
     save: jest.Mock<Promise<void>, [CardEditorResult]>;
     keepDraft: jest.Mock<void, [CardEditorSides | null]>;
     closed: jest.Mock<void, []>;
+    delete: jest.Mock<Promise<void>, []>;
 }
 
 /** Handlers registered on the workspace, by event name */
@@ -75,6 +76,7 @@ function callbacks(): Callbacks {
         save: jest.fn<Promise<void>, [CardEditorResult]>(() => Promise.resolve()),
         keepDraft: jest.fn<void, [CardEditorSides | null]>(),
         closed: jest.fn<void, []>(),
+        delete: jest.fn<Promise<void>, []>(() => Promise.resolve()),
     };
 }
 
@@ -101,6 +103,7 @@ function openEdit(
         cardType,
         save: cb.save,
         closed: cb.closed,
+        delete: cb.delete,
     };
     const modal = new CardEditorModal(testApp(), DEFAULT_SETTINGS, opts);
     modal.open();
@@ -150,15 +153,15 @@ describe("CardEditorModal layout", () => {
         expect($(".sr-card-editor-header").lastElementChild).toBe($(".sr-card-editor-close"));
         expect(saveNext()).toBeDefined();
         expect(saveClose()).toBeDefined();
-        expect(button("Discard")).toBeDefined();
+        expect(button("Delete card")).toBeDefined();
         expect(document.activeElement).toBe(textAreas()[0]);
     });
 
-    test("footer: Discard, Save & close, Save & next; the counter is hidden at 0", () => {
+    test("footer: Delete card, Save & close, Save & next; the counter is hidden at 0", () => {
         openAdd();
         const footerButtons = $$<HTMLButtonElement>(".sr-card-editor-footer button");
         expect(footerButtons.map((b) => b.textContent)).toEqual([
-            "Discard",
+            "Delete card",
             "Save & close",
             "Save & next",
         ]);
@@ -178,7 +181,7 @@ describe("CardEditorModal layout", () => {
         expect($("[class*='mode']")).toBeNull();
     });
 
-    test("edit mode: Cancel and Save, sides loaded from the card", () => {
+    test("edit mode: Delete card and Save, sides loaded from the card", () => {
         openEdit({
             front: side({ text: "Q" }),
             back: side({ text: "A", strokes: [stroke(0)] }),
@@ -186,10 +189,10 @@ describe("CardEditorModal layout", () => {
         expect(textAreas().map((ta) => ta.value)).toEqual(["Q", "A"]);
         expect(inkFields()[0].hasClass("is-empty")).toBe(true);
         expect(inkFields()[1].hasClass("is-empty")).toBe(false);
-        expect(button("Cancel")).toBeDefined();
+        expect(button("Cancel")).toBeUndefined();
+        expect(button("Delete card")).toBeDefined();
         expect(button("Save")).toBeDefined();
         expect(saveNext()).toBeUndefined();
-        expect(button("Discard")).toBeUndefined();
         expect($(".sr-card-editor-counter")).toBeNull();
     });
 
@@ -208,7 +211,7 @@ describe("CardEditorModal add mode", () => {
     test("save is disabled until both sides have content", () => {
         openAdd();
         expect(saveNext().disabled).toBe(true);
-        // An empty card is closed with ✕, Esc or Discard
+        // An empty card is closed with ✕, Esc or Delete
         expect(saveClose().disabled).toBe(true);
         type(0, "Q");
         expect(saveNext().disabled).toBe(true);
@@ -396,58 +399,58 @@ describe("CardEditorModal drafts and discard", () => {
         expect(cb.closed).toHaveBeenCalledTimes(1);
     });
 
-    test("Discard arms on the first tap and discards on the second", () => {
+    test("Delete card arms on the first tap and discards on the second", () => {
         const { cb } = openAdd();
         type(0, "Q");
         const discard = $<HTMLButtonElement>(".sr-card-editor-discard");
         discard.click();
-        expect(discard.textContent).toBe("Tap again to discard");
+        expect(discard.textContent).toBe("Tap again to delete");
         expect(cb.closed).not.toHaveBeenCalled();
         discard.click();
         expect(cb.keepDraft).toHaveBeenCalledWith(null);
         expect(cb.closed).toHaveBeenCalledTimes(1);
     });
 
-    test("Discard disarms after 3 seconds", () => {
+    test("Delete card disarms after 3 seconds", () => {
         jest.useFakeTimers();
         const { cb } = openAdd();
         type(0, "Q");
         const discard = $<HTMLButtonElement>(".sr-card-editor-discard");
         discard.click();
         jest.advanceTimersByTime(3000);
-        expect(discard.textContent).toBe("Discard");
+        expect(discard.textContent).toBe("Delete card");
         discard.click();
         expect(cb.closed).not.toHaveBeenCalled();
-        expect(discard.textContent).toBe("Tap again to discard");
+        expect(discard.textContent).toBe("Tap again to delete");
     });
 
-    test("Save & next disarms Discard for the next card", async () => {
+    test("Save & next disarms Delete card for the next card", async () => {
         jest.useFakeTimers();
         const { cb } = openAdd();
         type(0, "Q");
         type(1, "A");
         const discard = $<HTMLButtonElement>(".sr-card-editor-discard");
         discard.click();
-        expect(discard.textContent).toBe("Tap again to discard");
+        expect(discard.textContent).toBe("Tap again to delete");
         saveNext().click();
         await jest.advanceTimersByTimeAsync(0);
         expect(cb.save).toHaveBeenCalledTimes(1);
-        expect(discard.textContent).toBe("Discard");
+        expect(discard.textContent).toBe("Delete card");
         expect(discard.hasClass("is-armed")).toBe(false);
 
         // Within the first tap's 3 s: the first tap on the new card only arms
         type(0, "Q2");
         discard.click();
         expect(cb.closed).not.toHaveBeenCalled();
-        expect(discard.textContent).toBe("Tap again to discard");
+        expect(discard.textContent).toBe("Tap again to delete");
     });
 
-    test("Discard arms first on an empty card too", () => {
+    test("Delete card arms first on an empty card too", () => {
         const { cb } = openAdd();
         const discard = $<HTMLButtonElement>(".sr-card-editor-discard");
         discard.click();
         expect(cb.closed).not.toHaveBeenCalled();
-        expect(discard.textContent).toBe("Tap again to discard");
+        expect(discard.textContent).toBe("Tap again to delete");
         discard.click();
         expect(cb.closed).toHaveBeenCalledTimes(1);
     });
@@ -479,11 +482,39 @@ describe("CardEditorModal drafts and discard", () => {
 });
 
 describe("CardEditorModal edit mode", () => {
-    test("Cancel closes without saving", () => {
+    test("✕ closes without saving", () => {
         const { cb } = openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
-        button("Cancel").click();
+        $<HTMLButtonElement>(".sr-card-editor-close").click();
+        expect(cb.save).not.toHaveBeenCalled();
+        expect(cb.delete).not.toHaveBeenCalled();
+        expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("Delete card deletes on the second tap and closes", async () => {
+        const { cb } = openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
+        const del = button("Delete card");
+        del.click();
+        expect(del.textContent).toBe("Tap again to delete");
+        expect(cb.delete).not.toHaveBeenCalled();
+        del.click();
+        await flush();
+        expect(cb.delete).toHaveBeenCalledTimes(1);
         expect(cb.save).not.toHaveBeenCalled();
         expect(cb.closed).toHaveBeenCalledTimes(1);
+    });
+
+    test("a failed delete keeps the editor open", async () => {
+        const { cb } = openEdit({ front: side({ text: "Q" }), back: side({ text: "A" }) });
+        cb.delete.mockRejectedValueOnce(new Error("gone"));
+        jest.spyOn(console, "error").mockImplementation(() => {});
+        const del = button("Delete card");
+        del.click();
+        del.click();
+        await flush();
+        expect(cb.delete).toHaveBeenCalledTimes(1);
+        expect(cb.closed).not.toHaveBeenCalled();
+        expect(del.textContent).toBe("Delete card");
+        expect(del.disabled).toBe(false);
     });
 
     test("Save passes both sides and closes", async () => {
@@ -788,12 +819,12 @@ describe("CardEditorModal pen only", () => {
         pointer("pointerdown", ink, "pen");
 
         fingerTap(saveNext());
-        fingerTap(button("Discard"));
-        fingerTap(button("Discard"));
+        fingerTap(button("Delete card"));
+        fingerTap(button("Delete card"));
         fingerTap(undo());
         expect(cb.save).not.toHaveBeenCalled();
         expect(cb.closed).not.toHaveBeenCalled();
-        expect(button("Discard")).toBeDefined();
+        expect(button("Delete card")).toBeDefined();
 
         // Just after the pen was lifted, still the palm
         pointer("pointerup", ink, "pen");

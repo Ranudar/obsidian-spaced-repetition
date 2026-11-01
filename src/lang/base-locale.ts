@@ -387,6 +387,8 @@ export interface IBaseLocale {
     CARD_EDITOR_CLOSE: string;
     CARD_EDITOR_DISCARD: string;
     CARD_EDITOR_DISCARD_CONFIRM: string;
+    CARD_EDITOR_INK_TRASHED: string;
+    CARD_EDITOR_DELETE_FAILED: string;
     CARD_EDITOR_SAVE_NEXT: string;
     CARD_EDITOR_SAVE_CLOSE: string;
     CARD_EDITOR_ADDED_BADGE: string;

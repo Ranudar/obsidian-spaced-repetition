@@ -1,4 +1,11 @@
-import { Extension, Prec, RangeSet, RangeSetBuilder, RangeValue } from "@codemirror/state";
+import {
+    Extension,
+    Prec,
+    RangeSet,
+    RangeSetBuilder,
+    RangeValue,
+    Transaction,
+} from "@codemirror/state";
 import { EditorView, keymap, PluginValue, ViewPlugin, ViewUpdate } from "@codemirror/view";
 
 import { inkEmbedPath, linksIn } from "src/card-editor/core/card-text";
@@ -149,13 +156,40 @@ function deleteInk(view: EditorView, forward: boolean): boolean {
 }
 
 /**
+ * The links of the ink embeds an edit by the user removed (deleted or typed over), as written.
+ * Cut is left out: the embed is meant to be pasted elsewhere. So are undo, redo and changes not
+ * made by the user (e.g. the note reloaded after the card editor wrote it).
+ */
+export function removedInkLinks(tr: Transaction): string[] {
+    if (!tr.docChanged || tr.isUserEvent("delete.cut")) return [];
+    if (!tr.isUserEvent("delete") && !tr.isUserEvent("input")) return [];
+    const links: string[] = [];
+    tr.changes.iterChanges((fromA, toA) => {
+        if (toA === fromA) return;
+        const text = tr.startState.doc.sliceString(fromA, toA);
+        for (const range of inkEmbedRanges(text)) {
+            const path = inkEmbedPath(text.slice(range.from, range.to));
+            if (path !== null) links.push(path);
+        }
+    });
+    return links;
+}
+
+/**
  * Makes every ink embed in the editor one unit: the cursor moves over it in one step, and
  * Backspace / Delete next to it or inside it remove all of it (also on Android, where the
  * keyboard's deletions are run as Backspace). Without this, deleting it takes one character at a
- * time. Embeds in code are left as text.
+ * time. Embeds in code are left as text. onInkRemoved hears of embeds the user removed.
  */
-export function inkAtomicRanges(): Extension {
+export function inkAtomicRanges(
+    onInkRemoved?: (links: string[], view: EditorView) => void,
+): Extension {
     return [
+        EditorView.updateListener.of((update) => {
+            if (!onInkRemoved || !update.docChanged) return;
+            const links = update.transactions.flatMap(removedInkLinks);
+            if (links.length > 0) onInkRemoved(links, update.view);
+        }),
         inkAtomicRangesPlugin,
         EditorView.atomicRanges.of(
             (view) => view.plugin(inkAtomicRangesPlugin)?.ranges ?? RangeSet.empty,

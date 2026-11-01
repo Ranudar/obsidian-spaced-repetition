@@ -44,6 +44,8 @@ export type CardEditorOptions =
           kind: "edit";
           initial: CardEditorSides;
           cardType: CardType;
+          /** Deletes the card from its note; a rejection keeps the editor open with a notice */
+          delete(): Promise<void>;
       });
 
 const DISCARD_ARM_MS = 3000;
@@ -80,7 +82,7 @@ export class CardEditorModal extends Modal {
     /** Settles with true when the save in progress succeeded */
     private inFlight: Promise<boolean> | null = null;
     private isClosed = false;
-    /** Set when the card on screen was saved or discarded: no draft on close */
+    /** Set when the card on screen was saved or deleted: no draft on close */
     private dropDraft = false;
     private discardArmedAt = 0;
     private discardTimer: number | null = null;
@@ -238,12 +240,13 @@ export class CardEditorModal extends Modal {
 
     private buildFooter(root: HTMLElement) {
         const footer = root.createDiv({ cls: "sr-card-editor-footer" });
+        // Closing without saving is the ✕ in the header
+        this.discardButton = this.textButton(footer, t("CARD_EDITOR_DISCARD"), () => {
+            void this.discard();
+        });
+        this.discardButton.addClass("sr-card-editor-discard");
+        footer.createDiv({ cls: "sr-card-editor-footer-spacer" });
         if (this.opts.kind === "add") {
-            this.discardButton = this.textButton(footer, t("CARD_EDITOR_DISCARD"), () =>
-                this.discard(),
-            );
-            this.discardButton.addClass("sr-card-editor-discard");
-            footer.createDiv({ cls: "sr-card-editor-footer-spacer" });
             this.saveCloseButton = this.textButton(footer, t("CARD_EDITOR_SAVE_CLOSE"), () => {
                 void this.saveAdd(true);
             });
@@ -251,10 +254,6 @@ export class CardEditorModal extends Modal {
                 void this.saveAdd(false);
             });
         } else {
-            this.textButton(footer, t("CANCEL"), () => this.close()).addClass(
-                "sr-card-editor-cancel",
-            );
-            footer.createDiv({ cls: "sr-card-editor-footer-spacer" });
             this.saveButton = this.textButton(footer, t("SAVE"), () => {
                 void this.saveEdit();
             });
@@ -430,12 +429,31 @@ export class CardEditorModal extends Modal {
         this.updateButtons();
     }
 
-    /** The first tap arms the button, a second one within 3 s discards the card */
-    private discard() {
+    /**
+     * The first tap arms the Delete button, a second one within 3 s deletes the card: a new one is
+     * dropped, an existing one removed from its note
+     */
+    private async discard() {
         if (this.busy || !this.discardButton) return;
         if (Date.now() - this.discardArmedAt < DISCARD_ARM_MS) {
+            this.disarmDiscard();
+            if (this.opts.kind === "edit") {
+                const opts = this.opts;
+                this.busy = true;
+                this.updateButtons();
+                try {
+                    await opts.delete();
+                } catch (err) {
+                    console.error("SR: deleting the card failed", err);
+                    new Notice(t("CARD_EDITOR_DELETE_FAILED", { error: String(err) }));
+                    return;
+                } finally {
+                    this.busy = false;
+                    if (!this.isClosed) this.updateButtons();
+                }
+            }
             this.dropDraft = true;
-            this.close();
+            if (!this.isClosed) this.close();
             return;
         }
         this.disarmDiscard();
@@ -445,7 +463,7 @@ export class CardEditorModal extends Modal {
         this.discardTimer = activeWindow.setTimeout(() => this.disarmDiscard(), DISCARD_ARM_MS);
     }
 
-    /** Back to an unarmed Discard button: after the timeout and for every new card */
+    /** Back to an unarmed Delete button: after the timeout and for every new card */
     private disarmDiscard() {
         if (this.discardTimer !== null) activeWindow.clearTimeout(this.discardTimer);
         this.discardTimer = null;
@@ -589,7 +607,7 @@ export class CardEditorModal extends Modal {
         // Callbacks from the sides can arrive while the footer is still being built
         if (!this.saveButton) return;
         this.saveButton.disabled = this.busy || !this.ready;
-        // An empty card is closed with ✕, Esc or Discard, not with a button that looks like saving
+        // An empty card is closed with ✕, Esc or Delete, not with a button that looks like saving
         if (this.saveCloseButton) this.saveCloseButton.disabled = this.busy || !this.ready;
         if (this.discardButton) this.discardButton.disabled = this.busy;
         if (this.counterEl) {

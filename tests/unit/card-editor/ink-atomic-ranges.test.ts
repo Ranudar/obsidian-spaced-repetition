@@ -6,6 +6,7 @@ import {
     fenceAfter,
     inkAtomicRanges,
     inkEmbedRanges,
+    removedInkLinks,
 } from "src/card-editor/ink-atomic-ranges";
 
 function slices(text: string): string[] {
@@ -226,6 +227,49 @@ describe("inkAtomicRanges", () => {
             [embedFrom + 4, embedTo + 4],
             [doc.length + 5, doc.length + 22],
         ]);
+        view.destroy();
+    });
+});
+
+describe("removedInkLinks", () => {
+    const doc = "Q\n![[sr-ink/sr-ink-a-front.svg]]\n?\n![[x.png]]";
+    const embedFrom = 2;
+    const embedTo = doc.indexOf("\n?");
+
+    function removed(userEvent: string | undefined, from = embedFrom, to = embedTo): string[] {
+        const state = EditorState.create({ doc });
+        return removedInkLinks(state.update({ changes: { from, to }, userEvent }));
+    }
+
+    test("an ink embed deleted or typed over", () => {
+        expect(removed("delete.backward")).toEqual(["sr-ink/sr-ink-a-front.svg"]);
+        expect(removed("delete.selection", 0, doc.length)).toEqual(["sr-ink/sr-ink-a-front.svg"]);
+        expect(removed("input.type")).toEqual(["sr-ink/sr-ink-a-front.svg"]);
+    });
+
+    test("not cut, undo or changes not made by the user", () => {
+        expect(removed("delete.cut")).toEqual([]);
+        expect(removed("undo")).toEqual([]);
+        expect(removed(undefined)).toEqual([]);
+    });
+
+    test("not other embeds, nor an ink embed only partly deleted", () => {
+        expect(removed("delete.backward", doc.indexOf("![[x"), doc.length)).toEqual([]);
+        expect(removed("delete.backward", embedFrom + 5, embedTo)).toEqual([]);
+    });
+});
+
+describe("inkAtomicRanges onInkRemoved", () => {
+    test("hears of ink embeds the user removed", () => {
+        const heard: string[][] = [];
+        const view = new EditorView({
+            state: EditorState.create({
+                doc: "![[sr-ink-b-back.svg]]",
+                extensions: [inkAtomicRanges((links) => heard.push(links))],
+            }),
+        });
+        view.dispatch({ changes: { from: 0, to: 22 }, userEvent: "delete.backward" });
+        expect(heard).toEqual([["sr-ink-b-back.svg"]]);
         view.destroy();
     });
 });

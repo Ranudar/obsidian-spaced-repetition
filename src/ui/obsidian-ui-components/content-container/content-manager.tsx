@@ -394,8 +394,13 @@ export default class ContentManager {
         try {
             // Only called when the text changed: ink-only changes leave the note (and its
             // schedule) untouched
-            result = await service.editQuestion(currentQ, (text) =>
-                sequencer.updateCurrentQuestionTextAndCards(text),
+            result = await service.editQuestion(
+                currentQ,
+                (text) => sequencer.updateCurrentQuestionTextAndCards(text),
+                async () => {
+                    await sequencer.deleteCurrentCardFromNote();
+                    return true;
+                },
             );
         } catch (error) {
             console.error("SR: editing the card failed", error);
@@ -403,6 +408,10 @@ export default class ContentManager {
         }
         this.uiManager.setUIState(currentUIState);
         if (result === null || this.reviewSequencer === null) return;
+        if (result.deleted) {
+            await this._showNextCard();
+            return;
+        }
 
         service.refreshImages(result.changedImages);
 
