@@ -15,7 +15,7 @@ import { IOsrVaultNoteLinkInfoFinder } from "src/scheduling/algorithms/osr/obsid
 import { OsrNoteGraph } from "src/scheduling/algorithms/osr/osr-note-graph";
 import { CardDueDateHistogram, NoteDueDateHistogram } from "src/scheduling/due-date-histogram";
 import { FlashcardReviewMode } from "src/scheduling/flashcard-review-sequencer";
-import { globalDateProvider, IDayBoundary } from "src/utils/dates";
+import { DateUtil, globalDateProvider, IDayBoundary } from "src/utils/dates";
 import { TextDirection } from "src/utils/strings";
 
 export interface IOsrVaultEvents {
@@ -60,19 +60,13 @@ export class OsrCore {
         this._dueDateNoteHistogram = new NoteDueDateHistogram();
         this.defaultTextDirection = defaultTextDirection;
 
-        try {
-            const startOfDayElements: string[] = this.settings.startOfDay.split(":");
-            if (startOfDayElements.length !== 3) {
-                throw new Error("Invalid format for start of day");
-            }
-            const dayBoundary: IDayBoundary = {
-                hour: parseInt(startOfDayElements[0]),
-                minute: parseInt(startOfDayElements[1]),
-                second: parseInt(startOfDayElements[2]),
-            };
+        const dayBoundary: IDayBoundary | null = DateUtil.strToDayBoundary(
+            this.settings.startOfDay,
+        );
+        if (dayBoundary === null) {
+            console.warn("Invalid format for start of day", this.settings.startOfDay);
+        } else {
             globalDateProvider.setDayBoundary(dayBoundary);
-        } catch (e) {
-            console.warn("Invalid format for start of day", e);
         }
     }
 
@@ -104,19 +98,13 @@ export class OsrCore {
         this._dueDateNoteHistogram = new NoteDueDateHistogram();
         this.defaultTextDirection = defaultTextDirection;
 
-        try {
-            const startOfDayElements: string[] = this.settings.startOfDay.split(":");
-            if (startOfDayElements.length !== 3) {
-                throw new Error("Invalid format for start of day");
-            }
-            const dayBoundary: IDayBoundary = {
-                hour: parseInt(startOfDayElements[0]),
-                minute: parseInt(startOfDayElements[1]),
-                second: parseInt(startOfDayElements[2]),
-            };
+        const dayBoundary: IDayBoundary | null = DateUtil.strToDayBoundary(
+            this.settings.startOfDay,
+        );
+        if (dayBoundary === null) {
+            console.warn("Invalid format for start of day", this.settings.startOfDay);
+        } else {
             globalDateProvider.setDayBoundary(dayBoundary);
-        } catch (e) {
-            console.warn("Invalid format for start of day", e);
         }
     }
 

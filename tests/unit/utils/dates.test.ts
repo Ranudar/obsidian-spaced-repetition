@@ -33,28 +33,45 @@ describe("LiveDateProvider", () => {
         expect(globalDateProvider.now.date()).toBe(moment().date());
     });
 
-    test("today & dateBoundary", () => {
-        expect(globalDateProvider.today.year()).toBe(moment().year());
-        expect(globalDateProvider.today.month()).toBe(moment().month());
-        expect(globalDateProvider.today.week()).toBe(moment().week());
-        expect(globalDateProvider.today.date()).toBe(moment().date());
+    afterEach(() => {
+        globalDateProvider.setDayBoundary(null);
+        jest.useRealTimers();
+    });
+
+    const todayAt = (localTime: string, dayBoundary: IDayBoundary | null): string => {
+        jest.useFakeTimers({ now: new Date(`2024-03-15T${localTime}`) });
+        globalDateProvider.setDayBoundary(dayBoundary);
+        return globalDateProvider.today.format("YYYY-MM-DD HH:mm:ss");
+    };
+
+    test("today without a day boundary starts at midnight", () => {
         expect(globalDateProvider.getDayBoundary()).toBe(null);
+        expect(todayAt("00:00:00", null)).toBe("2024-03-15 00:00:00");
+        expect(todayAt("23:59:59", null)).toBe("2024-03-15 00:00:00");
+    });
 
-        let dayBoundary: IDayBoundary = { hour: 0, minute: 0, second: 0 };
-        globalDateProvider.setDayBoundary(dayBoundary);
+    test("today with a midnight day boundary", () => {
+        const dayBoundary: IDayBoundary = { hour: 0, minute: 0, second: 0 };
+        expect(todayAt("00:00:00", dayBoundary)).toBe("2024-03-15 00:00:00");
         expect(globalDateProvider.getDayBoundary()).toEqual(dayBoundary);
+    });
 
-        expect(globalDateProvider.today.year()).toBe(moment().year());
-        expect(globalDateProvider.today.month()).toBe(moment().month());
-        expect(globalDateProvider.today.week()).toBe(moment().week());
-        expect(globalDateProvider.today.date()).toBe(moment().date());
+    test("today with a 04:00:00 day boundary", () => {
+        const dayBoundary: IDayBoundary = { hour: 4, minute: 0, second: 0 };
+        expect(todayAt("03:59:59", dayBoundary)).toBe("2024-03-14 00:00:00");
+        expect(todayAt("04:00:00", dayBoundary)).toBe("2024-03-15 00:00:00");
+        expect(todayAt("04:00:01", dayBoundary)).toBe("2024-03-15 00:00:00");
+    });
 
-        dayBoundary = { hour: 23, minute: 0, second: 0 };
-        globalDateProvider.setDayBoundary(dayBoundary);
+    test("today with a boundary that has only minutes or seconds set", () => {
+        expect(todayAt("00:29:59", { hour: 0, minute: 30, second: 0 })).toBe("2024-03-14 00:00:00");
+        expect(todayAt("00:30:00", { hour: 0, minute: 30, second: 0 })).toBe("2024-03-15 00:00:00");
+        expect(todayAt("00:00:14", { hour: 0, minute: 0, second: 15 })).toBe("2024-03-14 00:00:00");
+    });
 
-        expect(globalDateProvider.getDayBoundary()).toEqual(dayBoundary);
-        expect(globalDateProvider.today.year()).toBe(moment().year());
-        expect(globalDateProvider.today.month()).toBe(moment().month());
-        expect(globalDateProvider.today.week()).toBe(moment().week());
+    test("today with a 23:00:00 day boundary", () => {
+        const dayBoundary: IDayBoundary = { hour: 23, minute: 0, second: 0 };
+        expect(todayAt("22:59:59", dayBoundary)).toBe("2024-03-14 00:00:00");
+        expect(todayAt("23:00:00", dayBoundary)).toBe("2024-03-15 00:00:00");
     });
 });
