@@ -26,14 +26,6 @@ export interface InkFieldOptions {
 
 const MIN_GUIDE_SPACING = 8;
 
-/** TEMPORARY: logs the pen's pointer events, to find out why strokes break on Android */
-let penLog: ((line: string) => void) | null = null;
-export function setPenLog(log: ((line: string) => void) | null): void {
-    penLog = log;
-}
-/** TEMPORARY: what happened during the gesture, for the pen log */
-const gestureLog = { moves: 0, samples: 0, stale: 0, shifts: 0, clipped: 0 };
-
 /**
  * A writing area with guide lines. No Obsidian runtime dependency besides the DOM helpers.
  * Pen draws; the pen's side button (or the eraser end of a stylus, or the toolbar eraser) erases
@@ -127,9 +119,6 @@ export class InkField {
         this.canvas.addEventListener("pointercancel", this.onUp);
         this.canvas.addEventListener("pointerleave", this.onLeave);
         this.canvas.addEventListener("pointerenter", this.onEnter);
-        this.canvas.addEventListener("lostpointercapture", (e) =>
-            penLog?.(`lostcapture ${e.pointerType} id=${e.pointerId} t=${Math.round(e.timeStamp)}`),
-        );
         // Long-press with the pen must not open a context menu
         this.canvas.addEventListener("contextmenu", this.onContextMenu);
 
@@ -202,7 +191,6 @@ export class InkField {
     }
 
     private invalidateView = (e: Event) => {
-        if (this.activePointer !== null) penLog?.(`  view ${e.type} t=${Math.round(e.timeStamp)}`);
         this.view = null;
         this.viewChangedAt = e.timeStamp;
     };
@@ -285,10 +273,6 @@ export class InkField {
     private onContextMenu = (e: Event) => e.preventDefault();
 
     private onDown = (e: PointerEvent) => {
-        penLog?.(
-            `down ${e.pointerType} id=${e.pointerId} buttons=${e.buttons} p=${e.pressure.toFixed(2)} t=${Math.round(e.timeStamp)} busy=${this.activePointer !== null}`,
-        );
-        Object.assign(gestureLog, { moves: 0, samples: 0, stale: 0, shifts: 0, clipped: 0 });
         // Pen or mouse; a finger on the screen is the hand resting on it
         if (e.pointerType === "touch") return;
         if (this.activePointer !== null) return;
@@ -355,20 +339,14 @@ export class InkField {
             // lastSample may be null here: after a shift, until the first sample in the new place
             const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
             const samples = events.length > 0 ? events : [e];
-            gestureLog.moves++;
             for (const ev of samples) {
-                gestureLog.samples++;
                 const p = this.point(ev);
                 if (this.fieldMoved()) {
-                    gestureLog.shifts++;
                     this.endStroke();
                     this.lastSample = null;
                 }
                 // Taken before the shift: in old coordinates, which no longer apply
-                if (this.stale(ev)) {
-                    gestureLog.stale++;
-                    continue;
-                }
+                if (this.stale(ev)) continue;
                 this.addSample(p);
             }
             this.updateEmpty();
@@ -397,10 +375,7 @@ export class InkField {
         const prev = this.lastSample ?? p;
         this.lastSample = p;
         const seg = this.clip(prev, p);
-        if (seg === null) {
-            gestureLog.clipped++;
-            return this.endStroke();
-        }
+        if (seg === null) return this.endStroke();
         const [from, to] = seg;
         if (this.current === null) this.current = this.newStroke(from);
         const pts = this.current.points;
@@ -451,13 +426,6 @@ export class InkField {
     };
 
     private onUp = (e: PointerEvent) => {
-        if (penLog) {
-            const pts = this.gestureStrokes().map((s) => s.points.length);
-            const box = this.view?.box;
-            penLog(
-                `${e.type} ${e.pointerType} id=${e.pointerId} mine=${e.pointerId === this.activePointer} t=${Math.round(e.timeStamp)} ${JSON.stringify(gestureLog)} pieces=${JSON.stringify(pts)} box=${box ? `${Math.round(box.maxX - box.minX)}x${Math.round(box.maxY - box.minY)}` : "none"} canvas=${Math.round(this.canvas.clientWidth)}x${Math.round(this.canvas.clientHeight)}`,
-            );
-        }
         if (e.pointerId !== this.activePointer) return;
         this.activePointer = null;
         this.stopRecheck();
