@@ -342,19 +342,20 @@ export class CardEditorModal extends Modal {
             this.counterEl.setAttr("role", "status");
         }
         if (this.opts.kind === "edit" && this.opts.steps) {
+            // Previous / next as one group, large, well away from Delete
+            const nav = header.createDiv({ cls: "sr-card-editor-nav" });
             this.prevButton = this.iconButton(
-                header,
+                nav,
                 "chevron-left",
                 t("CARD_EDITOR_PREVIOUS_CARD"),
                 () => void this.step(-1),
             );
             this.nextButton = this.iconButton(
-                header,
+                nav,
                 "chevron-right",
                 t("CARD_EDITOR_NEXT_CARD"),
                 () => void this.step(1),
             );
-            this.nextButton.addClass("sr-card-editor-next");
         }
         this.deleteButton = this.iconButton(header, "trash-2", t("CARD_EDITOR_DISCARD"), () => {
             void this.deleteCard();

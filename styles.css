@@ -224,8 +224,22 @@ img[src*="sr-ink-"] {
   font-size: var(--font-ui-smaller);
   white-space: nowrap;
 }
-.sr-card-editor-header .sr-card-editor-icon-button.sr-card-editor-next {
-  margin-inline-end: 12px;
+.sr-card-editor-nav {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  margin-inline-end: 28px;
+  padding: 2px;
+  border-radius: var(--radius-m);
+  background-color: var(--background-modifier-hover);
+}
+.sr-card-editor-header .sr-card-editor-nav > .sr-card-editor-icon-button {
+  width: 44px;
+  height: 40px;
+}
+.sr-card-editor-nav > .sr-card-editor-icon-button svg {
+  width: 24px;
+  height: 24px;
 }
 .sr-card-editor-header .sr-card-editor-icon-button.sr-card-editor-close {
   margin-inline-start: 18px;

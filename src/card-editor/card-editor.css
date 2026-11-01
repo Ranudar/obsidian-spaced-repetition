@@ -283,8 +283,25 @@ img[src*="sr-ink-"] {
 }
 
 /* Clear space between Next card, the most tapped while stepping, and Delete card */
-.sr-card-editor-header .sr-card-editor-icon-button.sr-card-editor-next {
-    margin-inline-end: 12px;
+/* Previous / next card: one group of two large buttons, clear of Delete */
+.sr-card-editor-nav {
+    flex: none;
+    display: flex;
+    gap: 2px;
+    margin-inline-end: 28px;
+    padding: 2px;
+    border-radius: var(--radius-m);
+    background-color: var(--background-modifier-hover);
+}
+
+.sr-card-editor-header .sr-card-editor-nav > .sr-card-editor-icon-button {
+    width: 44px;
+    height: 40px;
+}
+
+.sr-card-editor-nav > .sr-card-editor-icon-button svg {
+    width: 24px;
+    height: 24px;
 }
 
 /* Clear space between Delete card and ✕ */
