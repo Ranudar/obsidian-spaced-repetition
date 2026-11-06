@@ -121,9 +121,6 @@ export class SideEditor {
         this.textArea.setAttr("aria-label", opts.label);
         this.textArea.addEventListener("input", this.onTextInput);
         this.textArea.addEventListener("keydown", this.onTextKeyDown);
-        // No Android selection toolbar (Cut, Translate, AI...) over the editor, like in Obsidian's
-        // own editor: the selection stays, marking a cloze is a tap on the highlighter
-        this.textArea.addEventListener("contextmenu", preventDefault);
         this.textArea.addEventListener("pointerdown", this.onTextPointerDown);
         renderHint(this.textWrap.createDiv({ cls: "sr-card-editor-text-hint" }), opts.textHint);
         this.previewEl = this.textWrap.createDiv({ cls: "sr-card-editor-preview" });
@@ -327,7 +324,6 @@ export class SideEditor {
         if (this.flashTimer !== null) activeWindow.clearTimeout(this.flashTimer);
         this.textArea.removeEventListener("input", this.onTextInput);
         this.textArea.removeEventListener("keydown", this.onTextKeyDown);
-        this.textArea.removeEventListener("contextmenu", preventDefault);
         this.textArea.removeEventListener("pointerdown", this.onTextPointerDown);
         this.previewEl.removeEventListener("pointerdown", this.onPreviewPointerDown);
         this.previewEl.removeEventListener("click", this.onPreviewClick);
@@ -422,5 +418,3 @@ export function wordAt(text: string, pos: number): [number, number] | null {
     while (isWordChar(text[end])) end++;
     return start === end ? null : [start, end];
 }
-
-const preventDefault = (e: Event) => e.preventDefault();
